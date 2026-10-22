@@ -254,6 +254,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 - Each parameter-recovery seed uploads its per-parameter diagnostics ranked by R-hat and its per-chain sampler table, and the recovery report's per-seed table gives each chain's step size and the three parameters with the highest R-hat (#1088).
   An unconverged seed can then be traced to a parameter and to a stuck chain from the artifact.
   Fitted values do not change.
+- The benchmark suite times the health-zone model and its kernels, on a synthetic zone dataset of 60 zones, 4 patches, 150 days and 95 vintages (#996).
+  They run by default, the benchmark workflow's run included, and `BVD_BENCH_ZONE=false` leaves them out of a local run.
+  The zone tests and the benchmark build that dataset from one shared fixture.
+  The kernels take their inputs from the zone model's own draw construction, so they follow any change to the model.
 
 ### Fixed
 

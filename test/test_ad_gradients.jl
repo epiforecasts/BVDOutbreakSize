@@ -90,3 +90,32 @@ end
         @test any(!iszero, grad)
     end
 end
+
+## The health-zone scenario the benchmark suite times with
+## by default. It is not in the default scenario list, so it is asserted
+## here, at the size it is timed at and with mixing and the zone
+## correlation on.
+@testitem "AD gradient: the zone benchmark scenario differentiates (Mooncake)" tags = [
+    :ad,
+] begin
+    using LogDensityProblems: logdensity_and_gradient
+    using BVDOutbreakSize: default_adtype
+    include(joinpath(@__DIR__, "ad_fixtures.jl"))
+
+    scen = only(
+        filter(s -> s.group == "Zone", ADFixtures.scenarios(; zone = true))
+    )
+    @test !any(s -> s.group == "Zone", ADFixtures.scenarios())
+    zd = scen.model.args.zd
+    @test size(zd.counts) == (60, 95)
+    @test length(zd.patch_ranges) == 4
+    @test zd.n == 150
+    @test zd.mixing !== nothing
+    @test !isempty(zd.zone_distances)
+    ldf, x = ADFixtures.log_density_function(scen, default_adtype())
+    logp, grad = logdensity_and_gradient(ldf, x)
+    @test isfinite(logp)
+    @test length(grad) == length(x)
+    @test all(isfinite, grad)
+    @test any(!iszero, grad)
+end
