@@ -9,6 +9,7 @@ pageClass: bvd-dashboard
 
 The map shades each health zone or province by the estimate chosen above it.
 Hover over an area for its value, or click it for its detail.
+The compare menu sets an earlier data cut-off's estimates beside the current ones in the tooltips and the detail.
 The [methods](methods.md) and the [province](estimates/province.md) and [health-zone](estimates/zone.md) estimates explain each figure.
 
 ```@raw html

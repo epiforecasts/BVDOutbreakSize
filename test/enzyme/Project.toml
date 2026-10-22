@@ -1,6 +1,8 @@
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
 BVDOutbreakSize = "7c2a1f8e-9d4b-4a16-bf3e-1f5c8c3a90e2"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 LogDensityProblems = "6fdf6af0-433a-55f7-b3ed-c6c6e0b8df7c"
 Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
@@ -10,6 +12,7 @@ Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [compat]
 ADTypes = "1.22.0"
+Distributions = "0.25.129"
 Enzyme = "0.13"
 Mooncake = "0.5.33"
 LogDensityProblems = "2.2.0"

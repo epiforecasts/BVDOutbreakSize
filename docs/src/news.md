@@ -33,6 +33,13 @@ A major version: the report gains a health-zone level below the provinces, with 
   The patch figures take their default colours from the eight-colour zone palette, so no two patches share a colour.
   The zone composition calibration leaves out a patch with no zone counts to score for a stream, rather than giving it an empty row that broke the calibration plot.
 
+- The importation kernel's log flows have a multivariate normal prior whose mean is the log gravity kernel, so gravity is the prior and each flow's log deviation is the data's departure from it (#1030).
+  The covariance is a destination effect correlated with each province's origin deviation plus a double-centred flow term whose correlation matrix ties each flow to its reverse, and each origin's export total is held.
+  The deviation is drawn non-centred on a rectangular square root of the covariance, which leaves out the shift shared within an origin's column and so has no Cholesky factor.
+  Fitted values change.
+- The health-zone importation kernel samples its distance decay and a log weight per destination zone, holding each origin's total into every province (#1030).
+  The decay's `LogNormal(0, 1)` prior has its median at the fixed inverse-distance decay it replaces.
+  Fitted values change.
 - The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap` (#1123).
   The data pin each deviation rather than its scale, so the non-centred form tied the standard-normal draws to the scale along a funnel.
   On the joint posterior of the #1101 fit, whose model is the one before this change, the log scale correlates with the log mean square of its standard-normal draws at −0.93 for the background split and −0.96 for the capacity shares.
@@ -176,6 +183,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The dashboard page keeps a short lead and links the methods and estimates pages, and the map's legend and detail column use short labels (resolves #1089).
 - The map's summary, zone filter, window and R-source menus sit behind an Options disclosure that counts the settings in use, and its K menu shows only for the chance of K+ cases (resolves #1078).
   On a phone the metrics scroll in one strip, so the controls take four short rows rather than a screen.
+- The map's summary menu shows only for the metrics with a 90% interval rather than sitting greyed out, and the Options control is hidden on the province layer when it has nothing to hold (#1078).
 - The methods open with a model overview and three diagrams: the joint model's generative chain, its province patches coupled by importation, and what the health-zone model takes from the joint fit.
   The diagrams are TikZ sources rebuilt by `scripts/build_diagrams.sh`, and fitted values do not change (#1073).
 - The methods score the confirmed positives as a beta-binomial with its intra-window correlation and prior, as the model does, not as a binomial (#1073).
@@ -203,6 +211,8 @@ A major version: the report gains a health-zone level below the provinces, with 
   This also gives a keyboard route to every area.
   Show national zooms back out to the whole map.
 - In the narrow layout the dashboard map's legend sits under the map in two columns rather than covering most of it (#1079).
+- The dashboard map has a compare menu beside its data date that sets an earlier cut-off's estimates beside the current ones: under each figure in the detail column, dashed in its reproduction number and weekly charts, and in the tooltips (#1114).
+  The map keeps the current shading, and the menu shows only when the build carries an archive of earlier cut-offs.
 - The methods give the importation and province-composition deviations their own symbols, drawn independently of the reproduction number deviations (#1010).
 - The README, home page and About page link the draft paper as a work in progress (#1029).
 - The overall fit diagnostics table on the National estimates page and the Summary dashboard gains the tail effective sample size (#1051).
@@ -222,6 +232,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 - Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
 - `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
 - A release whose zone scoring fails is counted in the scoring log (#986).
+- Each release carries all five tables the dashboard map reads, adding the zone time series and the province and national estimates and time series to the zone estimates it already carried (#1114).
+  `scripts/archive_dashboard.jl` collects them from the newest release of each of the last 14 data cut-offs, and the deploy from `main` stages them under `zone_map/archive/` with an index, leaving them out of pull request previews and `site.zip`.
+  Releases from before this change do not carry the tables and are left out.
 - The health-zone fit runs as a CI job after the joint fits it is melded from, and the convergence gate covers it (#779).
 - The fit summary leaves out any quantity that is not finite in some draw (#779).
 - Each fit uploads its diagnostics bundle and any parent extract as `fit-extras-<id>`, kept for 90 days (#779).
@@ -237,6 +250,18 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The joint-model fits, and the health-zone fits that take their warm-up, run 1000 warm-up steps where they ran 500 (#1109, part of #1060).
   In one CI build on SitRep 143 the headline joint reached R-hat 1.03 with bulk ESS 95, against 1.10 and 1.11 in main's last two builds, and took 2 h 53 min, about 35 minutes longer.
   `frozen_validation` still reached R-hat 1.09.
+- Four slow test items that each built their own live-data `bvd_joint` sample `production_joint` instead, which the suite compiles anyway (#1005).
+  The two-phase seeding test checks its identities on prior draws and takes one Mooncake gradient, rather than a NUTS fit of a model with no data.
+  The gradient keeps the coverage job running the renewal and knot-interpolation rules, which the AD job tests but does not report coverage for.
+  In the `coverage` job of run 38192361183 the five items took 486 s of the 70-minute run, 169 s of it the seeding fit.
+  Run together locally with the province case-fatality item, which now reuses the same compiled model, the six take 437 s rather than 729 s.
+- Each parameter-recovery seed uploads its per-parameter diagnostics ranked by R-hat and its per-chain sampler table, and the recovery report's per-seed table gives each chain's step size and the three parameters with the highest R-hat (#1088).
+  An unconverged seed can then be traced to a parameter and to a stuck chain from the artifact.
+  Fitted values do not change.
+- The benchmark suite times the health-zone model and its kernels, on a synthetic zone dataset of 60 zones, 4 patches, 150 days and 95 vintages (#996).
+  They run by default, the benchmark workflow's run included, and `BVD_BENCH_ZONE=false` leaves them out of a local run.
+  The zone tests and the benchmark build that dataset from one shared fixture.
+  The kernels take their inputs from the zone model's own draw construction, so they follow any change to the model.
 
 ### Fixed
 

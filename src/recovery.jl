@@ -552,3 +552,30 @@ function recovery_fit(
     chain = nuts_sample(model; chains, seed, kwargs...)
     return (; model, chain)
 end
+
+"""
+$(TYPEDSIGNATURES)
+
+Where a [`recovery_fit`](@ref) chain fails to mix. `parameters` holds
+[`parameter_diagnostics`](@ref), one row per scalar parameter element ranked
+by R-hat from the highest down, with the element index in the name of a
+vector-valued parameter (`rt_state.log_Rt_knots[13]`). `sampler` holds
+[`sampler_by_chain_table`](@ref) at the tree-depth cap `max_depth` the fit
+ran at, one row per chain with the step size it adapted to. A single R-hat
+says neither which parameter carries it nor whether one chain is stuck
+while the others move.
+"""
+function recovery_chain_diagnostics(chain; max_depth::Integer = 10)
+    df = parameter_diagnostics(chain)
+    ## A stable sort, so tied parameters keep model order.
+    ranked = df[sortperm(df.rhat; rev = true, alg = MergeSort), :]
+    parameters = DataFrame(
+        parameter = [
+            _diag_label(r.parameter, r.index) for r in eachrow(ranked)
+        ],
+        rhat = ranked.rhat,
+        ess_bulk = ranked.ess_bulk,
+        ess_tail = ranked.ess_tail
+    )
+    return (; parameters, sampler = sampler_by_chain_table(chain; max_depth))
+end

@@ -51,6 +51,27 @@ end
     @test size(fit.chain) == (20, 1)
 end
 
+@testitem "recovery_chain_diagnostics ranks parameters and splits chains" begin
+    using BVDOutbreakSize, Turing, Distributions
+    ## A scalar and a three-element vector, so the elements carry distinct
+    ## R-hats to rank and indexed names to label.
+    @model function two_blocks()
+        x ~ Normal(0, 1)
+        z ~ product_distribution([Normal(0, 1) for _ in 1:3])
+    end
+    fit = recovery_fit(two_blocks(); samples = 50, n_adapts = 20, chains = 2)
+    d = recovery_chain_diagnostics(fit.chain)
+    @test sort(d.parameters.parameter) == ["x", "z[1]", "z[2]", "z[3]"]
+    @test issorted(d.parameters.rhat; rev = true)
+    @test length(unique(d.parameters.rhat)) > 1
+    @test d.sampler.chain == [1, 2]
+    @test all(d.sampler.draws .== 50)
+    @test all(d.sampler.step_size .> 0)
+    ## The tree-depth cap passes through: every tree reaches a cap of one.
+    capped = recovery_chain_diagnostics(fit.chain; max_depth = 1)
+    @test all(capped.sampler.percent_at_max_depth .== 100)
+end
+
 @testitem "simulated observations group by stream" begin
     using BVDOutbreakSize
     g = BVDOutbreakSize._grouped_observations(

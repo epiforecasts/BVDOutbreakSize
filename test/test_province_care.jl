@@ -305,26 +305,10 @@ end
     import FlexiChains
     using DataFrames: nrow, names
 
+    ## The headline joint carries the province occupancy and bed splits.
     obs = load_observations()
     np = length(PROVINCE_NAMES)
-    m = bvd_joint(
-        obs.n,
-        obs.exported_cases, obs.total_deaths, obs.reported_cases,
-        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
-        reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        isolation_history = obs.isolation_history,
-        bed_capacity_history = obs.bed_capacity_history,
-        n_patches = np,
-        province_isolation = province_care_observations(
-            obs.province_isolation_history, PROVINCE_NAMES
-        ),
-        province_capacity = province_care_observations(
-            obs.province_bed_capacity_history, PROVINCE_NAMES
-        ),
-        breakpoint = obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days
-    )
+    m = production_joint(obs; breakpoint = default_breakpoint(obs))
     chn = sample(
         Xoshiro(20261006), m, Prior(), 50;
         chain_type = FlexiChains.VNChain, progress = false
