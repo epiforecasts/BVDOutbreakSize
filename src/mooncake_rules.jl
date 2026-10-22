@@ -14,7 +14,7 @@
 # `task benchmark-rules` times both arms; if the gap has closed after a
 # backend upgrade, delete this file rather than maintain it.
 
-using Mooncake: CoDual, NoFData, NoRData, primal, tangent, zero_fcodual
+using Mooncake: CoDual, NoFData, NoRData, primal, tangent
 using SpecialFunctions: digamma
 
 ## An array argument a rule accepts: a float array, or a view into one (a
