@@ -77,6 +77,15 @@ A major version: the report gains a health-zone level below the provinces, with 
   The health-zone fatality is built the same way, as a logit shift of its province's ratio at the joint posterior mean, with the same change of scale prior.
   The zone point prevalence shifts each joint draw's province ratio by the zone's contrast, so it no longer caps the zone ratio at one.
   Fitted values change and the joint and zone fits need refitting.
+- Each province detects a BVD onset as a suspected case with its own probability, the DRC ascertainment shifted by a sum-to-zero contrast on the logit scale, so it lies between zero and one by construction (#PRNUM).
+  The national BVD suspected cases are each province's onsets through the onset-to-report delay times its probability, summed, and the suspected-case, laboratory and isolation streams read that sum.
+  The case composition's sum-to-zero log contrast becomes the confirmation contrast, which carries the provincial differences in testing, and the relative case ascertainment is the detection times that contrast.
+  The detection spread takes a half-normal scale of 0.5 on the logit scale, about 0.125 on the log scale at the prior centre of 0.75, and the confirmation contrast keeps its scale of 0.3 on the log scale.
+  The province occupancy splits carry the detection but no longer the confirmation contrast, since a suspect is admitted before testing.
+  A zero detection spread gives the previous model, except that the occupancy splits then use incidence alone.
+  The province point prevalence reads each province's detection directly, so it no longer rescales the relative ascertainment or caps it at one.
+  The zone point prevalence shifts that probability on the logit scale by the log of the zone's relative ascertainment.
+  Fitted values change and the joint fit, and everything fitted from it, needs refitting.
 
 ### Data
 

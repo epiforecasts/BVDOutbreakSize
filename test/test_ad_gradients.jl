@@ -90,3 +90,60 @@ end
         @test any(!iszero, grad)
     end
 end
+
+@testitem "AD gradient: province suspected-case detection differentiates (Mooncake)" tags = [:ad] begin
+    using Turing: DynamicPPL, @model, to_submodel
+    using LogDensityProblems: logdensity_and_gradient
+    using Random: seed!
+    using BVDOutbreakSize: province_suspected_ascertainment_model,
+        reported_cases_model, province_composition_model,
+        _patch_confirmed_increments, _patch_carried, default_adtype
+    using Distributions: Beta
+
+    ## The joint's detection path: the patch probabilities about the
+    ## national centre weight the patch onsets, whose sum feeds the national
+    ## suspected cases and whose rows feed the case composition.
+    seed!(20261022)
+    n = 40
+    onsets_matrix = vcat(
+        reshape(collect(1.0:n) .^ 1.5, 1, :),
+        reshape(collect(1.0:n), 1, :),
+        reshape(fill(2.0, n), 1, :),
+    )
+    history = (; days = [10, 20, 30, 40], counts = [30, 120, 400, 900])
+    prov = [60 200 300; 10 30 60; 2 5 9]
+    days = [20, 30, 40]
+    @model function detection_path(onsets_matrix, history, prov, days)
+        p_drc ~ Beta(15, 5)
+        detection_state ~ to_submodel(
+            province_suspected_ascertainment_model(size(onsets_matrix, 1), p_drc)
+        )
+        detected = detection_state.relative .* onsets_matrix
+        cases_state ~ to_submodel(
+            reported_cases_model(
+                history, history.counts[end],
+                vec(sum(detected; dims = 1)), 20.0, p_drc
+            )
+        )
+        carried = _patch_carried(detected, cases_state.report_pmf)
+        composition_state ~ to_submodel(
+            province_composition_model(
+                prov, _patch_confirmed_increments(carried, 0.9, days)
+            )
+        )
+    end
+    model = detection_path(onsets_matrix, history, prov, days)
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
+    x0 = collect(vi[:])
+    ldf = DynamicPPL.LogDensityFunction(
+        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    )
+    logp, grad = logdensity_and_gradient(ldf, x0)
+    @test isfinite(logp)
+    @test length(grad) == length(x0)
+    @test all(isfinite, grad)
+    ## The detection coordinates reach the density.
+    names = string.(keys(vi))
+    @test any(contains("τ_susp"), names)
+    @test any(!iszero, grad)
+end
