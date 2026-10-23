@@ -2334,7 +2334,7 @@ Per-patch latent bed demand for the province splits: the national demand
 patch's BVD admissions `A_bvd` (`_patch_bvd_admissions`) through the
 clinical-stay survival
 `S_clin`, plus its share of the national non-BVD admissions `A_bg`
-(`w[p]`, or `w[p, t]` by day as in [`_patch_admissions`](@ref)) through the
+(`w[p]`, or `w[p, t]` by day as in `_patch_admissions`) through the
 rule-out stay `ruleout_pmf` and the abscond rate `κ`. The national
 stock in [`treatment_flow_model`](@ref) carries the confirmation dynamics; the
 patches share them, so they cancel in the shares approximately rather than

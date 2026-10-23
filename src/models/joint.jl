@@ -128,7 +128,7 @@ scored with. The national count `obs` on each day is the negative binomial
 around the national mean in `means`, censored at `ceilings`, as the
 national occupancy is scored. It is split across the patches at their
 shares of `level` (one row per patch, one column per day) with the fitted
-split overdispersion `rho` ([`_forecast_split_model`](@ref)), as the
+split overdispersion `rho` (`_forecast_split_model`), as the
 province occupancy is scored. `province` holds the patch counts, one column
 per day stored column-major, and sums to `obs` on every day.
 """
