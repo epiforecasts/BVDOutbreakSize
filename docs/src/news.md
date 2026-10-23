@@ -87,6 +87,12 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone deviations are drawn on the sum-to-zero basis within each patch, as the province deviations are (#980).
 - The health-zone meld also carries the joint's per-origin importation intensity, so each draw's between-patch arrivals follow its own trajectories and intensities rather than the posterior mean (#1011).
 - The health-zone forecast reads the joint's own forecast arrivals past the cut-off rather than holding the cut-off import odds (#1014).
+- The cut-off and forecast beds, occupancy and admissions are built by province and summed to the national figures, with nothing capped: each province's beds are its share of the capacity walk, and its forecast runs the fitted stock forward (#958).
+  The forecast draws the national occupancy and admissions from the national negative binomial and splits each across the provinces by the fitted split and its overdispersion, so the national forecast keeps the fitted spread.
+  The national bed shortfall is the bed demand above the national beds; each province's patients above its own beds are reported by province.
+- The provinces' 24h admissions are fitted as a split of the national admissions (#958).
+  Each province's share of the non-BVD admissions is its share of the non-BVD suspects moved by a sum-to-zero level (scale `Normal⁺(0, 0.5)`) and a weekly random walk over the printed days, which nest the constant share at zero.
+  A province that never prints admissions keeps its share of the non-BVD suspects.
 - Each province's case-fatality ratio is the national ratio shifted by a sum-to-zero contrast on the logit scale, so it lies between zero and one by construction (#1149).
   It was the national ratio times a log-scale multiplier, which nothing bounded, and one draw of 2000 in the SitRep 154 fit put Nord-Kivu at 1.06.
   The province point prevalence rejected that draw and failed the province page.
@@ -146,6 +152,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 154 (15 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
   Dakwa (Bas-Uélé), new at SitRep 147, has no polygon in the Ministry of Health health-zone map, so its case is carried in the Bas-Uélé unallocated row until the zone is mapped.
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
+- `province_admissions_history` block, sparse by province, to SitRep 159 (20 October), and province beds raised to the rate-implied beds where the patients exceed a stale printed count (#958).
 
 ### Report
 
@@ -275,6 +282,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   The seed-prior test brackets the Nord-Kivu share at the first province report, the level the seed sets, rather than the share over the whole window, which also carries the later rise.
   Fitted values do not change.
 - The province bed and overview tables leave non-finite draws out of each cell and print "—" when none is finite, instead of failing; the province bed table test seeds its prior draws (#1086, resolves #1063).
+- Admissions are uncensored in the fit and in the forecast (#918).
+- The cut-off occupancy and bed shortfall are on the reported scale, the demand plus the reclassification offset (#640).
+- Province occupancy is the national modelled occupancy split on the demand shares, the basis the likelihood and forecast use, so a province over its beds, as Nord-Kivu prints, shows its patients above the beds rather than a capped occupancy (#920).
 
 ## v2.2.0
 
@@ -314,12 +324,12 @@ Changes since v2.1.0.
 ### Model
 
 - The province bed-capacity shares are centred on each province's modelled cumulative admissions to date, plus one admission, in place of population share (#945).
-- The importation kernel measures distance between province population centres, WorldPop-weighted over health zones, in place of capitals (#960).
   The share is recomputed each day, so it moves with the admissions.
   The deviations from that centre stay partially pooled, now with `τ_cap ~ Normal⁺(0, 1)`.
   `province_capacity_share` becomes a daily matrix.
   `province_capacity_share_sd` exposes the pooling scale `τ_cap`.
   The background split keeps its partially pooled population centre.
+- The importation kernel measures distance between province population centres, WorldPop-weighted over health zones, in place of capitals (#960).
 - Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#948).
   The fit sees the whole curve rather than the trailing four weeks.
   A date a figure does not plot is differenced against the last figure that did, rather than dropped.
