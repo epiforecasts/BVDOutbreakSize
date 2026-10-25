@@ -844,6 +844,13 @@ def digitize_windows(im, last_tick_date, y_step=20):
     outline = (h > 4) & ((nd >= np.maximum(0.25 * h, 6)) | (nb >= 3))
     soft = (h > 4) & (nd >= np.maximum(0.1 * h, 5))
     nz = np.flatnonzero((h > 2) & ~isborder)
+    # nothing left of the y-axis line is a bar: the axis is a grey column
+    # (no saturated pixel) that reaches the top gridline, and a tick stub
+    # left of it reads as a short bar (SitRep 160's 23 March)
+    yaxis = next((x for x in range(1, W + 1)
+                  if h[x] >= y0 - yt[0] and ns[x] < 0.1 * h[x]), None)
+    if yaxis is not None:
+        nz = nz[nz > yaxis]
     # a column under the dashed line reads its bar from the outline; the
     # dash can only have added height. An outline read under two counts is
     # taken as the dash's own edge and the run is kept, so a real bar of one
@@ -922,6 +929,7 @@ def digitize_windows(im, last_tick_date, y_step=20):
                 lo, hi = run
                 cols = list(range(lo, hi + 1))
         prev = (lo, hi)
+        wcols = cols
         # soft columns are kept when the rest of the window shows no outline
         # at all (a washed column beside a dark dead segment)
         interior = [x for x in cols if not soft[x]]
@@ -937,6 +945,16 @@ def digitize_windows(im, last_tick_date, y_step=20):
         cols = interior or cols
         if not cols:
             continue
+        # outside the incomplete-data band, whose faded bars carry no
+        # outline, a column with no dark pixel has lost its bar's top
+        # outline, so its run stopped short of the top; when every column
+        # the window kept is one, the window's columns that show an outline
+        # pixel and read more than two counts taller are read instead
+        # (SitRep 160's 25 August)
+        if all(nd[x] == 0 and hread[x] > 0 and not inband[x] for x in cols):
+            mx = max(int(hread[x]) for x in cols)
+            alt = [x for x in wcols if nd[x] > 0 and hread[x] > mx + 2 * ppc]
+            cols = alt or cols
         # an outline drawn across two columns can leave a second column that
         # is not soft but still reads the outline's height. Where the first
         # non-outline column on the outline's far side reads that height too,
