@@ -5329,3 +5329,252 @@ eds_investigations_performed,159,2026-10-20,Bas-Uele,0,investigations,"'3 corps 
 eds_corpses_swabbed,159,2026-10-20,Bas-Uele,3,corpses,"'3 corps ont été swabés (1 à Buta et 2 à Ganga), sans EDS réalisé.' / défis: 'Au Bas-Uélé, aucun EDS n’a été réalisé' - EDS section."
 vaccination_persons_cumulative,159,2026-10-20,Nord-Kivu,600,persons,"'128 PPL ont été vaccinés dans la ZS de Beni, portant le cumul à 600 sur une cible de 7 105 (8,4 %) ; les 600 doses reçues ont toutes été administrées et 1 MAPI non grave a été notifiée.' - vaccination section."
 smsps_confirmed_coverage,159,2026-10-20,Ituri,74.4,percent,"'Ituri, 32 cas confirmés sur 43 (74,4 %) ont bénéficié d’interventions SMSPS' - SMSPS section."
+alerts_total_day,160,2026-10-21,Haut-Uele,114,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,160,2026-10-21,Haut-Uele,15,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,160,2026-10-21,Haut-Uele,3,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,160,2026-10-21,Haut-Uele,6,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,160,2026-10-21,Bas-Uele,186,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,160,2026-10-21,Bas-Uele,26,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,160,2026-10-21,Bas-Uele,0,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,160,2026-10-21,Bas-Uele,0,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,160,2026-10-21,Ituri,1230,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,160,2026-10-21,Ituri,160,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,160,2026-10-21,Ituri,68,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,160,2026-10-21,Ituri,132,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,160,2026-10-21,Nord-Kivu,1540,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,160,2026-10-21,Nord-Kivu,138,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,160,2026-10-21,Nord-Kivu,59,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,160,2026-10-21,Nord-Kivu,116,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,160,2026-10-21,Tshopo,140,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,160,2026-10-21,Tshopo,12,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,160,2026-10-21,Tshopo,0,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,160,2026-10-21,Tshopo,1,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,160,2026-10-21,Ensemble,3210,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column. Total General row."
+alerts_validated_alive,160,2026-10-21,Ensemble,351,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column. Total General row."
+alerts_validated_dead_community,160,2026-10-21,Ensemble,130,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column. Total General row."
+alerts_investigated,160,2026-10-21,Ensemble,255,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column. Total General row."
+alert_investigation_rate,160,2026-10-21,Ensemble,97.5,percent,"481 validated, 469 (97,5 %) investigues and 255 (54,4 %) transferes - section 2.1.1."
+contacts_seen,160,2026-10-21,Ituri,8895,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,160,2026-10-21,Ituri,10222,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,160,2026-10-21,Ituri,87.0,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,160,2026-10-21,Nord-Kivu,16110,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,160,2026-10-21,Nord-Kivu,19410,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,160,2026-10-21,Nord-Kivu,83.0,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,160,2026-10-21,Haut-Uele,1722,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,160,2026-10-21,Haut-Uele,1913,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,160,2026-10-21,Haut-Uele,90.0,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,160,2026-10-21,Tshopo,1065,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,160,2026-10-21,Tshopo,1331,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,160,2026-10-21,Tshopo,80.0,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,160,2026-10-21,Bas-Uele,714,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,160,2026-10-21,Bas-Uele,748,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,160,2026-10-21,Bas-Uele,95.5,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,160,2026-10-21,Sud Ubangi,109,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,160,2026-10-21,Sud Ubangi,112,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,160,2026-10-21,Sud Ubangi,97.3,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,160,2026-10-21,Ensemble,28615,persons,"Section 2.1.1 prose, national total."
+contacts_under_follow_up,160,2026-10-21,Ensemble,33736,persons,"Section 2.1.1 prose, national total."
+contact_tracing_coverage,160,2026-10-21,Ensemble,84.8,percent,"Section 2.1.1 prose, national total."
+poe_travellers_screened,160,2026-10-21,Ituri,158965,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,160,2026-10-21,Ituri,4,alerts,Tableau 4.
+poe_alertes_vivantes_validees,160,2026-10-21,Ituri,3,alerts,Tableau 4.
+poe_corpses_swabbed,160,2026-10-21,Ituri,1,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,160,2026-10-21,Nord-Kivu,94238,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,160,2026-10-21,Nord-Kivu,2,alerts,Tableau 4.
+poe_alertes_vivantes_validees,160,2026-10-21,Nord-Kivu,1,alerts,Tableau 4.
+poe_corpses_swabbed,160,2026-10-21,Nord-Kivu,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,160,2026-10-21,Sud-Kivu,10163,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,160,2026-10-21,Sud-Kivu,1,alerts,Tableau 4.
+poe_alertes_vivantes_validees,160,2026-10-21,Sud-Kivu,0,alerts,Tableau 4.
+poe_corpses_swabbed,160,2026-10-21,Sud-Kivu,1,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,160,2026-10-21,Tshopo,20521,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,160,2026-10-21,Tshopo,0,alerts,Tableau 4.
+poe_alertes_vivantes_validees,160,2026-10-21,Tshopo,0,alerts,Tableau 4.
+poe_corpses_swabbed,160,2026-10-21,Tshopo,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,160,2026-10-21,Haut-Uele,23086,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,160,2026-10-21,Haut-Uele,0,alerts,Tableau 4.
+poe_alertes_vivantes_validees,160,2026-10-21,Haut-Uele,0,alerts,Tableau 4.
+poe_corpses_swabbed,160,2026-10-21,Haut-Uele,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,160,2026-10-21,Ensemble,306973,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,160,2026-10-21,Ensemble,7,alerts,Tableau 4.
+poe_alertes_vivantes_validees,160,2026-10-21,Ensemble,4,alerts,Tableau 4.
+poe_corpses_swabbed,160,2026-10-21,Ensemble,2,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+eds_death_alerts,160,2026-10-21,Ituri,87,alerts,"'Sur 87 alertes EDS seuls 51 EDS ont ete realises (58,6 %) et 50 corps swabes sur 70 (71,4 %).' - EDS section."
+eds_investigations_performed,160,2026-10-21,Ituri,51,investigations,"'Sur 87 alertes EDS seuls 51 EDS ont ete realises (58,6 %) et 50 corps swabes sur 70 (71,4 %).' - EDS section."
+eds_corpses_swabbed,160,2026-10-21,Ituri,50,corpses,"'Sur 87 alertes EDS seuls 51 EDS ont ete realises (58,6 %) et 50 corps swabes sur 70 (71,4 %).' - EDS section."
+eds_death_alerts,160,2026-10-21,Nord-Kivu,76,alerts,"'Sur 76 alertes EDS recues, 64 EDS ont ete realises et 64 corps swabes.' - EDS section."
+eds_investigations_performed,160,2026-10-21,Nord-Kivu,64,investigations,"'Sur 76 alertes EDS recues, 64 EDS ont ete realises et 64 corps swabes.' - EDS section."
+eds_corpses_swabbed,160,2026-10-21,Nord-Kivu,64,corpses,"'Sur 76 alertes EDS recues, 64 EDS ont ete realises et 64 corps swabes.' - EDS section."
+eds_investigations_performed,160,2026-10-21,Tshopo,0,investigations,'Aucun EDS n'a ete realise (6 reports).' - EDS section.
+eds_investigations_performed,160,2026-10-21,Haut-Uele,2,investigations,'2 EDS realises a Wamba (1 corps swabe)' - EDS section.
+eds_corpses_swabbed,160,2026-10-21,Haut-Uele,1,corpses,'2 EDS realises a Wamba (1 corps swabe)' - EDS section.
+eds_investigations_performed,160,2026-10-21,Bas-Uele,0,investigations,"defis: 'Au Bas-Uele, aucun EDS n'a ete realise' - EDS section."
+vaccination_persons_cumulative,160,2026-10-21,Ituri,1311,persons,'portant le cumul a 1 311 personnes vaccinees' - Vaccination section.
+vaccination_persons_cumulative,160,2026-10-21,Bas-Uele,1500,persons,"'la couverture atteint 11,4 % de la cible (1 500/13 202)' - Vaccination section."
+smsps_confirmed_coverage,160,2026-10-21,Ituri,51.4,percent,"'Ituri, 19 cas confirmes sur 37 (51,4 %) ont beneficie d'interventions SMSPS' - SMSPS section."
+alerts_total_day,161,2026-10-22,Haut-Uele,138,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,161,2026-10-22,Haut-Uele,20,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,161,2026-10-22,Haut-Uele,4,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,161,2026-10-22,Haut-Uele,9,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,161,2026-10-22,Bas-Uele,192,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,161,2026-10-22,Bas-Uele,20,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,161,2026-10-22,Bas-Uele,3,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,161,2026-10-22,Bas-Uele,0,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,161,2026-10-22,Ituri,1328,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,161,2026-10-22,Ituri,145,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,161,2026-10-22,Ituri,53,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,161,2026-10-22,Ituri,126,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,161,2026-10-22,Nord-Kivu,1348,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,161,2026-10-22,Nord-Kivu,137,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,161,2026-10-22,Nord-Kivu,51,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,161,2026-10-22,Nord-Kivu,124,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,161,2026-10-22,Tshopo,98,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,161,2026-10-22,Tshopo,17,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,161,2026-10-22,Tshopo,1,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,161,2026-10-22,Tshopo,2,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,161,2026-10-22,Ensemble,3104,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column. Total General row."
+alerts_validated_alive,161,2026-10-22,Ensemble,339,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column. Total General row."
+alerts_validated_dead_community,161,2026-10-22,Ensemble,112,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column. Total General row."
+alerts_investigated,161,2026-10-22,Ensemble,261,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column. Total General row."
+alert_investigation_rate,161,2026-10-22,Ensemble,90.9,percent,"451 validated, 410 (90,9 %) investigues and 261 (63,7 %) transferes - section 2.1.1."
+contacts_seen,161,2026-10-22,Ituri,10999,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,161,2026-10-22,Ituri,12758,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,161,2026-10-22,Ituri,86.2,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,161,2026-10-22,Nord-Kivu,10360,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,161,2026-10-22,Nord-Kivu,11203,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,161,2026-10-22,Nord-Kivu,92.5,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,161,2026-10-22,Haut-Uele,1788,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,161,2026-10-22,Haut-Uele,1992,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,161,2026-10-22,Haut-Uele,89.8,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,161,2026-10-22,Tshopo,1099,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,161,2026-10-22,Tshopo,1350,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,161,2026-10-22,Tshopo,81.4,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,161,2026-10-22,Bas-Uele,759,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,161,2026-10-22,Bas-Uele,764,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,161,2026-10-22,Bas-Uele,99.3,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,161,2026-10-22,Ensemble,25005,persons,"Section 2.1.1 prose, national total."
+contacts_under_follow_up,161,2026-10-22,Ensemble,28067,persons,"Section 2.1.1 prose, national total."
+contact_tracing_coverage,161,2026-10-22,Ensemble,89.1,percent,"Section 2.1.1 prose, national total."
+poe_travellers_screened,161,2026-10-22,Ituri,148084,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,161,2026-10-22,Ituri,4,alerts,Tableau 4.
+poe_alertes_vivantes_validees,161,2026-10-22,Ituri,4,alerts,Tableau 4.
+poe_corpses_swabbed,161,2026-10-22,Ituri,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,161,2026-10-22,Nord-Kivu,99012,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,161,2026-10-22,Nord-Kivu,3,alerts,Tableau 4.
+poe_alertes_vivantes_validees,161,2026-10-22,Nord-Kivu,2,alerts,Tableau 4.
+poe_corpses_swabbed,161,2026-10-22,Nord-Kivu,1,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,161,2026-10-22,Sud-Kivu,6931,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,161,2026-10-22,Sud-Kivu,0,alerts,Tableau 4.
+poe_alertes_vivantes_validees,161,2026-10-22,Sud-Kivu,0,alerts,Tableau 4.
+poe_corpses_swabbed,161,2026-10-22,Sud-Kivu,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,161,2026-10-22,Tshopo,20483,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,161,2026-10-22,Tshopo,1,alerts,Tableau 4.
+poe_alertes_vivantes_validees,161,2026-10-22,Tshopo,0,alerts,Tableau 4.
+poe_corpses_swabbed,161,2026-10-22,Tshopo,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,161,2026-10-22,Haut-Uele,19526,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,161,2026-10-22,Haut-Uele,0,alerts,Tableau 4.
+poe_alertes_vivantes_validees,161,2026-10-22,Haut-Uele,0,alerts,Tableau 4.
+poe_corpses_swabbed,161,2026-10-22,Haut-Uele,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,161,2026-10-22,Bas-Uele,11780,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,161,2026-10-22,Bas-Uele,8,alerts,Tableau 4.
+poe_alertes_vivantes_validees,161,2026-10-22,Bas-Uele,0,alerts,Tableau 4.
+poe_corpses_swabbed,161,2026-10-22,Bas-Uele,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,161,2026-10-22,Ensemble,305816,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,161,2026-10-22,Ensemble,16,alerts,Tableau 4.
+poe_alertes_vivantes_validees,161,2026-10-22,Ensemble,6,alerts,Tableau 4.
+poe_corpses_swabbed,161,2026-10-22,Ensemble,1,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+eds_death_alerts,161,2026-10-22,Ituri,76,alerts,"'Sur 76 alertes EDS (dont 13 reports), 47 EDS ont ete realises (61,8 %).' - EDS section."
+eds_investigations_performed,161,2026-10-22,Ituri,47,investigations,"'Sur 76 alertes EDS (dont 13 reports), 47 EDS ont ete realises (61,8 %).' - EDS section."
+eds_death_alerts,161,2026-10-22,Nord-Kivu,61,alerts,"'Sur 61 alertes EDS recues, 61 EDS ont ete realises et 59 corps swabes.' - EDS section."
+eds_investigations_performed,161,2026-10-22,Nord-Kivu,61,investigations,"'Sur 61 alertes EDS recues, 61 EDS ont ete realises et 59 corps swabes.' - EDS section."
+eds_corpses_swabbed,161,2026-10-22,Nord-Kivu,59,corpses,"'Sur 61 alertes EDS recues, 61 EDS ont ete realises et 59 corps swabes.' - EDS section."
+eds_death_alerts,161,2026-10-22,Haut-Uele,6,alerts,"'Sur 6 alertes EDS, 3 EDS ont ete realises (2 a Wamba et 1 a Pawa).' - EDS section."
+eds_investigations_performed,161,2026-10-22,Haut-Uele,3,investigations,"'Sur 6 alertes EDS, 3 EDS ont ete realises (2 a Wamba et 1 a Pawa).' - EDS section."
+eds_investigations_performed,161,2026-10-22,Bas-Uele,0,investigations,'1 corps a ete swabe a Agri-Uele (Ganga)' / defis: 'aucun EDS n'a ete realise' - EDS section.
+eds_corpses_swabbed,161,2026-10-22,Bas-Uele,1,corpses,'1 corps a ete swabe a Agri-Uele (Ganga)' / defis: 'aucun EDS n'a ete realise' - EDS section.
+vaccination_persons_cumulative,161,2026-10-22,Ituri,1502,persons,'portant le cumul a 1 502 personnes vaccinees' - Vaccination section.
+smsps_confirmed_coverage,161,2026-10-22,Ituri,82.5,percent,"'En Ituri, 33 cas confirmes sur 40 (82,5 %) ont beneficie d'interventions SMSPS' - SMSPS section."
+alerts_total_day,162,2026-10-23,Haut-Uele,193,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,162,2026-10-23,Haut-Uele,20,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,162,2026-10-23,Haut-Uele,3,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,162,2026-10-23,Haut-Uele,5,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,162,2026-10-23,Bas-Uele,133,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,162,2026-10-23,Bas-Uele,17,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,162,2026-10-23,Bas-Uele,7,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,162,2026-10-23,Bas-Uele,0,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,162,2026-10-23,Ituri,1513,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,162,2026-10-23,Ituri,182,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,162,2026-10-23,Ituri,76,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,162,2026-10-23,Ituri,143,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,162,2026-10-23,Nord-Kivu,2074,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,162,2026-10-23,Nord-Kivu,194,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,162,2026-10-23,Nord-Kivu,44,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,162,2026-10-23,Nord-Kivu,86,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,162,2026-10-23,Tshopo,155,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column."
+alerts_validated_alive,162,2026-10-23,Tshopo,5,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column."
+alerts_validated_dead_community,162,2026-10-23,Tshopo,1,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column."
+alerts_investigated,162,2026-10-23,Tshopo,2,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column."
+alerts_total_day,162,2026-10-23,Ensemble,4068,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total alertes column. Total General row."
+alerts_validated_alive,162,2026-10-23,Ensemble,418,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Vivants column. Total General row."
+alerts_validated_dead_community,162,2026-10-23,Ensemble,131,alerts,"Tableau 3 'Situation des alertes notifiees par province', Alertes verifiees et validees (cas suspect) - Decedes column. Total General row."
+alerts_investigated,162,2026-10-23,Ensemble,236,alerts,"Tableau 3 'Situation des alertes notifiees par province', Nombre de suspects investigues et transferes au CT/CTE (du jour) column. Total General row."
+alert_investigation_rate,162,2026-10-23,Ensemble,81.8,percent,"549 validated, 449 (81,8 %) investigues and 236 (52,6 %) transferes - section 2.1.1."
+contacts_seen,162,2026-10-23,Ituri,13450,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,162,2026-10-23,Ituri,14333,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,162,2026-10-23,Ituri,93.8,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,162,2026-10-23,Nord-Kivu,14953,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,162,2026-10-23,Nord-Kivu,17828,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,162,2026-10-23,Nord-Kivu,83.9,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,162,2026-10-23,Haut-Uele,1635,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,162,2026-10-23,Haut-Uele,1905,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,162,2026-10-23,Haut-Uele,85.8,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,162,2026-10-23,Tshopo,1227,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,162,2026-10-23,Tshopo,1376,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,162,2026-10-23,Tshopo,89.2,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,162,2026-10-23,Bas-Uele,758,persons,"Section 2.1.1 prose, per-province breakdown."
+contacts_under_follow_up,162,2026-10-23,Bas-Uele,776,persons,"Section 2.1.1 prose, per-province breakdown."
+contact_tracing_coverage,162,2026-10-23,Bas-Uele,97.7,percent,"Section 2.1.1 prose, per-province breakdown."
+contacts_seen,162,2026-10-23,Ensemble,32023,persons,"Section 2.1.1 prose, national total."
+contacts_under_follow_up,162,2026-10-23,Ensemble,36218,persons,"Section 2.1.1 prose, national total."
+contact_tracing_coverage,162,2026-10-23,Ensemble,88.4,percent,"Section 2.1.1 prose, national total."
+poe_travellers_screened,162,2026-10-23,Ituri,165142,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,162,2026-10-23,Ituri,4,alerts,Tableau 4.
+poe_alertes_vivantes_validees,162,2026-10-23,Ituri,1,alerts,Tableau 4.
+poe_corpses_swabbed,162,2026-10-23,Ituri,3,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,162,2026-10-23,Nord-Kivu,90327,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,162,2026-10-23,Nord-Kivu,1,alerts,Tableau 4.
+poe_alertes_vivantes_validees,162,2026-10-23,Nord-Kivu,1,alerts,Tableau 4.
+poe_corpses_swabbed,162,2026-10-23,Nord-Kivu,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,162,2026-10-23,Sud-Kivu,9959,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,162,2026-10-23,Sud-Kivu,0,alerts,Tableau 4.
+poe_alertes_vivantes_validees,162,2026-10-23,Sud-Kivu,0,alerts,Tableau 4.
+poe_corpses_swabbed,162,2026-10-23,Sud-Kivu,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,162,2026-10-23,Tshopo,21143,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,162,2026-10-23,Tshopo,1,alerts,Tableau 4.
+poe_alertes_vivantes_validees,162,2026-10-23,Tshopo,1,alerts,Tableau 4.
+poe_corpses_swabbed,162,2026-10-23,Tshopo,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,162,2026-10-23,Haut-Uele,23340,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,162,2026-10-23,Haut-Uele,0,alerts,Tableau 4.
+poe_alertes_vivantes_validees,162,2026-10-23,Haut-Uele,0,alerts,Tableau 4.
+poe_corpses_swabbed,162,2026-10-23,Haut-Uele,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,162,2026-10-23,Bas-Uele,7390,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,162,2026-10-23,Bas-Uele,9,alerts,Tableau 4.
+poe_alertes_vivantes_validees,162,2026-10-23,Bas-Uele,0,alerts,Tableau 4.
+poe_corpses_swabbed,162,2026-10-23,Bas-Uele,0,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+poe_travellers_screened,162,2026-10-23,Ensemble,317301,travellers,"Tableau 4, 'Nombre de personnes passees aux PoE/PoC'."
+poe_alertes_notifiees,162,2026-10-23,Ensemble,15,alerts,Tableau 4.
+poe_alertes_vivantes_validees,162,2026-10-23,Ensemble,3,alerts,Tableau 4.
+poe_corpses_swabbed,162,2026-10-23,Ensemble,3,corpses,"Tableau 4, 'Nombre de corps sans vie interceptes ce jour'."
+eds_death_alerts,162,2026-10-23,Ituri,71,alerts,"'Sur 71 alertes EDS (dont 11 reports), 47 EDS ont ete realises (66,2 %) et 47 corps swabes.' - EDS section."
+eds_investigations_performed,162,2026-10-23,Ituri,47,investigations,"'Sur 71 alertes EDS (dont 11 reports), 47 EDS ont ete realises (66,2 %) et 47 corps swabes.' - EDS section."
+eds_corpses_swabbed,162,2026-10-23,Ituri,47,corpses,"'Sur 71 alertes EDS (dont 11 reports), 47 EDS ont ete realises (66,2 %) et 47 corps swabes.' - EDS section."
+eds_death_alerts,162,2026-10-23,Nord-Kivu,64,alerts,"'Sur 64 alertes EDS, 57 EDS ont ete realises et 60 corps swabes.' - EDS section."
+eds_investigations_performed,162,2026-10-23,Nord-Kivu,57,investigations,"'Sur 64 alertes EDS, 57 EDS ont ete realises et 60 corps swabes.' - EDS section."
+eds_corpses_swabbed,162,2026-10-23,Nord-Kivu,60,corpses,"'Sur 64 alertes EDS, 57 EDS ont ete realises et 60 corps swabes.' - EDS section."
+eds_death_alerts,162,2026-10-23,Haut-Uele,12,alerts,"'Sur 12 alertes EDS, 10 EDS ont ete realises (83,3 %) et 10 corps swabes.' - EDS section."
+eds_investigations_performed,162,2026-10-23,Haut-Uele,10,investigations,"'Sur 12 alertes EDS, 10 EDS ont ete realises (83,3 %) et 10 corps swabes.' - EDS section."
+eds_corpses_swabbed,162,2026-10-23,Haut-Uele,10,corpses,"'Sur 12 alertes EDS, 10 EDS ont ete realises (83,3 %) et 10 corps swabes.' - EDS section."
+eds_death_alerts,162,2026-10-23,Bas-Uele,7,alerts,'sur 7 alertes EDS.' (sentence cut off; no count of EDS performed) - EDS section.
+vaccination_persons_cumulative,162,2026-10-23,Ituri,1613,persons,'portant le cumul a 1 613 personnes vaccinees' - Vaccination section.
+vaccination_persons_cumulative,162,2026-10-23,Bas-Uele,1660,persons,"'le cumul atteint 1 660 personnes vaccinees sur 13 202 ciblees (12,6 %)' - Vaccination section."
+smsps_confirmed_coverage,162,2026-10-23,Ituri,51.9,percent,"'En Ituri, 14 nouveaux cas confirmes sur 27 (51,9 %) ont beneficie d'interventions SMSPS' - SMSPS section."

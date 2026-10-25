@@ -228,6 +228,9 @@ CONFIG = {
     "158": ("2026-10-19", "2026-10-19"),
     # "159" is a new render with SitRep 158's n (7 660) and last tick (19
     # October), so it is the same extract and is left out.
+    "160": ("2026-10-21", "2026-10-19"),
+    # "161" and "162" are new renders with SitRep 160's n (7 709) and last
+    # tick (19 October), so they are the same extract and are left out.
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid.
@@ -296,6 +299,7 @@ Y_AXIS_STEP = {
     "151": 25,
     "153": 25,
     "158": 25,
+    "160": 25,
 }
 
 

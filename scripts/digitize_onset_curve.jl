@@ -243,6 +243,9 @@ const CONFIG = [
     ("158", Date(2026, 10, 19), Date(2026, 10, 19)),
     # "159" is a new render with SitRep 158's n (7 660) and last tick (19
     # October), so it is the same extract and is left out.
+    ("160", Date(2026, 10, 21), Date(2026, 10, 19)),
+    # "161" and "162" are new renders with SitRep 160's n (7 709) and last
+    # tick (19 October), so they are the same extract and are left out.
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -314,7 +317,8 @@ const Y_AXIS_STEP = Dict(
     "149" => 25,
     "151" => 25,
     "153" => 25,
-    "158" => 25
+    "158" => 25,
+    "160" => 25
 )
 
 # --- PPM (P6) reader ------------------------------------------------------
