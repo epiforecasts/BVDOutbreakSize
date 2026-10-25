@@ -102,6 +102,13 @@ A major version: the report gains a health-zone level below the provinces, with 
   The reader now reads a short bar whose dark dead segment passes as outline, drops a column that carries the next bar's outline height, reads no bar from the band's pink beside the last outline, and lets two agreeing soft columns outvote a middle column under the dashed line.
   The rebuild adds 8 May to SitReps 133 and 134 and 2 May to SitRep 146, removes a 4 May bar from SitReps 112 and 143 to 145, and moves SitRep 120's 7 September from 17 to 24.
   SitReps 150 and 154 stay out, and #1154 gives the reasons.
+- The model cut-off advances to SitRep 162, 23 October, and the onset curve gains SitRep 160, so its latest vintage is 21 October (#1154).
+  SitRep 160 removes 10 cases and 1 death from Beni's cumulative with no note (#1159), so Nord-Kivu and the national total rise by less than the printed 24h counts.
+  The reader now reads a bar from its outlined columns when every other column of its window has lost its top outline, and reads nothing left of the y-axis line, which also drops a 24 and 28 April bar of 1 from SitReps 106 and 107.
+  SitReps 161 and 162 redraw SitRep 160's extract, so the onset curve does not add them.
+  The care scanner reads Nord-Kivu's `patients sont pris en charge` with its CTE/CT fraction.
+  `data/onset_dashboard_history.csv` adds the dashboard snapshots of 22 and 24 October.
+  Fitted values change with the new data.
 - Nord-Ubangi is the eighth source province (#1147).
   Its 2019 population, 1 425 000, is from the same INS *Annuaire statistique RDC 2020* table as the other seven.
   Its centre, (3.8889, 20.9641), is the WorldPop-weighted mean of its 11 health-zone centroids, printed by `task province-centres` from the same INRB-UMIE build as the other seven.
