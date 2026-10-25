@@ -788,6 +788,73 @@ end
     ]
 end
 
+@testitem "digitize reads a bar from its outlined column when the other lost its top" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## A bar between two outlines of its own height whose soft column
+    ## carries the top outline, beside two columns whose fill breaks well
+    ## below the top and shows no dark pixel at all (SitRep 160's 25
+    ## August, read as 31 against 88 to 89 in every other vintage). The
+    ## broken columns are the window's only non-soft ones, so the reader
+    ## read the bar from them.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    x = 680
+    paint!(200:299, (x - 2):(x + 2), (255, 255, 255))
+    paint!(240:299, (x - 1):(x - 1), (100, 180, 230))
+    paint!(240:245, (x - 1):(x - 1), (110, 30, 40))
+    paint!(270:299, x:(x + 1), (100, 180, 230))
+    paint!(240:299, (x - 2):(x - 2), (60, 60, 60))
+    paint!(240:299, (x + 2):(x + 2), (60, 60, 60))
+    last_tick = Date(2026, 8, 24)
+    rows = digitize(R, G, B, last_tick, 20)
+    @test (last_tick - Day(3), 14, 1) in rows
+end
+
+@testitem "digitize reads nothing left of the y-axis line" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## A three-pixel grey stub on the first weekly tick, left of the
+    ## y-axis line, read as a bar of one count (SitRep 160's 23 March,
+    ## four weeks before the first case). The axis line here stands right
+    ## of the first tick, as SitRep 160's does.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    paint!(60:299, 38:38, (255, 255, 255))
+    paint!(60:299, 130:130, (100, 100, 100))
+    paint!(297:299, 122:124, (90, 90, 90))
+    last_tick = Date(2026, 8, 24)
+    rows = digitize(R, G, B, last_tick, 20)
+    @test (last_tick - Day(9), 12, 5) in rows
+    @test all(r -> r[1] > last_tick - Day(19 * 7 - 3), rows)
+end
+
 ## --- End to end against the real figures ----------------------------------
 
 @testitem "tick_chain steps over a split tick and a missing one" begin
