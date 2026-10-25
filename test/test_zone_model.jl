@@ -3,10 +3,10 @@
 ## inputs built from a parent chain, the bvd_zone model, and the chain
 ## post-processing in src/zone.jl.
 
-## A synthetic two-patch zone dataset generated from a known share process,
-## plus a stand-in parent chain (a `Dict` of iteration-by-chain matrices,
-## which is all the input builder reads) so every item runs without a real
-## joint fit. The truth is kept alongside so the recovery items can compare.
+## The synthetic two-patch zone dataset of `test/zone_fixtures.jl`, built
+## from a known share process with a stand-in parent chain so every item runs
+## without a real joint fit. The truth is kept alongside so the recovery
+## items can compare.
 @testsnippet ZoneSynthetic begin
     using BVDOutbreakSize
     using BVDOutbreakSize: zone_initial_shares, deviation_knots,
@@ -18,168 +18,8 @@
     using Dates: Date, Day
     using Distributions: Gamma, Multinomial
     using Random: Xoshiro
-
-    function zone_synthetic(;
-            n = 120, first_vintage = 60, step = 3,
-            lead_days = 42, seed = 11, total_scale = 1.0
-        )
-        rng = Xoshiro(seed)
-        np = 2
-        ## Fixed patch infections: growth then a plateau, two very different
-        ## sizes so the small patch exercises the near-zero force paths.
-        I_bar = zeros(Float64, np, n)
-        for t in 1:n
-            I_bar[1, t] = 30.0 * exp(0.03 * min(t, 80)) * total_scale
-            I_bar[2, t] = 5.0 * exp(0.02 * min(t, 80)) * total_scale
-        end
-        ## The delay parameters of every parent draw, in the order of
-        ## `_ZONE_DELAY_KEYS`, at the centres of the parent's priors.
-        delay_params = [
-            2.71 * 5.65, sqrt(2.71) * 5.65, 6.3, 3.5, 1.178, 3.694,
-            4.5, 4.0, 1.178, 3.694, 2.151, 3.906,
-        ]
-        pmfs = zone_delay_pmfs(delay_params)
-        g, f = pmfs.g, pmfs.f
-        zones = [
-            ("a", ["z1", "z2", "z3", "z4", "z5"]),
-            ("b", ["y1", "y2", "y3"]),
-        ]
-        patch_ranges = [1:5, 6:8]
-        nz = 8
-        days = collect(first_vintage:step:n)
-        days[end] == n || push!(days, n)
-        t0 = clamp(days[1] - lead_days, 1, n)
-        knots = knot_days(n; week = 7, start = t0)
-        K = length(knots)
-        ## The truth: uneven initial shares, a level contrast, and one zone
-        ## in the big patch walking upward while another walks down. Every
-        ## zone clears the walking threshold, so all carry innovations and
-        ## the truth is representable in the fitted model.
-        z_w = [1.2, 0.3, -0.2, -0.6, -0.7, 0.8, -0.3, -0.5]
-        w0 = zone_initial_shares(z_w, patch_ranges, 2.0)
-        walking = fill(true, nz)
-        σ_level = 0.25
-        ## One drift scale per patch, as the model samples it.
-        σ_δ = fill(0.08, np)
-        φ = exp2(-7 / 42)
-        ## `n_p - 1` level draws per patch on the sum-to-zero basis.
-        z_level = [0.6, -0.4, 0.2, -0.3, 0.5, -0.2]
-        ## Per knot, the first basis direction of the big patch contrasts
-        ## its first two zones: `+0.8` and `-0.8` in the draw's units.
-        nd = deviation_knot_dims(patch_ranges, walking).drift
-        z_drift = zeros(nd * (K - 1))
-        for k in 2:K
-            z_drift[(k - 2) * nd + 1] = 0.8 * sqrt(2)
-        end
-        patch_of_zone = [1, 1, 1, 1, 1, 2, 2, 2]
-        δ_knots = deviation_knots(
-            z_level, z_drift, σ_level, σ_δ, φ,
-            patch_ranges, Matrix{Float64}[], Matrix{Float64}[], walking, K
-        )
-        terms = zone_delay_terms(I_bar, pmfs, t0, days, patch_of_zone)
-        zd = (;
-            I_bar, g, f, patch_ranges, patch_of_zone, knots, t0, n, days,
-            terms.force_pre, terms.infections_pre, mixing = nothing,
-            interp = zone_interpolation_weights(knots, t0, n),
-            terms.report_bin, terms.death_bin,
-        )
-        fw = zone_forward(zd, δ_knots, w0, nothing)
-        ## Observed counts: each vintage's allocated total is the rounded
-        ## modelled patch total, split multinomially at the modelled shares.
-        nv = length(days)
-        counts = zeros(Int, nz, nv)
-        for v in 1:nv, (p, zs) in enumerate(patch_ranges)
-
-            C = fw.increments[zs, v]
-            N = round(Int, sum(C))
-            N > 0 || continue
-            counts[zs, v] = rand(rng, Multinomial(N, C ./ sum(C)))
-        end
-        ## The manifest shape: cumulative per zone on the shared vintage days.
-        hist = Dict{String, Dict{String, NamedTuple}}()
-        z = 0
-        for (prov, names) in zones
-            hist[prov] = Dict{String, NamedTuple}()
-            for nm in names
-                z += 1
-                hist[prov][nm] = (;
-                    days = copy(days),
-                    counts = cumsum(counts[z, :]),
-                )
-            end
-        end
-        ## Allocated zone deaths, a tenth of the confirmed, so the death
-        ## composition the model always fits has something to score.
-        death_hist = Dict{String, Dict{String, NamedTuple}}()
-        for (prov, zones) in hist
-            death_hist[prov] = Dict{String, NamedTuple}()
-            for (nm, h) in zones
-                death_hist[prov][nm] = (;
-                    days = copy(h.days), counts = cld.(h.counts, 10),
-                )
-            end
-        end
-        seeding = Date("2026-02-13")
-        obs = (;
-            n, seeding, cutoff = seeding + Day(n - 1),
-            zone_confirmed_history = hist,
-            zone_death_history = death_hist,
-        )
-        ## Stand-in parent chain: four identical draws of the truth.
-        ndraw = 4
-        chain = Dict{Symbol, Any}(
-            :infections_patch => reshape(
-                [vec(I_bar) for _ in 1:ndraw],
-                ndraw, 1
-            ),
-            Symbol("gi_state.gi_mean") => fill(2.71 * 5.65, ndraw, 1),
-            Symbol("gi_state.gi_sd") => fill(sqrt(2.71) * 5.65, ndraw, 1),
-            Symbol("inc_state.delay_mean") => fill(6.3, ndraw, 1),
-            Symbol("inc_state.delay_sd") => fill(3.5, ndraw, 1),
-            Symbol("cases_state.report_state.α") => fill(1.178, ndraw, 1),
-            Symbol("cases_state.report_state.θ") => fill(3.694, ndraw, 1),
-            Symbol("confirmed_state.receipt_state.d.delay_mean") =>
-                fill(4.5, ndraw, 1),
-            Symbol("confirmed_state.receipt_state.d.delay_sd") =>
-                fill(4.0, ndraw, 1),
-            Symbol("deaths_state.od_state.oa.α") => fill(1.178, ndraw, 1),
-            Symbol("deaths_state.od_state.oa.θ") => fill(3.694, ndraw, 1),
-            Symbol("deaths_state.od_state.ad.α") => fill(2.151, ndraw, 1),
-            Symbol("deaths_state.od_state.ad.θ") => fill(3.906, ndraw, 1),
-            :C_T => fill(sum(I_bar), ndraw, 1),
-            ## The national case-fatality ratio, the zones' fatality centre
-            ## when the parent has no province death split.
-            :CFR => fill(0.4, ndraw, 1),
-            ## The province model's own between-patch movement: a per-origin
-            ## intensity and the arrivals into each patch, a twentieth of
-            ## the second patch's infections and none into the first.
-            :importation_epsilon_patch => reshape(
-                [[0.02, 0.01] for _ in 1:ndraw], ndraw, 1
-            ),
-            :importation_patch => reshape(
-                [
-                    vec(
-                        [
-                            p == 2 ? 0.05 * I_bar[p, t] : 0.0
-                                for p in 1:np, t in 1:n
-                        ]
-                    )
-                        for _ in 1:ndraw
-                ],
-                ndraw, 1
-            )
-        )
-        truth = (;
-            z_w, w0, δ_knots, z_level, z_drift, σ_level, σ_δ, φ,
-            δ_daily = zd.interp * transpose(δ_knots),
-            walking, shares = fw.shares, increments = fw.increments,
-            infections = fw.infections, forces = fw.forces,
-        )
-        return (;
-            obs, chain, truth, I_bar, g, f, pmfs, delay_params,
-            patch_ranges, days, t0, knots, counts, nz,
-        )
-    end
+    include(joinpath(@__DIR__, "zone_fixtures.jl"))
+    using .ZoneFixtures: zone_synthetic, zone_metadata
 
     ## Reference forms of the delay convolution, from the formula: the
     ## lower-triangular Toeplitz matrix with `F[j, j − s] = f_s` over the
@@ -257,21 +97,6 @@
             :, 1
         )
         return chain
-    end
-
-    ## Health-zone metadata rows covering every synthetic zone, for the
-    ## mixing kernel.
-    function zone_metadata(syn)
-        pairs = [("a", "z$i") for i in 1:5]
-        append!(pairs, [("b", "y$i") for i in 1:3])
-        return [
-            (;
-                zone = nm, label = uppercase(nm), province = prov,
-                population = 10_000 * i, lat = 0.1 * i, lon = 0.2 * i,
-                zscode = string(i),
-            )
-                for (i, (prov, nm)) in enumerate(pairs)
-        ]
     end
 end
 
@@ -1213,7 +1038,7 @@ end
     ZoneSynthetic,
 ] begin
     using BVDOutbreakSize: bvd_zone, zone_importation_blocks, _zone_states,
-        zone_deformation, zone_draw_mixing
+        zone_deformation, zone_draw_mixing, destination_weighted_kernel
     using Turing: sample, Prior
     import FlexiChains
 
@@ -1246,6 +1071,56 @@ end
     end
     ## Arrivals stay a proper fraction of a patch's own infections.
     @test all(0 .<= zone_draw_mixing(mix, nothing, nothing).import_fraction .< 1)
+    ## A parent's log weights reach the blocks through
+    ## `destination_weighted_kernel`: a malformed one throws there rather
+    ## than being skipped.
+    function tilted(flow)
+        chain = copy(syn.chain)
+        chain[:importation_flow_effect] = reshape([flow for _ in 1:4], 4, 1)
+        return zone_inputs(
+            merge(syn, (; chain)); zones = zone_metadata(syn)
+        ).model_data.mixing
+    end
+    @test_throws DimensionMismatch tilted(zeros(3))
+    ## With two patches each origin has one destination, so any weighting
+    ## cancels and the blocks are the unweighted ones.
+    @test tilted([0.0, 0.4, -0.7, 0.0]).between ≈ mix.between
+    ## The parent kernel is the posterior mean of the weighted kernels over
+    ## draws, not the kernel at the mean log weight.
+    Ws = [
+        [0.0 1.5 -0.4; 2.0 0.0 0.3; -1.0 0.2 0.0],
+        [0.0 -1.2 0.8; -0.5 0.0 1.1; 0.9 -0.7 0.0],
+        [0.0 0.3 0.1; 0.4 0.0 -2.0; 1.6 0.5 0.0],
+        [0.0 -0.2 -1.5; 1.0 0.0 0.0; -0.3 1.8 0.0],
+    ]
+    chain3 = copy(syn.chain)
+    chain3[:importation_flow_effect] = reshape(vec.(Ws), 4, 1)
+    K3p = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
+    mean_kernel = sum(destination_weighted_kernel(K3p, W) for W in Ws) ./ 4
+    got = BVDOutbreakSize._mean_parent_kernel(chain3, :importation_flow_effect)
+    @test got ≈ mean_kernel
+    @test !(got ≈ destination_weighted_kernel(K3p, sum(Ws) ./ 4))
+    ## With three patches a non-zero weighting changes the between block,
+    ## and its column over a destination patch's zones is the weighted
+    ## kernel's entry.
+    K3 = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
+    η3 = [0.7, -0.2, -0.5]
+    poz3 = [1, 1, 2, 2, 3, 3]
+    pops3 = [5.0e5, 2.0e5, 3.0e5, 1.0e5, 4.0e5, 1.5e5]
+    coords3 = [
+        (-4.3, 15.3), (-4.6, 15.8), (-5.9, 22.4),
+        (-6.2, 23.6), (0.5, 25.2), (1.2, 24.8),
+    ]
+    Kw3 = destination_weighted_kernel(K3, η3)
+    plain3 = zone_importation_blocks(pops3, coords3, poz3, K3).between
+    tilt3 = zone_importation_blocks(pops3, coords3, poz3, Kw3).between
+    @test !(tilt3 ≈ plain3)
+    for q in eachindex(poz3), p in 1:3
+
+        p == poz3[q] && continue
+        zs = findall(==(p), poz3)
+        @test sum(tilt3[zs, q]) ≈ Kw3[p, poz3[q]] rtol = 1.0e-12
+    end
     chn = sample(
         bvd_zone(zd), Prior(), 6;
         chain_type = FlexiChains.VNChain, progress = false
@@ -1302,6 +1177,108 @@ end
     @test zone_inputs(
         merge(syn, (; chain = flat)); zones = zone_metadata(syn)
     ).model_data.mixing === nothing
+end
+
+@testitem "zone mixing: the sampled decay and destination weights" setup = [
+    ZoneSynthetic,
+] begin
+    using BVDOutbreakSize: bvd_zone, zone_gravity_blocks, gravity_pull,
+        province_distance_matrix, _zone_states
+    using Turing: sample, Prior
+    using Statistics: median, quantile
+    import FlexiChains
+
+    syn = zone_synthetic()
+    inputs = zone_inputs(syn; zones = zone_metadata(syn))
+    zd = inputs.model_data
+    mix = zd.mixing
+    poz = inputs.patch_of_zone
+    nz = syn.nz
+    meta = zone_metadata(syn)
+    pops = Float64[r.population for r in meta]
+    coords = [(r.lat, r.lon) for r in meta]
+    K = province_importation_kernel(PROVINCE_POPULATIONS[1:2])
+    ## The gravity blocks written out from the pull at decay `γ`, each
+    ## destination weighted by `exp(ω_z)`.
+    function reference(γ, ω = zeros(nz))
+        pull = gravity_pull(
+            pops; distances = province_distance_matrix(coords), decay = γ
+        ) .* exp.(ω)
+        within = zeros(nz, nz)
+        between = zeros(nz, nz)
+        for q in 1:nz, z in 1:nz
+
+            zs = findall(==(poz[z]), poz)
+            s = sum(pull[zs, q])
+            s > 0 || continue
+            if poz[z] == poz[q]
+                within[z, q] = pull[z, q] / s
+            else
+                between[z, q] = K[poz[z], poz[q]] * pull[z, q] / s
+            end
+        end
+        return (; within, between)
+    end
+    ## Unit decay and no destination weight recover the fixed blocks.
+    blocks(γ, ω) = zone_gravity_blocks(mix.gravity, γ, ω)
+    b1 = blocks(1.0, zeros(nz))
+    @test b1.within ≈ mix.within rtol = 1.0e-12
+    @test b1.between ≈ mix.between rtol = 1.0e-12
+    @test b1.within ≈ reference(1.0).within rtol = 1.0e-12
+    @test b1.between ≈ reference(1.0).between rtol = 1.0e-12
+    ## Another decay is the gravity pull at that decay.
+    @test blocks(2.5, zeros(nz)).within ≈ reference(2.5).within rtol = 1.0e-12
+    ## A weight shared within a patch cancels.
+    ω_flat = [fill(0.7, 5); fill(-0.7, 3)]
+    @test blocks(1.0, ω_flat).within ≈ mix.within
+    @test blocks(1.0, ω_flat).between ≈ mix.between
+    ## At any decay and weight the within block stays column-stochastic in
+    ## the origin's patch and the between block's column over a destination
+    ## patch is still the parent's flow; only the split moves.
+    ω = [1.2, -0.4, 0.3, -0.9, -0.2, 0.8, -1.1, 0.3]
+    for γ in (0.05, 0.6, 4.0)
+        b = blocks(γ, ω)
+        @test b.within ≈ reference(γ, ω).within rtol = 1.0e-10
+        @test b.between ≈ reference(γ, ω).between rtol = 1.0e-10
+        for q in 1:nz, p in 1:2
+
+            zs = findall(==(p), poz)
+            if p == poz[q]
+                @test sum(b.within[zs, q]) ≈ 1 rtol = 1.0e-12
+                @test b.within[q, q] == 0
+                @test all(iszero, b.between[zs, q])
+            else
+                @test sum(b.between[zs, q]) ≈ K[p, poz[q]] rtol = 1.0e-12
+                @test all(iszero, b.within[zs, q])
+            end
+        end
+        @test !(b.within ≈ mix.within)
+    end
+    ## The model records the decay, the weight scale and the log weights,
+    ## which sum to zero within every patch, and the states rebuild each
+    ## draw's blocks from them.
+    chn = sample(
+        bvd_zone(zd), Prior(), 4;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+    γs = vec(collect(chn[:mixing_decay_zone]))
+    ## The decay prior keeps its median at the conventional 1 and its 95%
+    ## point above 3.7, the upper end of the decay a 63-zone fit estimated.
+    decay_prior = bvd_zone(zd).defaults.mixing_decay_prior
+    @test median(decay_prior) ≈ 1
+    @test quantile(decay_prior, 0.95) > 3.7
+    ωs = [collect(v) for v in vec(collect(chn[:mixing_destination_zone]))]
+    @test all(>(0), γs)
+    @test all(>(0), vec(collect(chn[:mixing_destination_sd_zone])))
+    for v in ωs, zs in inputs.patch_ranges
+        @test abs(sum(v[zs])) < 1.0e-10
+    end
+    states = _zone_states(chn, inputs)
+    for (i, st) in enumerate(states)
+        b = blocks(γs[i], ωs[i])
+        @test st.def.mixing.within ≈ b.within
+        @test st.def.mixing.between ≈ b.between
+    end
 end
 
 @testitem "bvd_zone: the two compositions sum to the likelihood" setup = [
@@ -1377,6 +1354,73 @@ end
     )
 end
 
+@testitem "bvd_zone: each draw's terms are the model's own" setup = [
+    ZoneSynthetic,
+] begin
+    using BVDOutbreakSize: bvd_zone, _zone_draw_terms, zone_correlation_factors
+    using Turing: sample, Prior
+    import FlexiChains
+
+    ## With and without the zone metadata, so the mixing and the zone
+    ## correlation are each off and then on.
+    syn = zone_synthetic()
+    for zones in (nothing, zone_metadata(syn))
+        zd = zone_inputs(syn; zones).model_data
+        on = !isempty(zd.zone_distances)
+        mix_on = zd.mixing !== nothing
+        @test on == mix_on == (zones !== nothing)
+        K = length(zd.knots)
+        chn = sample(
+            bvd_zone(zd), Prior(), 4; chain_type = FlexiChains.VNChain,
+            progress = false
+        )
+        draws(q) = vec(collect(chn[q]))
+        for i in 1:4
+            θ = (;
+                z_w = draws(:z_w)[i], σ_level = draws(:σ_level)[i],
+                z_level = draws(:z_level)[i],
+                δ_halflife = draws(:δ_halflife)[i], σ_δ = draws(:σ_δ)[i],
+                z_drift = draws(:z_drift)[i],
+                ρ_corr = on ? draws(:ρ_corr)[i] : nothing,
+                ε_within = mix_on ? draws(:ε_within)[i] : nothing,
+                τ_mix = mix_on ? draws(:τ_mix)[i] : nothing,
+                z_mix = mix_on ? draws(:z_mix)[i] : nothing,
+            )
+            t = _zone_draw_terms(zd, θ, K)
+            ## The model stores what the helper returns, to the bit.
+            @test vec(t.δ_knots) == draws(:delta_knots_zone)[i]
+            @test t.w0 == draws(:share_start_zone)[i]
+            ## Each term from its definition.
+            φ = exp2(-zd.week / θ.δ_halflife)
+            if on
+                @test t.ℓ == draws(:correlation_length_zone)[i]
+                @test t.ℓ ≈ -zd.correlation_distance / log(θ.ρ_corr)
+                lf = zone_correlation_factors(zd.zone_distances, t.ℓ)
+                df = zone_correlation_factors(zd.zone_walk_distances, t.ℓ)
+            else
+                @test t.ℓ === nothing
+                lf = df = Matrix{Float64}[]
+            end
+            @test t.knot_args[5] == φ
+            @test t.δ_knots == deviation_knots(
+                θ.z_level, θ.z_drift, θ.σ_level, θ.σ_δ, φ, zd.patch_ranges,
+                lf, df, zd.walking, K
+            )
+            @test t.w0 == zone_initial_shares(
+                θ.z_w, zd.patch_ranges, zd.share_scale
+            )
+            if mix_on
+                @test t.ε == draws(:mixing_epsilon_zone)[i]
+                x = log(θ.ε_within / (1 - θ.ε_within)) .+
+                    θ.τ_mix .* (θ.z_mix .- sum(θ.z_mix) / length(θ.z_mix))
+                @test t.ε ≈ 1 ./ (1 .+ exp.(-x)) rtol = 1.0e-12
+            else
+                @test t.ε === nothing
+            end
+        end
+    end
+end
+
 @testitem "bvd_zone: the sampled dimension and the optional blocks" setup = [
     ZoneSynthetic,
 ] begin
@@ -1401,12 +1445,13 @@ end
     dim = syn.nz + 3 * nc + nd * (K - 1) + 6 + np + zd.meld_d
     @test dimension(bvd_zone(zd)) == dim
     ## Mixing adds the within-patch intensity, a departure scale and one
-    ## offset per zone, where the inputs carry the kernel blocks, and one
+    ## offset per zone, the zone decay, the destination weight scale and its
+    ## contrasts within each patch, where the inputs carry the kernel, and one
     ## origin intensity per patch to the shared draw. The same metadata gives
     ## the zones centroids, so the correlation block switches on too and adds
     ## its reference correlation.
     zdm = zone_inputs(syn; zones = zone_metadata(syn)).model_data
-    @test dimension(bvd_zone(zdm)) == dim + 3 + syn.nz + np
+    @test dimension(bvd_zone(zdm)) == dim + 5 + syn.nz + nc + np
     ## With no kept meld cell the shared draw is absent.
     zdc = merge(
         zd, (;
@@ -1683,10 +1728,10 @@ end
 @testitem "AD gradient: bvd_zone with mixing, correlation and the meld" tags = [
     :ad,
 ] setup = [ZoneSynthetic] begin
-    using BVDOutbreakSize: bvd_zone, default_adtype
+    using BVDOutbreakSize: bvd_zone, default_adtype, relative_multiplier_dims
     using Turing: DynamicPPL
     using LogDensityProblems: logdensity_and_gradient
-    using Random: seed!
+    using Random: seed!, Xoshiro
 
     ## The configuration the registry fits: metadata for every zone, so the
     ## mixing blocks and the distance correlation are on, and the shared
@@ -1707,6 +1752,25 @@ end
     @test length(grad) == length(x0)
     @test all(isfinite, grad)
     @test any(!iszero, grad)
+    ## The gradient stays finite at the extremes of the zone decay and the
+    ## destination weights, and the decay reaches the likelihood.
+    nc = relative_multiplier_dims(zd.patch_ranges)
+    lps = map((0.02, 6.0)) do γ
+        params = (;
+            γ_zone = γ, σ_destination = 4.0,
+            z_destination = [(-1)^k * 3.0 for k in 1:nc],
+        )
+        vix = DynamicPPL.link(
+            DynamicPPL.VarInfo(
+                Xoshiro(3), model, DynamicPPL.InitFromParams(params)
+            ), model
+        )
+        lp, gr = logdensity_and_gradient(ldf, collect(vix[:]))
+        @test isfinite(lp)
+        @test all(isfinite, gr)
+        lp
+    end
+    @test lps[1] != lps[2]
 end
 
 @testitem "fit_zone: a short NUTS fit with mixing and correlation on" tags = [
