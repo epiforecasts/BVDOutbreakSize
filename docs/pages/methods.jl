@@ -792,8 +792,7 @@ MarkdownTable(vintage_table) #hide
 # The delay from symptom onset to a suspected case being detected and reported into surveillance.
 # We use a Bayesian reanalysis [bdbv_linelist_analysis_2026](@cite) of the 2012 Isiro Bundibugyo virus outbreak line list [rosello2015](@cite).
 # We take its onset-to-admission delay as a Gamma sampled on its natural shape and scale, with priors centred on the reanalysis posterior (implied mean about 4 d) and carrying its reported uncertainty.
-# Both priors are LogNormal, with the scale's median at the reanalysis estimate of 3.69 and its standard deviation of 1.20 carried to the log scale (1.20 / 3.69, about 0.32).
-# A scale near zero, which would put the report on the day of onset, then becomes steadily less likely rather than meeting a hard lower bound:
+# Both priors are LogNormal, with the scale's median at the reanalysis estimate and its SD carried to the log scale:
 #
 # ```math
 # \alpha_{\text{rep}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \qquad

@@ -456,7 +456,7 @@ ascertainment and the background CFR for reuse by
         onset_to_death = onset_to_death_model(
             cdf_nmax(Gamma(3.33, 3.83));
             oa_alpha_prior = LogNormal(log(1.178), 0.25),
-            oa_theta_prior = LogNormal(log(3.694), 0.32),
+            oa_theta_prior = ONSET_ADMISSION_THETA_PRIOR,
             ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
             ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
         ),
@@ -544,8 +544,8 @@ disjoint days. Empty by default.
 The background and testing fraction are sampled by an injected
 [`test_positivity_model`](@ref), and the onset-to-report delay is
 injected, defaulting to the line-list onset-to-admission Gamma with shape
-`LogNormal(log(1.178), 0.25)` and scale `LogNormal(log(3.694), 0.32)`
-(implied mean about 4 d).
+`LogNormal(log(1.178), 0.25)` and scale
+[`ONSET_ADMISSION_THETA_PRIOR`](@ref) (implied mean about 4 d).
 
 Returns the onset-to-report PMF and the BVD onset-to-report daily series
 (unit ascertainment, no background) so [`confirmed_cases_model`](@ref) can
@@ -567,15 +567,14 @@ sitrep.
         ## suspect-case and export streams. The line-list onset→notification
         ## delay (~20 d) is not used: it is assumed to reflect a longer
         ## pathway (likely confirmation and administrative processing),
-        ## though what it captures is uncertain. The scale prior is
-        ## LogNormal at the reanalysis estimate 3.694, with its SD 1.198
-        ## carried to the log scale (1.198 / 3.694 ≈ 0.32). A near-zero
-        ## scale then costs more the nearer it is to zero, rather than
-        ## meeting a hard bound the sampler can sit against (#1087).
+        ## though what it captures is uncertain. The scale prior's median
+        ## is the reanalysis estimate 3.694, with its SD 1.198 carried to
+        ## the log scale (1.198 / 3.694 ≈ 0.32), so a near-zero scale is
+        ## penalised.
         onset_to_report = gamma_delay_model(
             cdf_nmax(Gamma(1.178, 3.694));
             alpha_prior = LogNormal(log(1.178), 0.25),
-            theta_prior = LogNormal(log(3.694), 0.32)
+            theta_prior = ONSET_ADMISSION_THETA_PRIOR
         ),
         cutoff::Union{Nothing, Integer} = nothing,
         simulated = nothing
@@ -1425,7 +1424,7 @@ rate and the daily at-risk prevalence for reuse by
         onset_to_detection = gamma_delay_model(
             cdf_nmax(Gamma(1.178, 3.694));
             alpha_prior = LogNormal(log(1.178), 0.25),
-            theta_prior = LogNormal(log(3.694), 0.32)
+            theta_prior = ONSET_ADMISSION_THETA_PRIOR
         ),
         cutoff::Union{Nothing, Integer} = nothing,
         simulated = nothing
