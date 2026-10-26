@@ -2558,9 +2558,10 @@ series for forecasting and replication.
         ## Share of the non-BVD background in each patch, summing to one
         ## ([`background_split_model`](@ref)).
         background_split::AbstractVector{<:Real} = [1.0],
-        ## Relative case ascertainment by patch (the case composition's),
-        ## which splits the national BVD admissions by ascertainment-weighted
-        ## incidence. Ones leaves the split on incidence alone.
+        ## Relative ascertainment by patch, which re-splits the national BVD
+        ## admissions. Ones leaves the split on the reports alone, as
+        ## [`bvd_joint`](@ref) passes when each patch's reports already
+        ## carry its suspected-case detection.
         patch_ascertainment::AbstractVector{<:Real} = ones(
             length(background_split)
         ),
