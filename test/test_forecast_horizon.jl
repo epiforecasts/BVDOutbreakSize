@@ -369,11 +369,19 @@ end
         rh.onsets, st.logit_h0, st.γ, st.grid_start, st.alpha, as_of
     )
     vintages = [N + 7, N + 14]
-    fm = onset_forecast_model(rh.onsets, st, N, vintages)
-    sds(σ) = fix(fm, (; forecast_scan_sd = σ))().sds
+    sds(σ) = onset_forecast_model(
+        rh.onsets, merge(st, (; σ_scan = σ)), N, vintages
+    )().sds
     now = total(N)
     then = total.(vintages)
-    ## A whole figure's total carries both figures' calibration error on
+    ## The forecast reads the fitted scan level SD rather than drawing its
+    ## own.
+    @test st.σ_scan > 0
+    fm = onset_forecast_model(rh.onsets, st, N, vintages)
+    names = string.(collect(keys(DynamicPPL.VarInfo(fm))))
+    @test all(n -> startswith(n, "forecast_onset_reports"), names)
+    @test fm().sds ≈ sds(st.σ_scan)
+    ## A whole figure's total carries both figures' scan level error on
     ## top of the two bar reads.
     for σ in (0.0, 0.004, 0.02)
         @test sds(σ) ≈ sqrt.(

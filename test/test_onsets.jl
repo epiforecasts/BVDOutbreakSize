@@ -896,6 +896,120 @@ end
     @test pixel / 2 < median(τs) < 2 * pixel
 end
 
+@testitem "onset_vintage_indices maps each read onto its figure" begin
+    using BVDOutbreakSize: onset_vintage_indices
+
+    v = onset_vintage_indices([15, 15, 20, 20, 30], [0, 0, 15, 15, 17])
+    @test v.n_vintages == 3
+    @test v.vintage_idx == [1, 1, 2, 2, 3]
+    ## The empty predecessor and a report day no cell reports on name no
+    ## figure.
+    @test v.prev_vintage_idx == [0, 0, 1, 1, 0]
+end
+
+@testitem "onset_reporting_model scales each figure's levels by its scan level" begin
+    using BVDOutbreakSize: onset_reporting_model, onset_report_moments
+    using Turing: DynamicPPL, fix
+    using Random: seed!
+
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    model = onset_reporting_model(oc, fill(30.0, 25))
+    names = string.(collect(keys(DynamicPPL.VarInfo(model))))
+    @test "σ_scan" in names
+    @test "z_scan" in names
+    z = [1.5, -0.7]
+    seed!(20261026)
+    out = fix(model, (; σ_scan = 0.02, z_scan = z))()
+    @test out.scan_level ≈ exp.(0.02 .* z)
+    ## Recompute the unscaled levels from the fitted hazard, then apply
+    ## figure 1's level to reads off 15 and figure 2's to reads off 20.
+    m = onset_report_moments(
+        fill(30.0, 25), out.logit_h0, out.γ, out.grid_start, out.alpha,
+        oc.onset_days, oc.report_days, oc.prev_report_days
+    )
+    @test out.unscanned ≈ m.means
+    c = exp.(0.02 .* z)
+    cur = [r == 15 ? c[1] : c[2] for r in oc.report_days]
+    prev = [p == 15 ? c[1] : 1.0 for p in oc.prev_report_days]
+    @test out.modelled ≈ m.level_cur .* cur .- m.level_prev .* prev
+    @test out.modelled != out.unscanned
+    reads = [p == 0 ? 1 : 2 for p in oc.prev_report_days]
+    @test out.scales ≈
+        sqrt.(max.(out.modelled, 0) .+ reads ./ 12 .+ reads .* out.τ^2)
+end
+
+@testitem "onset_reporting_model nests the model without a scan level" begin
+    ## At `σ_scan = 0` every figure reads at level one, whatever `z_scan`
+    ## is, so the increment likelihood is the one without a scan level.
+    using BVDOutbreakSize: onset_reporting_model
+    using Turing: DynamicPPL, fix
+    using Random: seed!
+
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
+    )
+    model = onset_reporting_model(oc, fill(30.0, 25))
+    seed!(20261027)
+    vi = DynamicPPL.VarInfo(model)
+    lik(z) = DynamicPPL.getloglikelihood(
+        last(
+            DynamicPPL.evaluate!!(
+                fix(model, (; σ_scan = 0.0, z_scan = z)), deepcopy(vi)
+            )
+        )
+    )
+    out = fix(model, (; σ_scan = 0.0, z_scan = [2.0, -3.0]))()
+    @test all(==(1.0), out.scan_level)
+    @test out.modelled == out.unscanned
+    @test lik([2.0, -3.0]) ≈ lik([-1.0, 0.5])
+    ## A small level moves the likelihood continuously away from it.
+    small = fix(model, (; σ_scan = 1.0e-9, z_scan = [2.0, -3.0]))()
+    @test small.modelled ≈ out.modelled rtol = 1.0e-6
+end
+
+@testitem "onset scan level prior is a half-normal on the read-back gaps" begin
+    ## The prior has its mode at no level error and its scale set by the
+    ## digitised totals read back against the printed ones: half its mass
+    ## sits within a few read-back gaps and its bulk covers the largest
+    ## gap above a printed total.
+    using BVDOutbreakSize
+    using BVDOutbreakSize: onset_reporting_model
+    using Statistics: median, quantile
+    using Random: seed!
+
+    figures = joinpath(pkgdir(BVDOutbreakSize), "data", "onset_curve_figures.csv")
+    lines = readlines(figures)
+    head = split(lines[1], ',')
+    gcol = findfirst(==("gap_pct"), head)
+    rcol = findfirst(==("reprint_of"), head)
+    rows = [split(l, ',') for l in lines[2:end]]
+    gaps = [
+        parse(Float64, r[gcol]) / 100 for r in rows
+            if !isempty(r[gcol]) && isempty(r[rcol])
+    ]
+    oc = (;
+        onset_days = [10, 11], report_days = [15, 15],
+        prev_report_days = [0, 0], increments = [2, 3],
+    )
+    model = onset_reporting_model(oc, fill(30.0, 25))
+    seed!(20261028)
+    σs = [model().σ_scan for _ in 1:4000]
+    @test all(>=(0), σs)
+    ## A zero-centred half-normal has its median at 0.674 of its scale.
+    @test median(σs) ≈ 0.674 * 0.005 rtol = 0.1
+    @test quantile(σs, 0.1) < median(abs.(gaps)) < median(σs)
+    @test maximum(gaps) < quantile(σs, 0.9)
+    @test quantile(σs, 0.95) < 0.0125
+end
+
 @testitem "safe_studentt stays valid under extreme scale/df" begin
     using BVDOutbreakSize: safe_studentt
     using Distributions: mean, std, logpdf
@@ -1148,6 +1262,53 @@ end
     @test length(grad) == length(x0)
     @test all(isfinite, grad)
     @test any(!iszero, grad)
+end
+
+@testitem "AD gradient: the onset scan level differentiates (Mooncake)" tags = [
+    :ad,
+] begin
+    ## The gradient reaches `σ_scan` and every figure's `z_scan` through
+    ## the scan level, at a level away from zero and at zero itself.
+    using Turing: DynamicPPL
+    using LogDensityProblems: logdensity_and_gradient
+    using Random: seed!
+    using BVDOutbreakSize: onset_reporting_model, default_adtype
+
+    oc = (;
+        onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14, 12, 13],
+        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20, 25, 25],
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0, 20, 20],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5, -1, 2],
+    )
+    seed!(20261029)
+    model = onset_reporting_model(oc, fill(30.0, 25))
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
+    ldf = DynamicPPL.LogDensityFunction(
+        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    )
+    x0 = collect(vi[:])
+    ## The linked coordinates of `σ_scan` and `z_scan`, by moving each in
+    ## the unlinked trace and seeing which entries change.
+    names = collect(keys(vi))
+    sizes = [length(vi[k]) for k in names]
+    offs = cumsum([0; sizes[1:(end - 1)]])
+    at(name) = only(
+        offs[i] .+ (1:sizes[i]) for i in eachindex(names)
+            if string(names[i]) == name
+    )
+    iσ = only(at("σ_scan"))
+    iz = at("z_scan")
+    @test length(iz) == 3
+    for σ_link in (x0[iσ], log(0.004), -40.0)
+        x = copy(x0)
+        x[iσ] = σ_link
+        x[iz] .= [1.0, -0.5, 2.0]
+        logp, grad = logdensity_and_gradient(ldf, x)
+        @test isfinite(logp)
+        @test all(isfinite, grad)
+        @test grad[iσ] != 0
+        @test all(!iszero, grad[iz])
+    end
 end
 
 @testitem "bvd_joint: the onset stream is wired in" begin

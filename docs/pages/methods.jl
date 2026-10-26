@@ -1944,6 +1944,16 @@ cfr_prior_fig #hide
 # We use $\tau \sim \mathrm{LogNormal}(\log 0.3,\ 0.5)$, centred on one pixel of read error beyond the rounding.
 # One count spans a median of 3.2 pixels across the digitised figures (2.6 to 8.7), so one pixel is about 0.3 counts.
 #
+# Each figure is also read at its own level, since a bar's height is converted to counts with the axis scale read off that figure.
+# An error in that scale moves every bar of the figure together and does not average out over the figure's total.
+# The modelled cumulative counts read off figure $s$ are multiplied by $\exp(\sigma_{\text{scan}} z_s)$, with one $z_s \sim \mathrm{Normal}(0,\ 1)$ per figure, before they are differenced in (53).
+# The counting term in $\sigma_u$ uses the scaled increment.
+# We use $\sigma_{\text{scan}} \sim \mathrm{Normal}^{+}(0,\ 0.005)$, which has its mode at no level error.
+# Its scale comes from reading the digitised totals back against the totals the figures print.
+# Over the 60 distinct figures that print a total, the median absolute gap is 0.13% and no figure reads more than 0.16% above its printed total.
+# A gap below the printed total also carries cases plotted past the last tick or bars the reader lost, so the upper side is the cleaner bound on the level error.
+# The prior puts half its mass below 0.34% and 95% below 1%.
+#
 # The level cells are what anchor $\alpha$, since corrections only ever pin differences of $F$.
 #
 # Three things stay weak.
@@ -2597,10 +2607,8 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # Onsets past the cut-off come from the renewal run past the cut-off, as for the other streams.
 # The calendar-time effect $\gamma$ and the ascertainment level are held flat at their last fitted values across the horizon.
 # The increment is drawn with the Student-t the scored cells take.
-# Its scale is that of a correction read off two bars, plus the calibration error of each figure's total, $\sigma_{\text{scan}}^2 \bigl(S(T + h)^2 + S(T)^2\bigr)$ added to the variance.
-# The scan error dominates the interval on the increment.
-# $\sigma_{\text{scan}}$ is not fitted, since the scored cells carry no per-figure level.
-# Its prior is centred on the estimate of an earlier fit that sampled a per-figure level, 0.41% (0.09% to 0.75%).
+# Its scale is that of a correction read off two bars, plus the scan level error of each figure's total, $\sigma_{\text{scan}}^2 \bigl(S(T + h)^2 + S(T)^2\bigr)$ added to the variance.
+# $\sigma_{\text{scan}}$ is the fitted spread of the figure levels, and the scan error dominates the interval on the increment.
 #
 # We score the sum of the two terms, the increment the triangle should add over the horizon, rather than its cumulative level.
 # Every vintage rereads the whole figure, so the printed total moves with the read error on each bar as well as with genuine late reporting.

@@ -734,7 +734,9 @@ _onset_labels = merge(
         Symbol("onset_report_state.σ_a") => "onset ascertainment walk step size",
         Symbol("onset_report_state.ρ") =>
             "onset ascertainment before detection (relative)",
-        Symbol("onset_report_state.τ") => "onset-report read SD (cases)"
+        Symbol("onset_report_state.τ") => "onset-report read SD (cases)",
+        Symbol("onset_report_state.σ_scan") =>
+            "onset-report scan level SD (log scale)"
     )
 );
 
@@ -779,7 +781,8 @@ onset_summary = vcat(
         [
             Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
             Symbol("onset_report_state.σ_γ"),
-            Symbol("onset_report_state.τ"), Symbol("onset_report_state.ρ"),
+            Symbol("onset_report_state.τ"), Symbol("onset_report_state.σ_scan"),
+            Symbol("onset_report_state.ρ"),
         ];
         digits = 3, labels = _onset_labels
     ),
@@ -802,6 +805,7 @@ onset_summary #hide
 #md # The onset-report hazard parameters, the share of a median onset date's eventual reports that arrive within 7 days, and the median modelled ascertainment.
 #md # The share comes from the delay hazard and the ascertainment from its own level, so they are separate estimates.
 #md # The read SD is the error attributed to one digitised bar, in cases, beyond integer rounding.
+#md # The scan level SD is the spread of the level each whole figure is read at, on the log scale, so 0.005 is about half a percent.
 #md # </figcaption>
 #md # </figure>
 #md # </details>
@@ -818,6 +822,7 @@ onset_pair_fig = plot_pair(
         Symbol("onset_report_state.σ_γ"),
         Symbol("onset_report_state.β"), Symbol("onset_report_state.σ_a"),
         Symbol("onset_report_state.ρ"), Symbol("onset_report_state.τ"),
+        Symbol("onset_report_state.σ_scan"),
     ];
     prior = prior_chn, labels = _onset_labels
 );

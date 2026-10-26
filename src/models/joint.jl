@@ -252,31 +252,23 @@ vintage `v` in `vintages` prints a total the fitted reporting hazard puts at
 runs past the cut-off `n`. Its increment over the total at the cut-off is
 drawn with the Student-t the scored cells take. Its variance is the one
 [`onset_report_scale`](@ref) gives a correction read off two bars with the
-fitted read SD `τ`, plus each figure's calibration error on its total,
+fitted read SD `τ`, plus each figure's scan level error on its total,
 `σ_scan² (then² + now²)`, with `then` and `now` the two figures' totals.
-`σ_scan` (`forecast_scan_sd ~ scan_sd_prior`) is not fitted, since the
-scored cells carry no per-figure level, so `predict` draws it from its
-prior. The prior is centred on the estimate of a fit that sampled a
-per-figure level (884a047), 0.41% (0.09–0.75%). The increment is drawn on the whole figure,
-not per onset date, since the figure's total is the quantity the forecast
-is scored on. The split of each
+`σ_scan` is the one [`onset_reporting_model`](@ref) fits to the scored
+figures, and both figures' levels are drawn afresh at that SD. The
+increment is drawn on the whole figure, not per onset date, since the
+figure's total is the quantity the forecast is scored on. The split of each
 increment into reports of onsets up to the cut-off (`backfill`) and after it
 (`future`) is tracked, with the total the triangle should already have
 printed by the cut-off.
 """
-@model function onset_forecast_model(
-        onsets, state, n, vintages;
-        scan_sd_prior = truncated(Normal(0.0041, 0.0017); lower = 0.0)
-    )
+@model function onset_forecast_model(onsets, state, n, vintages)
     past = onsets[1:n]
     now = _onset_total(onsets, state, n)
     then = [_onset_total(onsets, state, v) for v in vintages]
     then_past = [_onset_total(past, state, v) for v in vintages]
     means = then .- now
-    forecast_scan_sd ~ scan_sd_prior
-    ## `~` rebinds its left side, so the comprehension reads a name bound
-    ## once; capturing the sampled name itself would box it.
-    scan_sd = forecast_scan_sd
+    scan_sd = state.σ_scan
     sds = [
         hypot(
             onset_report_scale(means[j], state.τ, 2),

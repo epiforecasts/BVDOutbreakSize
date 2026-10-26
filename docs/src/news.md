@@ -22,6 +22,11 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The onset reporting triangle carries a fitted scan level per digitised figure again, one non-centred multiplier `exp(σ_scan z_s)` on the modelled cumulative counts read off figure `s` (#1039).
+  A figure's axis scale converts every bar on it, so its error moves the whole figure together, and settled-bar differences between figures vary more than independent per-bar errors allow.
+  `σ_scan` takes a half-normal prior with scale 0.5%, set from the digitised totals read back against the printed ones (median absolute gap 0.13%, at most 0.16% above, over the 60 distinct figures in `data/onset_curve_figures.csv`), rather than the 3% scale the level had before #881.
+  The onset forecast reads the fitted `σ_scan` in place of its own prior draw.
+  Fitted values change, and the joint needs a refit.
 - Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
   SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.
   Giving Nord-Ubangi, with 2 cases, its own patch while Tshopo, with 59 by 10 October, stayed pooled would have broken the rule the pooling rested on, so Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi become patches too.

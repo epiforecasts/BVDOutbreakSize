@@ -597,14 +597,16 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## A function giving posterior predictive draws of one digitised bar
     ## from per-draw modelled counts, through the onset stream's
     ## measurement error for a single read (`onset_report_scale`'s level
-    ## case: one read at the fitted read SD). Four replicates per draw
-    ## keep the 90% band edge from being ragged with Monte Carlo error.
+    ## case: one read at the fitted read SD, plus the fitted per-figure
+    ## scan level on the bar's count). Four replicates per draw keep the
+    ## 90% band edge from being ragged with Monte Carlo error.
     function onset_bar_replicator(chn, rng)
         τ = vec(collect(chn[Symbol("onset_report_state.τ")]))
+        σ_scan = vec(collect(chn[Symbol("onset_report_state.σ_scan")]))
         return draws -> [
             begin
                 μ = draws[i]
-                σ = onset_report_scale(μ, τ[i], 1)
+                σ = hypot(onset_report_scale(μ, τ[i], 1), σ_scan[i] * μ)
                 μ + σ * rand(rng, TDist(4.0))
             end
                 for _ in 1:4 for i in eachindex(draws)
