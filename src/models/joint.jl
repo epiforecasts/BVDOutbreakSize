@@ -17,6 +17,14 @@
 ## infection state and the daily onsets shared by every stream. With a
 ## `forecast` horizon both run past the cut-off `n`, and the future
 ## infections, onsets and reproduction number are tracked.
+##
+## The composers below only pass `infection` and `onset_incidence` on to it,
+## and Julia does not specialise on a function argument that is never called.
+## They type both as `I` and `O` (`where {I, O}`) to force the
+## specialisation. Without it an evaluator can compile on a bare `Function`
+## and dispatch every submodel call dynamically, which more than doubled the
+## `confirmed_only_model` gradient time (see
+## `test/test_composer_specialisation.jl`).
 @model function _latent(
         n::Integer, infection, onset_incidence;
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
@@ -319,11 +327,11 @@ exports likelihood only. See [`exports_model`](@ref).
         n::Integer, exported_cases::Union{Missing, Integer};
         export_case_days::AbstractVector{<:Integer} = Int[],
         source_population::Real = ITURI_POPULATION,
-        infection = infection_model,
-        onset_incidence = onset_incidence_model,
+        infection::I = infection_model,
+        onset_incidence::O = onset_incidence_model,
         exports = exports_model,
         ascertainment = pooled_ascertainment_model()
-    )
+    ) where {I, O}
     latent ~ to_submodel(
         _latent(n, infection, onset_incidence), false
     )
@@ -347,12 +355,12 @@ deaths likelihood only. See [`deaths_model`](@ref).
         n::Integer, total_deaths::Union{Missing, Integer};
         deaths_history = (; days = Int[], counts = Int[]),
         suspected_daily_deaths_history = (; days = Int[], counts = Int[]),
-        infection = infection_model,
-        onset_incidence = onset_incidence_model,
+        infection::I = infection_model,
+        onset_incidence::O = onset_incidence_model,
         deaths = deaths_model,
         dispersion = surveillance_dispersion_model(),
         forecast::Union{Nothing, ForecastHorizon} = nothing
-    )
+    ) where {I, O}
     ckw = forecast === nothing ? (;) : (; cutoff = n)
     latent ~ to_submodel(
         _latent(n, infection, onset_incidence; forecast), false
@@ -385,13 +393,13 @@ then conditions on the reported-cases likelihood. See
         n::Integer, reported_cases::Union{Missing, Integer};
         reported_history = (; days = Int[], counts = Int[]),
         suspected_daily_history = (; days = Int[], counts = Int[]),
-        infection = infection_model,
-        onset_incidence = onset_incidence_model,
+        infection::I = infection_model,
+        onset_incidence::O = onset_incidence_model,
         cases = reported_cases_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         forecast::Union{Nothing, ForecastHorizon} = nothing
-    )
+    ) where {I, O}
     ckw = forecast === nothing ? (;) : (; cutoff = n)
     latent ~ to_submodel(
         _latent(n, infection, onset_incidence; forecast), false
@@ -440,14 +448,14 @@ draws [`forecast_stream`](@ref) reads.
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross_cases::AbstractVector{<:Integer} = Int[],
         confirmed_break_sd::Real = 25.0,
-        infection = infection_model,
-        onset_incidence = onset_incidence_model,
+        infection::I = infection_model,
+        onset_incidence::O = onset_incidence_model,
         cases = reported_cases_model,
         confirmed = confirmed_cases_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         forecast::Union{Nothing, ForecastHorizon} = nothing
-    )
+    ) where {I, O}
     ckw = forecast === nothing ? (;) : (; cutoff = n)
     latent ~ to_submodel(
         _latent(n, infection, onset_incidence; forecast), false
@@ -518,8 +526,8 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross_cases::AbstractVector{<:Integer} = Int[],
         confirmed_break_sd::Real = 25.0,
-        infection = infection_model,
-        onset_incidence = onset_incidence_model,
+        infection::I = infection_model,
+        onset_incidence::O = onset_incidence_model,
         cases = reported_cases_model,
         confirmed = confirmed_cases_model,
         treatment = treatment_flow_model,
@@ -529,7 +537,7 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         ## Built once, with the model, and passed to `treatment`.
         treatment_defaults = treatment_flow_defaults(),
         forecast::Union{Nothing, ForecastHorizon} = nothing
-    )
+    ) where {I, O}
     ckw = forecast === nothing ? (;) : (; cutoff = n)
     latent ~ to_submodel(
         _latent(n, infection, onset_incidence; forecast), false
@@ -628,12 +636,12 @@ the digitised level.
             onset_days = Int[], report_days = Int[],
             prev_report_days = Int[], increments = Int[],
         ),
-        infection = infection_model,
-        onset_incidence = onset_incidence_model,
+        infection::I = infection_model,
+        onset_incidence::O = onset_incidence_model,
         onset_report = onset_reporting_model,
         export_case_days::AbstractVector{<:Integer} = Int[],
         forecast::Union{Nothing, ForecastHorizon} = nothing
-    )
+    ) where {I, O}
     latent ~ to_submodel(
         _latent(n, infection, onset_incidence; forecast), false
     )
@@ -681,8 +689,8 @@ uses ([`lab_delay_model`](@ref)). See [`confirmed_deaths_model`](@ref).
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross_deaths::AbstractVector{<:Integer} = Int[],
         confirmed_break_sd::Real = 25.0,
-        infection = infection_model,
-        onset_incidence = onset_incidence_model,
+        infection::I = infection_model,
+        onset_incidence::O = onset_incidence_model,
         deaths = deaths_model,
         cases = reported_cases_model,
         confirmed_deaths_stream = confirmed_deaths_model,
@@ -690,7 +698,7 @@ uses ([`lab_delay_model`](@ref)). See [`confirmed_deaths_model`](@ref).
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         forecast::Union{Nothing, ForecastHorizon} = nothing
-    )
+    ) where {I, O}
     ckw = forecast === nothing ? (;) : (; cutoff = n)
     latent ~ to_submodel(
         _latent(n, infection, onset_incidence; forecast), false
@@ -747,13 +755,13 @@ See [`exports_deaths_model`](@ref).
         n::Integer, exports_deaths::Union{Missing, Integer};
         export_death_days::AbstractVector{<:Integer} = Int[],
         source_population::Real = ITURI_POPULATION,
-        infection = infection_model,
-        onset_incidence = onset_incidence_model,
+        infection::I = infection_model,
+        onset_incidence::O = onset_incidence_model,
         deaths = deaths_model,
         exports = exports_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model()
-    )
+    ) where {I, O}
     latent ~ to_submodel(
         _latent(n, infection, onset_incidence), false
     )
@@ -796,14 +804,14 @@ drop it. See [`exports_model`](@ref) and [`exports_deaths_model`](@ref).
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
         source_population::Real = ITURI_POPULATION,
-        infection = infection_model,
-        onset_incidence = onset_incidence_model,
+        infection::I = infection_model,
+        onset_incidence::O = onset_incidence_model,
         deaths = deaths_model,
         exports = exports_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         forecast::Union{Nothing, ForecastHorizon} = nothing
-    )
+    ) where {I, O}
     ckw = forecast === nothing ? (;) : (; cutoff = n)
     latent ~ to_submodel(
         _latent(n, infection, onset_incidence; forecast), false
