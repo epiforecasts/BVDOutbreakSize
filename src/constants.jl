@@ -150,14 +150,9 @@ const M_PRIOR_DOUBLING_DAYS = 11.7
 """
     ONSET_ADMISSION_THETA_PRIOR
 
-Prior on the scale θ of the line-list onset-to-admission Gamma,
-`LogNormal(log(3.694), 0.32)`. The median
-is the reanalysis estimate 3.694 and the log-scale SD is its SD 1.198
-carried to the log scale (1.198 / 3.694 ≈ 0.32), so a near-zero scale is
-penalised. It is the default scale prior of the onset-to-report delay in
-[`reported_cases_model`](@ref), the onset-to-detection delay in
-[`exports_model`](@ref) and the onset-to-admission leg of the
-onset-to-death delay in [`deaths_model`](@ref).
+Prior on the scale of the line-list onset-to-admission Gamma: median at the
+reanalysis estimate 3.694, log-scale SD 1.198 / 3.694 ≈ 0.32. Open at zero,
+so near-zero scales are penalised.
 """
 const ONSET_ADMISSION_THETA_PRIOR = LogNormal(log(3.694), 0.32)
 

@@ -567,10 +567,7 @@ sitrep.
         ## suspect-case and export streams. The line-list onset→notification
         ## delay (~20 d) is not used: it is assumed to reflect a longer
         ## pathway (likely confirmation and administrative processing),
-        ## though what it captures is uncertain. The scale prior's median
-        ## is the reanalysis estimate 3.694, with its SD 1.198 carried to
-        ## the log scale (1.198 / 3.694 ≈ 0.32), so a near-zero scale is
-        ## penalised.
+        ## though what it captures is uncertain.
         onset_to_report = gamma_delay_model(
             cdf_nmax(Gamma(1.178, 3.694));
             alpha_prior = LogNormal(log(1.178), 0.25),

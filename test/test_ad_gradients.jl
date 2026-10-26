@@ -177,9 +177,9 @@ end
     @test any(!iszero, grad)
 end
 
-## The onset-to-report scale θ is sampled on the log scale. At a scale of
-## 0.13, far below the prior median, the Mooncake gradient along log θ must
-## match a central finite difference of the log density.
+## Gradient check far from the prior median: at an onset-to-report scale of
+## 0.13 the Mooncake gradient along log θ matches a central finite
+## difference of the log density.
 @testitem "AD gradient: reported_cases_model matches finite differences at a small scale (Mooncake)" tags = [
     :ad,
 ] begin
@@ -203,7 +203,9 @@ end
         DynamicPPL.VarInfo(Xoshiro(ADFixtures.SEED), model, init), model
     )
     x = collect(vi[:])
-    i = only(findall(≈(log(θ)), x))
+    idx = findall(≈(log(θ)), x)
+    @test length(idx) == 1
+    i = only(idx)
     ldf = DynamicPPL.LogDensityFunction(
         model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
     )

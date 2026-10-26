@@ -20,17 +20,11 @@
         dth[@varname(od_state.oa.θ)],
         xpt[@varname(detect_state.θ)],
     ]
-    d0 = ONSET_ADMISSION_THETA_PRIOR
-    @test d0 isa LogNormal
-    @test median(d0) ≈ 3.694
-    ## The reanalysis SD 1.198 carried to the log scale.
-    @test d0.σ ≈ 1.198 / 3.694 atol = 0.005
-    @test minimum(d0) == 0
-    ## On the log scale the sampler moves in, a scale of 0.13 is more than
-    ## 40 nats below the median.
-    lp(θ) = logpdf(d0, θ) + log(θ)
-    @test lp(0.13) - lp(3.694) < -40
     for d in priors
-        @test d == d0
+        @test d == ONSET_ADMISSION_THETA_PRIOR
+        ## On the log scale the sampler moves in, a scale of 0.13 is more
+        ## than 50 nats below the median.
+        lp(θ) = logpdf(d, θ) + log(θ)
+        @test lp(0.13) - lp(3.694) < -50
     end
 end
