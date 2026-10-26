@@ -467,8 +467,7 @@ rt_fig = plot_rt(
     n = obs.n, breakpoint = _BREAKPOINT,
     rt_start = _rt_start_plot,
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
-    as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    ramp = RESPONSE_RAMP
+    as_of_date = string(obs.cutoff), seeding = obs.seeding
 );
 
 #md # ```@raw html
@@ -481,7 +480,7 @@ rt_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Daily reproduction number from the genetic bound to the cut-off, with 30%, 60% and 90% credible ribbons and about a hundred sampled trajectories.
-#md # Red lines mark the start (dashed, the first situation report on 18 May 2026) and end (dotted) of the three-week response scale-up.
+#md # The red dashed line marks the first situation report on 18 May 2026.
 #md # Grey dashed lines mark a reproduction number of one and the cut-off.
 #md # </figcaption>
 #md # </figure>

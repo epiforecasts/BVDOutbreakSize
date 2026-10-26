@@ -847,8 +847,7 @@ end
 ## latent-trajectory deterministics surface bare under the same names a
 ## single-population chain carries.
 @model function _patch_latent(
-        n::Integer, n_patches::Integer,
-        breakpoint, patch_infection;
+        n::Integer, n_patches::Integer, patch_infection;
         rt_start::Integer = 1,
         rt_walk_start::Integer = rt_start,
         importation_kernel::AbstractMatrix = province_importation_kernel(
@@ -861,7 +860,7 @@ end
     patch_state ~ to_submodel(
         patch_infection(
             n, n_patches;
-            breakpoint, rt_start, rt_walk_start,
+            rt_start, rt_walk_start,
             importation_kernel, flow_basis, fkw...
         ), false
     )
@@ -1149,9 +1148,8 @@ and lagged by a confirmation-to-recovery delay (see
 [`recovered_model`](@ref)).
 
 `breakpoint` is the day of the first WHO situation report. The
-reproduction-number walk starts `rt_walk_lead` days before it and the
-importation intensities change on a ramp centred on it. `genetic` injects
-the genetic seeding submodel when `tmrca_days` is given. The analysed
+reproduction-number walk starts `rt_walk_lead` days before it. `genetic`
+injects the genetic seeding submodel when `tmrca_days` is given. The analysed
 volume is scaled by specimens analysed per suspect
 ([`specimen_intensity_model`](@ref)), which `τ_test` alone, being a
 probability, cannot exceed one of.
@@ -1374,7 +1372,7 @@ cut-off, and the density there, is the fitted model's.
         clamp(round(Int, breakpoint) - rt_walk_lead, rt_start, n)
     latent ~ to_submodel(
         _patch_latent(
-            n, n_patches, breakpoint, patch_infection;
+            n, n_patches, patch_infection;
             rt_start, rt_walk_start, importation_kernel,
             flow_basis = importation_flow_basis, forecast
         ), false

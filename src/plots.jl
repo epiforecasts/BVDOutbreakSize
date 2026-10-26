@@ -2490,17 +2490,15 @@ Daily reproduction-number trajectory `Rt` per posterior draw, rebuilt by
 That window runs from `rt_start`, the renewal start where the random walk
 begins, to the cut-off. Only that period is drawn, as 30%, 60% and 90%
 credible ribbons with no median line, with about `n_traj` thinned sampled
-trajectories overlaid faint to show the per-draw spread. The intervention
-breakpoint, the end of the scale-up (`breakpoint + ramp`, dotted) and the
-cut-off are marked. `seeding` is the calendar date of grid day 1, so day `d`
+trajectories overlaid faint to show the per-draw spread. The first
+situation report (`breakpoint`) and the cut-off are marked. `seeding` is the calendar date of grid day 1, so day `d`
 is `seeding + (d - 1)`.
 """
 function plot_rt(
         chn; n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
-        week::Integer = 7, ramp::Real = RESPONSE_RAMP,
-        n_traj::Integer = 100
+        week::Integer = 7, n_traj::Integer = 100
     )
     rt = reconstruct_rt(chn; n, rt_start, rt_walk_start, week)
     ndraws = size(rt, 1)
@@ -2559,11 +2557,6 @@ function plot_rt(
     vlines!(
         ax, [Float64(epoch + breakpoint - 1)];
         color = :firebrick, linestyle = :dash, linewidth = 2
-    )
-    ## End of the intervention scale-up.
-    vlines!(
-        ax, [Float64(epoch + breakpoint - 1 + ramp)];
-        color = :firebrick, linestyle = :dot, linewidth = 2
     )
     vlines!(
         ax, [Float64(date2epochdays(Date(as_of_date)))];
@@ -2647,9 +2640,8 @@ and `rt_start`/`rt_walk_start` are the renewal start and random-walk start
 that fit used. The per-stream fits walk from day 1, the joint from the
 breakpoint lead. `display_start` is the shared grid day the panels draw from,
 so every stream reads over the same window. `seeding` is the calendar date of
-grid day 1, so day `d` is `seeding + (d - 1)`. The intervention breakpoint,
-the end of the scale-up (`breakpoint + ramp`, dotted) and the cut-off are
-marked as in [`plot_rt`](@ref).
+grid day 1, so day `d` is `seeding + (d - 1)`. The first situation report
+and the cut-off are marked as in [`plot_rt`](@ref).
 
 `title`, `reference_label` and `panel_label` name what the figure is showing.
 They default to the per-stream reading, and the province in-sample page passes its
@@ -2660,7 +2652,6 @@ function plot_rt_streams(
         joint, n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         display_start::Integer = 1, week::Integer = 7,
-        ramp::Real = RESPONSE_RAMP,
         ncols::Integer = 2, joint_colour = :grey25,
         title::AbstractString =
             "Implied Rt by data stream, with the joint fit overlaid",
@@ -2722,10 +2713,6 @@ function plot_rt_streams(
         vlines!(
             ax, [Float64(epoch + breakpoint - 1)];
             color = :firebrick, linestyle = :dash, linewidth = 2
-        )
-        vlines!(
-            ax, [Float64(epoch + breakpoint - 1 + ramp)];
-            color = :firebrick, linestyle = :dot, linewidth = 2
         )
         vlines!(
             ax, [Float64(date2epochdays(Date(as_of_date)))];
@@ -2835,8 +2822,8 @@ is rebuilt by [`reconstruct_patch_rt`](@ref). The national reference is
 
 Every panel draws 30/60/90% credible ribbons with no median line, on a shared
 y-axis so the provinces are compared rather than each rescaled to its own
-range. The intervention breakpoint (dashed), the end of the scale-up (dotted)
-and the cut-off are marked as in [`plot_rt`](@ref).
+range. The first situation report (red, dashed) and the cut-off are marked
+as in [`plot_rt`](@ref).
 
 The grey reference is the reproduction number implied by the summed
 provinces, the incidence-weighted mean of the panels rather than any one
@@ -2852,8 +2839,7 @@ function plot_rt_patches(
         patch_labels::AbstractVector = PROVINCE_LABELS,
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
         display_start::Integer = rt_start,
-        week::Integer = 7, ramp::Real = RESPONSE_RAMP,
-        ncols::Integer = 3,
+        week::Integer = 7, ncols::Integer = 3,
         colours = _ZONE_PATCH_COLOURS,
         national_colour = :grey25
     )
@@ -2903,10 +2889,6 @@ function plot_rt_patches(
         vlines!(
             ax, [Float64(epoch + breakpoint - 1)];
             color = :firebrick, linestyle = :dash, linewidth = 2
-        )
-        vlines!(
-            ax, [Float64(epoch + breakpoint - 1 + ramp)];
-            color = :firebrick, linestyle = :dot, linewidth = 2
         )
         vlines!(
             ax, [Float64(date2epochdays(Date(as_of_date)))];

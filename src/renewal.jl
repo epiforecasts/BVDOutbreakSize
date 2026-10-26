@@ -625,31 +625,6 @@ end
 upto(x::AbstractVector, n::Integer) = length(x) <= n ? x : x[1:n]
 
 """
-Smooth intervention ramp over an `n`-day grid: the logistic curve
-`1 / (1 + e^{−(t − day) / ramp})` for each day `t`, rising from ≈0 well
-before `day` to ≈1 well after, with `ramp` setting the transition width
-in days. [`patch_infection_model`](@ref) scales the importation
-intensities along it, so the change at detection (the first WHO situation
-report) is gradual rather than an instantaneous step. Returns a
-length-`n` `Float64` vector. `day = missing` gives an all-zero ramp (no
-intervention). Type-stable and AD-transparent in the effect that scales
-it.
-
-Split into two dispatches on `day`'s concrete type rather than one method
-with a runtime `ismissing(day)` branch. Mooncake cannot build a reverse rule
-for the branching form (`TypeError: non-boolean (Missing) used in boolean
-context`). Dispatch resolves `day`'s type at the call site, so each method
-body is differentiated on its own concretely-typed slot.
-"""
-function sigmoid_ramp(n::Integer, day::Missing; ramp::Real = RESPONSE_RAMP)
-    return zeros(Float64, n)
-end
-
-function sigmoid_ramp(n::Integer, day::Real; ramp::Real = RESPONSE_RAMP)
-    return Float64[logistic((t - day) / ramp) for t in 1:n]
-end
-
-"""
 Gaussian random walk in centred form over `n` levels. The walk starts at
 `start`, and each level is `Normal` about the one before it with SD `σ`.
 The levels themselves are the sampled coordinates. `σ` is floored at `eps`

@@ -222,7 +222,7 @@ MarkdownTable(vintage_table) #hide
 #md # ```
 
 # Importation couples the patches by moving a share of each day's new infections from one patch to another.
-# The share follows a gravity kernel on population and distance, scaled by a partially pooled intensity for each origin patch that changes at detection.
+# The share follows a gravity kernel on population and distance, scaled by a partially pooled intensity for each origin patch that is constant in time.
 # The outbreak starts from one unobserved seed growing exponentially in Ituri, and the other patches start with no infections.
 # Each receiving patch grows its arrivals at its own reproduction number, so importation rather than a separate seed starts the outbreak in the other patches.
 # The provincial confirmed cases, confirmed deaths and analysed specimens enter only as compositions of the national counts, so they inform the split across patches and not the national size.
@@ -351,15 +351,6 @@ MarkdownTable(vintage_table) #hide
 # A step standard deviation of zero gives a constant reproduction number.
 # We sample the knot levels themselves rather than scaled standard-normal steps.
 #
-# We time the outbreak response by a logistic ramp at the first WHO situation report on 18 May 2026, and we assume the response takes about three weeks (21 days) to scale up:
-#
-# ```math
-# S(t) = \mathrm{logistic}\!\left(\frac{t - t_{\text{bp}}}{21}\right). \tag{5}
-# ```
-#
-# Here $t_{\text{bp}}$ is the day of that report.
-# The ramp sets the timing of the change in importation intensity below.
-#
 # The deviations live on the trend's weekly knots $k = 1, \dots, K$.
 # They are correlated across patches, they revert toward zero, and they sum to zero at every knot so that no patch is privileged.
 # A sum-to-zero vector over $P$ patches has $P - 1$ free directions, so the deviations are drawn on them through a fixed orthonormal basis $Q$ ($P \times (P - 1)$, columns orthogonal to the vector of ones):
@@ -368,14 +359,14 @@ MarkdownTable(vintage_table) #hide
 # \boldsymbol\delta_{1} = \sqrt{\tfrac{P - 1}{\operatorname{tr}(AA^{\top})}}\, Q A \mathbf{u},
 # \qquad
 # \boldsymbol\delta_{k} = \phi\, \boldsymbol\delta_{k-1}
-#   + \sigma_{\text{drift}} \sqrt{\tfrac{P - 1}{\operatorname{tr}(AA^{\top})}}\, Q A \mathbf{z}_k, \tag{6}
+#   + \sigma_{\text{drift}} \sqrt{\tfrac{P - 1}{\operatorname{tr}(AA^{\top})}}\, Q A \mathbf{z}_k, \tag{5}
 # ```
 #
 # ```math
 # \sigma_{\text{lvl}} \sim \mathrm{Normal}^{+}(0,\ 0.15), \qquad
 # \sigma_{\text{drift}} \sim \mathrm{Normal}^{+}(0,\ 0.05), \qquad
 # h \sim \mathrm{LogNormal}(\log 42,\ 0.6), \qquad
-# AA^{\top} \sim \mathrm{Wishart}(\nu,\ I_{P-1}), \quad \nu = P - 1, \tag{7}
+# AA^{\top} \sim \mathrm{Wishart}(\nu,\ I_{P-1}), \quad \nu = P - 1, \tag{6}
 # ```
 #
 # with $\mathbf{u} \sim \mathrm{Normal}(0, \sigma_{\text{lvl}}^2 I_{P-1})$, $\mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $A$ the lower-triangular Bartlett factor of the Wishart draw [bartlett1934, smith1972](@cite) and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
@@ -426,7 +417,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \mu_g \sim \mathrm{Normal}^{+}(15.3,\ 0.97), \qquad
-# \sigma_g \sim \mathrm{Normal}^{+}(9.3,\ 1.0). \tag{8}
+# \sigma_g \sim \mathrm{Normal}^{+}(9.3,\ 1.0). \tag{7}
 # ```
 #
 # That puts 95% of the prior mean between 13.4 and 17.2 d and of the prior SD between 7.3 and 11.3 d.
@@ -459,14 +450,14 @@ MarkdownTable(vintage_table) #hide
 # We place a prior on $m$ centred so that the implied origin sits in mid-February, with 90% of its mass between mid-January and mid-March:
 #
 # ```math
-# m \sim \mathrm{Normal}^{+}(2.75,\ 1.2). \tag{9}
+# m \sim \mathrm{Normal}^{+}(2.75,\ 1.2). \tag{8}
 # ```
 #
 # The traced 25 January death then sits near the 87th percentile: it is the earliest chain the field work reached, which bounds the origin rather than dating it.
 #
 # ```math
 # T_{\text{cryptic}} = m\,G, \qquad
-# C_T = e^{r T_{\text{cryptic}}}. \tag{10}
+# C_T = e^{r T_{\text{cryptic}}}. \tag{9}
 # ```
 #
 # The growth rate $r$ carries the prior the genetic source informs.
@@ -478,7 +469,7 @@ MarkdownTable(vintage_table) #hide
 # Our 95% interval on the doubling time is 6.5--21.1 d, which contains the HPD and reaches into that earlier range:
 #
 # ```math
-# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.30\right). \tag{11}
+# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.30\right). \tag{10}
 # ```
 #
 # This single growth rate fills the cryptic phase and, through the forward Euler–Lotka derivation above, sets the established reproduction number.
@@ -488,7 +479,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # I_{1,j} = C_T\, e^{r (j - L)}, \qquad
-# I_{p,j} = 0 \;\; (p \ge 2), \qquad j \le L, \tag{12}
+# I_{p,j} = 0 \;\; (p \ge 2), \qquad j \le L, \tag{11}
 # ```
 #
 # with $L$ the renewal start.
@@ -524,7 +515,7 @@ MarkdownTable(vintage_table) #hide
 # \text{tmrca}_{\text{days}} \sim
 #   \mathrm{censored}\!\bigl(\mathrm{Normal}(T,\ \sigma);\
 #   \text{upper} = \text{tmrca}_{\text{days}}\bigr),
-# \qquad \sigma = 16\ \text{d}. \tag{13}
+# \qquad \sigma = 16\ \text{d}. \tag{12}
 # ```
 #
 # The renewal starts on the grid day on which the renewal recursion begins and sustained transmission is treated as established.
@@ -556,27 +547,26 @@ MarkdownTable(vintage_table) #hide
 # ```math
 # K_{p,q} = \Bigl(1 - \frac{N_q}{N}\Bigr)
 #           \frac{N_p\, d_{pq}^{-1}}{\sum_{r \ne q} N_r\, d_{rq}^{-1}},
-# \qquad K_{q,q} = 0. \tag{14}
+# \qquad K_{q,q} = 0. \tag{13}
 # ```
 #
-# The intensity is one level per origin, partially pooled, and it changes at detection on the response ramp $S(t)$ of Equation (5):
+# The intensity is one level per origin, partially pooled and constant in time:
 #
 # ```math
-# \varepsilon_{q,t} = \min\!\Bigl(
-#     \bar\varepsilon\, \exp\bigl(\sigma_\varepsilon (Q \mathbf{z}^{\varepsilon})_q\bigr)\,
-#     \exp\bigl(\beta_\varepsilon S(t)\bigr),\ 1 \Bigr), \tag{15}
+# \varepsilon_{q} = \min\!\Bigl(
+#     \bar\varepsilon\, \exp\bigl(\sigma_\varepsilon (Q \mathbf{z}^{\varepsilon})_q\bigr),\ 1 \Bigr), \tag{14}
 # ```
 #
 # ```math
 # \bar\varepsilon \sim \mathrm{Beta}(1,\ 100), \qquad
 # \sigma_\varepsilon \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
-# \beta_\varepsilon \sim \mathrm{Normal}(0,\ 0.5), \qquad
-# \mathbf{z}^{\varepsilon} \sim \mathrm{Normal}(0, I_{P-1}), \tag{16}
+# \mathbf{z}^{\varepsilon} \sim \mathrm{Normal}(0, I_{P-1}), \tag{15}
 # ```
 #
-# with $Q$ the fixed sum-to-zero basis of Equation (6), so the origin levels are centred on $\bar\varepsilon$ on the log scale.
+# with $Q$ the fixed sum-to-zero basis of Equation (5), so the origin levels are centred on $\bar\varepsilon$ on the log scale.
 # The origin deviation $\mathbf{z}^{\varepsilon}$ is drawn independently of the reproduction number deviations and is constant in time.
-# Exports scale with $R_{q,t}$ through the origin's generated infections $G_{q,t}$ in Equation (18), and $\beta_\varepsilon$ changes the share of them exported.
+# Exports scale with $R_{q,t}$ through the origin's generated infections $G_{q,t}$ in Equation (17), and the share of them exported does not change at detection.
+# We assume any change in movement after the response shows in the provinces' own reproduction numbers, since a fitted step in the intensity at that time would trade against them.
 #
 # Gravity is the prior mean of the flows between provinces, and the data move each flow away from it.
 # We collect the log flows $\ell_{p,q} = \log K_{p,q} + W_{p,q}$, for $p \ne q$, into one vector and give it a multivariate normal prior centred on the log gravity kernel:
@@ -620,7 +610,7 @@ MarkdownTable(vintage_table) #hide
 # with the rows of the flows $q \to q$ set to zero.
 # $\Sigma$ has rank $P(P-2)$, one direction per share of each origin's exports, so it has no Cholesky factor and $L$ is a rectangular square root of it.
 # The destination block of $\boldsymbol\zeta$ is $\rho_{\text{od}}\, \mathbf{z}^{\varepsilon} + \sqrt{1 - \rho_{\text{od}}^2}\, \mathbf{z}^{\text{dest}}$, with $\mathbf{z}^{\text{dest}} \sim \mathrm{Normal}(0, I_{P-1})$.
-# It is standard normal, and each province's destination effect has correlation $\rho_{\text{od}}$ with its origin deviation in Equation (15).
+# It is standard normal, and each province's destination effect has correlation $\rho_{\text{od}}$ with its origin deviation in Equation (14).
 #
 # We use priors of
 #
@@ -653,7 +643,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \text{renewal start} = n - \text{tmrca}_{\text{days}} + 14, \qquad
-# \tau_{\text{obs}} = n - \text{renewal start}. \tag{17}
+# \tau_{\text{obs}} = n - \text{renewal start}. \tag{16}
 # ```
 #
 # The grid days before the renewal start are filled by the cryptic exponential seeds above.
@@ -663,11 +653,11 @@ MarkdownTable(vintage_table) #hide
 # ```math
 # \begin{aligned}
 # G_{p,t} &= R_{p,t} \sum_{s \ge 1} I_{p,t-s}\, g_s, \qquad
-# Y_{p,t} = \Bigl(1 - \varepsilon_{p,t} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
-#           + \sum_{q \ne p} \varepsilon_{q,t} K_{p,q}\, G_{q,t}, \\
+# Y_{p,t} = \Bigl(1 - \varepsilon_{p} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
+#           + \sum_{q \ne p} \varepsilon_{q} K_{p,q}\, G_{q,t}, \\
 # I_{p,t} &= S_{p,t-1}\bigl(1 - e^{-Y_{p,t}/N_p}\bigr), \qquad
 # S_{p,t} = S_{p,t-1}\, e^{-Y_{p,t}/N_p} = S_{p,t-1} - I_{p,t}.
-# \end{aligned} \tag{18}
+# \end{aligned} \tag{17}
 # ```
 #
 # This is the population adjustment of [bhatt2023](@citet), as used in EpiNow2 [epinow2](@cite), with $N_p$ the patch's resident population and $S_{p,t}$ starting at $N_p$ less the seeds.
@@ -677,7 +667,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # I_t = \sum_p I_{p,t}, \qquad
-# R^{\text{nat}}_t = \frac{I_t}{\sum_{s \ge 1} I_{t-s}\, g_s}. \tag{19}
+# R^{\text{nat}}_t = \frac{I_t}{\sum_{s \ge 1} I_{t-s}\, g_s}. \tag{18}
 # ```
 #
 # $R^{\text{nat}}_t$ is what the headline $R_T$ reports.
@@ -688,7 +678,7 @@ MarkdownTable(vintage_table) #hide
 # The total outbreak age is the cryptic duration plus the observed window:
 #
 # ```math
-# T = m\,G + \tau_{\text{obs}}. \tag{20}
+# T = m\,G + \tau_{\text{obs}}. \tag{19}
 # ```
 #
 # The current growth rate is the exponential growth implied by the cut-off reproduction number and the generation interval through forward Euler–Lotka.
@@ -735,7 +725,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \mu_{\text{inc}} \sim \mathrm{Normal}^{+}(6.3,\ 0.54), \qquad
-# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(3.5,\ 0.8). \tag{21}
+# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(3.5,\ 0.8). \tag{20}
 # ```
 #
 # Every delay is discretised to a daily PMF over lags $0,\dots,n_{\max}$ by double interval censoring [charniga2024](@cite).
@@ -751,7 +741,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # f_s = \int_0^1 \big[\, F(s + 1 - u) - F(s - u) \,\big]\, \mathrm{d}u,
-# \qquad F = \text{the delay CDF}, \tag{22}
+# \qquad F = \text{the delay CDF}, \tag{21}
 # ```
 #
 # which is then renormalised over lags $0,\dots,n_{\max}$.
@@ -796,7 +786,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \alpha_{\text{rep}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \qquad
-# \theta_{\text{rep}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{23}
+# \theta_{\text{rep}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{22}
 # ```
 #
 # We do not use the reanalysis onset-to-notification delay, a near-exponential Gamma with mean about 20 d.
@@ -814,7 +804,7 @@ MarkdownTable(vintage_table) #hide
 # \alpha_{\text{oa}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \quad
 # \theta_{\text{oa}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20), \\
 # \alpha_{\text{ad}} \sim \mathrm{Normal}^{+}(2.15,\ 0.60), \quad
-# \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38). \tag{24}
+# \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38). \tag{23}
 # ```
 #
 # and the onset-to-death PMF is the convolution of the two discretised components (implied mean about 13 d).
@@ -827,7 +817,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \alpha_{\text{det}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \qquad
-# \theta_{\text{det}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{25}
+# \theta_{\text{det}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{24}
 # ```
 #
 # It drives the exports streams.
@@ -840,7 +830,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \mu_{\text{rec}} \sim \mathrm{Normal}^{+}(4.5,\ 1.0), \qquad
-# \sigma_{\text{rec}} \sim \mathrm{Normal}^{+}(4.0,\ 0.75). \tag{26}
+# \sigma_{\text{rec}} \sim \mathrm{Normal}^{+}(4.0,\ 0.75). \tag{25}
 # ```
 #
 # It drives the laboratory analysed-specimen volume.
@@ -853,7 +843,7 @@ MarkdownTable(vintage_table) #hide
 # Based on this we use a prior of
 #
 # ```math
-# \mathrm{CFR} \sim \mathrm{Beta}(6.6,\ 13.4), \tag{27}
+# \mathrm{CFR} \sim \mathrm{Beta}(6.6,\ 13.4), \tag{26}
 # ```
 #
 # with mean $0.33$ and $95\%$ interval roughly $0.15$-$0.54$.
@@ -907,7 +897,7 @@ cfr_prior_fig #hide
 # \log\!\bigl(1/\sqrt{k_s}\bigr) = \mu + \tau\, z_s, \quad
 # z_s \sim \mathrm{Normal}(0, 1), \qquad
 # \mu \sim \mathrm{Normal}(\log 0.6,\ 0.33), \quad
-# \tau \sim \mathrm{Normal}^{+}(0,\ 0.6), \tag{28}
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.6), \tag{27}
 # ```
 #
 # so $k_s = 1/\exp(\mu + \tau z_s)^2$ per stream, with $\tau$ setting the pooling ($\tau = 0$ collapses to one shared dispersion).
@@ -937,13 +927,13 @@ cfr_prior_fig #hide
 # ```math
 # \mu \sim \mathrm{Normal}(\mathrm{logit}(0.75),\ 1),
 # \qquad
-# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \tag{29}
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \tag{28}
 # ```
 #
 # ```math
 # \mathrm{logit}(p_{\text{DRC}}) \sim \mathrm{Normal}(\mu,\ \tau),
 # \qquad
-# \mathrm{logit}(p_{\text{Uganda}}) \sim \mathrm{Normal}(\mu,\ \tau). \tag{30}
+# \mathrm{logit}(p_{\text{Uganda}}) \sim \mathrm{Normal}(\mu,\ \tau). \tag{29}
 # ```
 #
 
@@ -988,7 +978,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \delta_0 \sim \mathrm{Normal}^{+}(1.5,\ 0.75), \qquad
-# \text{scaling} \sim \mathrm{LogNormal}(0,\ 0.25). \tag{31}
+# \text{scaling} \sim \mathrm{LogNormal}(0,\ 0.25). \tag{30}
 # ```
 #
 # The non-BVD background rate $\lambda_{\text{bg}}$ enters the suspected-case stream and is described with it below.
@@ -1105,7 +1095,7 @@ cfr_prior_fig #hide
 # The source population is kept fixed (census):
 #
 # ```math
-# N_{\text{travel}} \sim \mathrm{Normal}^{+}(1871,\ 200). \tag{32}
+# N_{\text{travel}} \sim \mathrm{Normal}^{+}(1871,\ 200). \tag{31}
 # ```
 
 #md # ```@raw html
@@ -1177,7 +1167,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{cases},i} - Y_{\text{cases},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} c_t,\ k\Bigr). \tag{33}
+#     \sum_{t = d_{i-1}+1}^{d_i} c_t,\ k\Bigr). \tag{32}
 # ```
 #
 # From SitRep 013 (27 May) INSP reclassifies suspects, so the national cumulative suspected total falls.
@@ -1226,7 +1216,7 @@ cfr_prior_fig #hide
 # ```math
 # A_{\text{bvd},t} = p_{\text{iso,bvd}}\,p_{\text{DRC}}\,\text{bvd}_t,
 # \qquad
-# A_{\text{bg},t} = p_{\text{iso}}\,\lambda_{\text{bg},t}, \tag{34}
+# A_{\text{bg},t} = p_{\text{iso}}\,\lambda_{\text{bg},t}, \tag{33}
 # ```
 #
 # each carried through a short suspected-to-admission delay that captures triage, transport and the wait for a bed.
@@ -1239,14 +1229,14 @@ cfr_prior_fig #hide
 # The abscond outflow drains the suspected pool at a small daily fraction $\kappa$ of the previous day's suspected occupancy,
 #
 # ```math
-# \text{absconds}_t = \kappa\, O_{\text{susp},t-1}, \tag{35}
+# \text{absconds}_t = \kappa\, O_{\text{susp},t-1}, \tag{34}
 # ```
 #
 # so the total bed demand is the forward balance
 #
 # ```math
 # D_t = D_{t-1} + A_t - \text{deaths}_t - \text{recoveries}_t
-#       - \text{rule-outs}_t - \text{absconds}_t, \tag{36}
+#       - \text{rule-outs}_t - \text{absconds}_t, \tag{35}
 # ```
 #
 # with $A = A_{\text{bvd}} + A_{\text{bg}}$.
@@ -1260,7 +1250,7 @@ cfr_prior_fig #hide
 # \text{deaths}_s = \sum_{t \le s} \text{CFR}_{\text{iso}}\, A_{\text{bvd},t}\,
 #     f_{\text{death},\,s-t}\, S_{t,\,s-t},
 # \qquad
-# S_{t,d} = \prod_{j = 1}^{d}\bigl(1 - \kappa\, U_{t,j}\bigr), \tag{37}
+# S_{t,d} = \prod_{j = 1}^{d}\bigl(1 - \kappa\, U_{t,j}\bigr), \tag{36}
 # ```
 #
 # and likewise for recoveries and rule-outs.
@@ -1277,7 +1267,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \text{CFR}_{\text{iso}} = \mathrm{logit}^{-1}\bigl(\mathrm{logit}\,\text{CFR}
-#     + \beta_{\text{iso}}\bigr), \tag{38}
+#     + \beta_{\text{iso}}\bigr), \tag{37}
 # ```
 #
 # It is a fatality conditional on admission rather than a causal treatment effect, sitting below the infection case-fatality ratio where care lowers mortality.
@@ -1293,7 +1283,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # O_{\text{conf},t} = \sum_{u \le t} A_{\text{bvd},u}\,
-#     F_{\text{conf}}(u, t)\, S_{\text{clin}}(t - u), \tag{39}
+#     F_{\text{conf}}(u, t)\, S_{\text{clin}}(t - u), \tag{38}
 # ```
 #
 # with $F_{\text{conf}}$ the cumulative confirmation probability of a cohort
@@ -1335,7 +1325,7 @@ cfr_prior_fig #hide
 # O_j \sim \mathrm{censored}\bigl(\mathrm{NegBinomial}(D_{t_j},\ k_{\text{iso}});\
 #     \text{upper} = C^{\text{cap}}_j\bigr),
 # \qquad
-# F_j \sim \mathrm{NegBinomial}(\mu^{F}_{t_j},\ k_{\text{flow}}), \tag{40}
+# F_j \sim \mathrm{NegBinomial}(\mu^{F}_{t_j},\ k_{\text{flow}}), \tag{39}
 # ```
 #
 # with each flow mean $\mu^{F}_t$ the matching modelled event series (the admissions, the in-care deaths, the rule-outs and the absconds).
@@ -1503,7 +1493,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{deaths},i} - Y_{\text{deaths},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} m_t,\ k\Bigr). \tag{41}
+#     \sum_{t = d_{i-1}+1}^{d_i} m_t,\ k\Bigr). \tag{40}
 # ```
 
 #md # ```@raw html
@@ -1546,7 +1536,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{ana},i} - Y_{\text{ana},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{42}
+#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{41}
 # ```
 #
 # The confirmed positives in each laboratory window $v$ are scored as a beta-binomial of the observed specimens-analysed denominator $A_v$ with a per-window tested-positive probability $p_{\text{pos},v}$.
@@ -1574,7 +1564,7 @@ cfr_prior_fig #hide
 # ```
 #
 # ```math
-# C_v \sim \mathrm{BetaBinomial}(A_v,\ p_{\text{pos},v},\ \rho_{\text{conf}}), \qquad \rho_{\text{conf}} \sim \mathrm{Beta}(1, 24), \tag{43}
+# C_v \sim \mathrm{BetaBinomial}(A_v,\ p_{\text{pos},v},\ \rho_{\text{conf}}), \qquad \rho_{\text{conf}} \sim \mathrm{Beta}(1, 24), \tag{42}
 # ```
 #
 # where the beta-binomial has mean $A_v p_{\text{pos},v}$ and intra-window correlation $\rho_{\text{conf}}$, which tends to the binomial as $\rho_{\text{conf}}$ tends to zero.
@@ -1586,7 +1576,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # C_v^{\text{no-denom}} \sim
-#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{44}
+#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{43}
 # ```
 
 #md # ```@raw html
@@ -1662,7 +1652,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{cd},i} - Y_{\text{cd},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{45}
+#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{44}
 # ```
 #
 # The death analysed volume inherits the laboratory capacity onset from the case volume $v^{\text{c}}_t$, so $\text{cd}_t$ is zero before the first confirmed-case vintage.
@@ -1771,7 +1761,7 @@ cfr_prior_fig #hide
 # Its running sum is the cumulative export intensity:
 #
 # ```math
-# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{46}
+# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{45}
 # ```
 #
 # We model outbound travel only, not return, so this term would overestimate the infections on its own.
@@ -1786,7 +1776,7 @@ cfr_prior_fig #hide
 # Y_{\text{exports},i} \sim
 #     \mathrm{Poisson}\!\bigl(\Lambda(d_i) - \Lambda(d_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{47}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{46}
 # ```
 
 #md # ```@raw html
@@ -1837,7 +1827,7 @@ cfr_prior_fig #hide
 # Its running sum is the cumulative export-death intensity:
 #
 # ```math
-# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{48}
+# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{47}
 # ```
 #
 # Each dated Uganda export death is scored at its reported date with a per-day Poisson, the same dated-event likelihood the exports use, with a zero term before the first death day $\delta_1$:
@@ -1847,7 +1837,7 @@ cfr_prior_fig #hide
 #     \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_i)
 #     - \Lambda_d(\delta_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{49}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{48}
 # ```
 
 #md # ```@raw html
@@ -1879,7 +1869,7 @@ cfr_prior_fig #hide
 # \eta_0 \sim \mathrm{Normal}(\mathrm{logit}(0.13),\ 0.7), \qquad
 # \sigma_{h0} \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
 # \mathrm{logit}\,h_0 = \eta_0 + Q\,\mathbf{y}_{h0}, \qquad
-# \mathbf{y}_{h0} \sim \mathrm{Normal}(0,\ \sigma_{h0}^2 I_{D-1}). \tag{50}
+# \mathbf{y}_{h0} \sim \mathrm{Normal}(0,\ \sigma_{h0}^2 I_{D-1}). \tag{49}
 # ```
 #
 # $Q$ is the sum-to-zero basis used for the patch deviations, so the delay deviations sum to zero and $\eta_0$ is the mean logit hazard.
@@ -1892,7 +1882,7 @@ cfr_prior_fig #hide
 # \gamma_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
 # \qquad
 # h(d, t) = \mathrm{logistic}\bigl(\mathrm{logit}\,h_0(d) + \gamma_t\bigr).
-# \tag{51}
+# \tag{50}
 # ```
 #
 # The walk is zero up to the first figure's report date and moves only after it.
@@ -1912,7 +1902,7 @@ cfr_prior_fig #hide
 # \alpha(u) = \mathrm{logistic}\bigl(\mathrm{logit}\,\mathrm{anchor}(u)
 #     + \beta + \omega_u\bigr)\, s(u), \qquad
 # s(u) = \rho + (1 - \rho)\,\mathrm{logistic}\bigl((u - u_d) / w\bigr).
-#     \tag{52}
+#     \tag{51}
 # ```
 #
 # $G(u, D-1) = 1$, so the delay distribution is proper rather than an asymptote that drifts with the hazard level, and $\delta < 0$ is right truncation.
@@ -1933,7 +1923,7 @@ cfr_prior_fig #hide
 # ```math
 # y_u \sim \mathrm{Student}\text{-}t\Bigl(
 #     \mathrm{onsets}_u\bigl(F(u, R_s{-}u) - F(u, R_{s-1}{-}u)\bigr),\
-#     \sigma_u,\ \nu{=}4\Bigr). \tag{53}
+#     \sigma_u,\ \nu{=}4\Bigr). \tag{52}
 # ```
 #
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
@@ -2019,7 +2009,7 @@ cfr_prior_fig #hide
 # ```
 #
 # with $d_p = 1$ in the death composition and $\kappa_p = 1$ in the case composition.
-# Here $\mathbf{z}^{d}, \mathbf{z}^{a}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ is the fixed sum-to-zero basis of Equation (6).
+# Here $\mathbf{z}^{d}, \mathbf{z}^{a}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ is the fixed sum-to-zero basis of Equation (5).
 # The logit detection contrasts, the log ascertainment multipliers and the logit case-fatality contrasts each sum to zero across patches.
 # Each patch detection probability and case-fatality ratio therefore lies between zero and one, and $\tau_d = 0$ and $\tau_\kappa = 0$ give every patch the national value.
 # In the case composition $a_p$ is the confirmation contrast, which carries the provincial differences in testing, and $p_{\text{DRC},p}\, a_p$ is the relative case ascertainment.
@@ -2029,7 +2019,7 @@ cfr_prior_fig #hide
 # ```math
 # y_{p,i} \sim \mathrm{BetaBinomial}\Bigl(
 #     N_i - \sum_{q < p} y_{q,i},\;
-#     \frac{\pi_{p,i}}{\sum_{q \ge p} \pi_{q,i}},\; \rho \Bigr). \tag{54}
+#     \frac{\pi_{p,i}}{\sum_{q \ge p} \pi_{q,i}},\; \rho \Bigr). \tag{53}
 # ```
 #
 # $\rho$ is one overdispersion shared across patches and vintages, absorbing the extra-Binomial variation in how cases are attributed to provinces, such as reporting lags between the provincial and national tables and reassignment of cases between health zones.
@@ -2265,11 +2255,11 @@ cfr_prior_fig #hide
 #
 # ```math
 # p(\psi, \xi \mid Y_1, Y_2) \;\propto\;
-#   p_1(\xi \mid Y_1)\; p(Y_2 \mid \xi, \psi)\; p(\psi), \tag{55}
+#   p_1(\xi \mid Y_1)\; p(Y_2 \mid \xi, \psi)\; p(\psi), \tag{54}
 # ```
 #
 # with $p_1(\xi \mid Y_1)$ the joint model's marginal posterior over $\xi$.
-# We approximate $p_1$ by a multivariate normal fitted to the joint model's draws of the log weekly patch infections, the log intensities $\log \varepsilon_q$ of Equation (15) and the log parameters $\log \theta_k$ of the generation interval and delays.
+# We approximate $p_1$ by a multivariate normal fitted to the joint model's draws of the log weekly patch infections, the log intensities $\log \varepsilon_q$ of Equation (14) and the log parameters $\log \theta_k$ of the generation interval and delays.
 # A week in which a patch's mean infections sum to less than one is left out as not yet seeded.
 # With $L$ the Cholesky factor of the draws' sample covariance over the $d$ kept cells, one draw is
 #
@@ -2278,7 +2268,7 @@ cfr_prior_fig #hide
 # \zeta = L\eta, \qquad
 # I_{p,t} = \bar I_{p,t} \exp \zeta_p(t), \qquad
 # \varepsilon_q = \bar\varepsilon_q \exp \zeta^{\varepsilon}_q, \qquad
-# \theta_k = \bar\theta_k \exp \zeta^{\theta}_k. \tag{56}
+# \theta_k = \bar\theta_k \exp \zeta^{\theta}_k. \tag{55}
 # ```
 #
 # Here $\bar I_{p,t}$, $\bar\varepsilon_q$ and $\bar\theta_k$ are the exponentials of the joint posterior mean log infections, log intensities and log parameters.
@@ -2311,7 +2301,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \Lambda_{z,t} = \sum_{s \ge 1} g_s\, I_{z,t-s}, \qquad
-# u_{z,t} = e^{\delta_{z,t}}\, \Lambda_{z,t}, \tag{57}
+# u_{z,t} = e^{\delta_{z,t}}\, \Lambda_{z,t}, \tag{56}
 # ```
 #
 # with $g$ the draw's generation interval and $I_{z,t} = w_z I_{p,t}$ before $t_0$.
@@ -2321,7 +2311,7 @@ cfr_prior_fig #hide
 #
 # Movement between patches is the joint model's own, and only movement within a patch is estimated here.
 # With $p(z)$ the patch of zone $z$, $N_z$ its population and $d_{zq}$ the distance between zone centroids, both blocks normalise one gravity pull over all zones.
-# This is the form of Equation (14) and the coupling of [xia2004](@citet), with a sampled distance decay $\gamma$ and a log weight $\omega_z$ per destination zone:
+# This is the form of Equation (13) and the coupling of [xia2004](@citet), with a sampled distance decay $\gamma$ and a log weight $\omega_z$ per destination zone:
 #
 # ```math
 # \mathrm{pull}_{zq} = N_z\, e^{\omega_z} d_{zq}^{-\gamma}, \qquad
@@ -2337,7 +2327,7 @@ cfr_prior_fig #hide
 # K^{\text{w}}_{zq} = \frac{\mathrm{pull}_{zq}}
 #     {\sum_{z' \in p(q)} \mathrm{pull}_{z'q}}, \qquad
 # K^{\text{b}}_{zq} = K_{p(z)p(q)}\,
-#   \frac{\mathrm{pull}_{zq}}{\sum_{z' \in p(z)} \mathrm{pull}_{z'q}}, \tag{58}
+#   \frac{\mathrm{pull}_{zq}}{\sum_{z' \in p(z)} \mathrm{pull}_{z'q}}, \tag{57}
 # ```
 #
 # the first within a patch and the second between patches, with $K$ the province kernel.
@@ -2351,7 +2341,7 @@ cfr_prior_fig #hide
 #   + \log \sum_{q \ne p} s_{pq,t} \exp\bigl(\zeta^{\varepsilon}_q + \zeta_q(t)\bigr) - \zeta_p(t),
 # \qquad
 # s_{pq,t} = \frac{\bar\varepsilon_q K_{pq} \bar I_{q,t}}
-#   {\sum_{r \ne p} \bar\varepsilon_r K_{pr} \bar I_{r,t}}, \tag{59}
+#   {\sum_{r \ne p} \bar\varepsilon_r K_{pr} \bar I_{r,t}}, \tag{58}
 # ```
 #
 # with $\bar o_{p,t}$ the joint posterior mean log odds that an infection in $p$ was imported.
@@ -2363,17 +2353,17 @@ cfr_prior_fig #hide
 #   + \sum_{q \in p,\, q \ne z} \varepsilon_q K^{\text{w}}_{zq}\, u_{q,t},
 # \qquad
 # h_{z,t} = \sum_{q:\, p(q) \ne p(z)} \varepsilon_{p(q)}
-#     K^{\text{b}}_{zq}\, u_{q,t}, \tag{60}
+#     K^{\text{b}}_{zq}\, u_{q,t}, \tag{59}
 # ```
 #
 # ```math
 # I_{z,t} = (I_{p,t} - M_{p,t}) \frac{v_{z,t}}{\sum_{z' \in p} v_{z',t}}
 #   + M_{p,t}\, \frac{h_{z,t}}{\sum_{z' \in p} h_{z',t}},
 # \qquad
-# w_{z,t} = \frac{I_{z,t}}{I_{p,t}}. \tag{61}
+# w_{z,t} = \frac{I_{z,t}}{I_{p,t}}. \tag{60}
 # ```
 #
-# The origin intensities $\varepsilon_{p(q)}$ are the sampled ones of Equation (56), and the zone infections of a patch sum to $I_{p,t}$ exactly.
+# The origin intensities $\varepsilon_{p(q)}$ are the sampled ones of Equation (55), and the zone infections of a patch sum to $I_{p,t}$ exactly.
 # The within-patch intensity has one level and a pooled deviation for each origin zone, with priors of our choice:
 #
 # ```math
@@ -2381,21 +2371,21 @@ cfr_prior_fig #hide
 #     + \tau (z^\varepsilon_z - \bar z^\varepsilon), \qquad
 # \varepsilon_{\text{w}} \sim \mathrm{Beta}(1,\ 20), \qquad
 # \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
-# z^\varepsilon_z \sim \mathrm{Normal}(0, 1). \tag{62}
+# z^\varepsilon_z \sim \mathrm{Normal}(0, 1). \tag{61}
 # ```
 #
 # #### Zone deviations
 #
-# The deviations $\delta_{z,t}$ follow the province deviation process of Equation (6), with the zones of each patch as its units.
+# The deviations $\delta_{z,t}$ follow the province deviation process of Equation (5), with the zones of each patch as its units.
 # They sum to zero within each patch at every knot, and their correlation decays with the distance between zone centroids [diggle1998](@cite):
 #
 # ```math
 # C_{zq} = \exp(-d_{zq} / \ell), \qquad
-# \ell = -\bar d / \log \rho_{\text{corr}}, \tag{63}
+# \ell = -\bar d / \log \rho_{\text{corr}}, \tag{62}
 # ```
 #
 # with $\rho_{\text{corr}}$ the correlation at $\bar d$, the mean distance between provincial population centres.
-# In place of the Wishart factor of Equation (7), patch $p$ uses the Cholesky factor of $Q_p^{\top} C_p Q_p$.
+# In place of the Wishart factor of Equation (6), patch $p$ uses the Cholesky factor of $Q_p^{\top} C_p Q_p$.
 # $C_p$ is the block of $C$ for the $n_p$ zones of $p$ and $Q_p$ is their sum-to-zero basis.
 #
 # Only zones with at least 30 cumulative confirmed cases at the cut-off take weekly innovations, and only in patches with two or more such zones.
@@ -2407,14 +2397,14 @@ cfr_prior_fig #hide
 # #### Zone observations
 #
 # Expected confirmed cases carry each zone's infections through the draw's infection-to-receipt delay $f = f_{\text{inc}} * f_{\text{rep}} * f_{\text{rec}}$, the delay the province compositions apply to infections.
-# Each patch and vintage then follows a Dirichlet-multinomial on its total, the composition of Equation (54) without the ordering:
+# Each patch and vintage then follows a Dirichlet-multinomial on its total, the composition of Equation (53) without the ordering:
 #
 # ```math
 # C_{z,v} = \sum_{t \in (d_{v-1},\, d_v]} \sum_{s \ge 0} f_s\, I_{z,t-s},
 # \qquad
 # y_{p,v} \sim \mathrm{DirichletMultinomial}\bigl(N_{p,v},\ \kappa\, \pi_{p,v}\bigr),
 # \qquad
-# \kappa = \frac{1 - \rho}{\rho}. \tag{64}
+# \kappa = \frac{1 - \rho}{\rho}. \tag{63}
 # ```
 #
 # Expected confirmed deaths $D_{z,v}$ use the incubation period convolved with the draw's onset-to-death and report-to-receipt delays.
@@ -2424,7 +2414,7 @@ cfr_prior_fig #hide
 # ```math
 # \pi^{C}_{z,v} = \frac{a_z C_{z,v}}{\sum_{z' \in p} a_{z'} C_{z',v}},
 # \qquad
-# \pi^{D}_{z,v} = \frac{\theta_z D_{z,v}}{\sum_{z' \in p} \theta_{z'} D_{z',v}}, \tag{65}
+# \pi^{D}_{z,v} = \frac{\theta_z D_{z,v}}{\sum_{z' \in p} \theta_{z'} D_{z',v}}, \tag{64}
 # ```
 #
 # with relative ascertainment $a_z$ at scale $\sigma_a$ and relative fatality $\theta_z$ at scale $\sigma_\theta$, built on sum-to-zero bases as in the [province compositions](@ref methods-province-compositions):
@@ -2436,7 +2426,7 @@ cfr_prior_fig #hide
 # \qquad
 # \mathrm{logit}\, \mathrm{CFR}_z = \mathrm{logit}\, \bar{\mathrm{CFR}}_p + \sigma_\theta (Q_p \mathbf{z}^\theta_p)_z,
 # \qquad
-# \mathbf{z}^a_p, \mathbf{z}^\theta_p \sim \mathrm{Normal}(0, I_{n_p - 1}). \tag{66}
+# \mathbf{z}^a_p, \mathbf{z}^\theta_p \sim \mathrm{Normal}(0, I_{n_p - 1}). \tag{65}
 # ```
 #
 # Here $\bar{\mathrm{CFR}}_p$ is the province case-fatality ratio at the joint posterior mean on the logit scale, so each zone case-fatality ratio $\mathrm{CFR}_z$ lies between zero and one.
@@ -2451,10 +2441,10 @@ cfr_prior_fig #hide
 #
 # #### Zone reproduction number
 #
-# The zone reproduction number inverts the zone renewal, as Equation (19) does nationally:
+# The zone reproduction number inverts the zone renewal, as Equation (18) does nationally:
 #
 # ```math
-# R_{z,t} = \frac{I_{z,t}}{\Lambda_{z,t}}. \tag{67}
+# R_{z,t} = \frac{I_{z,t}}{\Lambda_{z,t}}. \tag{66}
 # ```
 #
 # It is reported from the day the zone's cumulative infections reach ten in the median draw.
@@ -2528,7 +2518,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # \mathrm{cCFR}_{\text{corr}}(T) =
 #   \frac{D_{\text{conf}}(T)}
 #        {\sum_{t} c_{\text{conf}}(t)\,
-#         \Pr(X_d - X_c \le T - t)}, \tag{68}
+#         \Pr(X_d - X_c \le T - t)}, \tag{67}
 # ```
 #
 # with $D_{\text{conf}}(T)$ the cumulative confirmed deaths, $c_{\text{conf}}(t)$ the modelled daily confirmed-case incidence, and $X_d - X_c$ the residual delay between a confirmed case and its confirmed death.
@@ -2634,32 +2624,32 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 #
 # The one-week zone forecast is drawn from the fitted zone model run a week past the cut-off, as the other forecasts are.
 # Each draw keeps its fitted parameters.
-# The sampled joint quantities of Equation (56) are extended over the forecast week.
+# The sampled joint quantities of Equation (55) are extended over the forecast week.
 # The multivariate normal is fitted to each joint-model draw's log weekly patch infections over the fitted weeks and over the forecast week of the same draw's forecast, with the fitted block of its Cholesky factor held fixed:
 #
 # ```math
 # \begin{pmatrix} \boldsymbol\zeta \\ \boldsymbol\zeta^{\text{fc}} \end{pmatrix}
 # = \begin{pmatrix} L_{11} & 0 \\ L_{21} & L_{22} \end{pmatrix}
 # \begin{pmatrix} \boldsymbol\eta \\ \boldsymbol\eta^{\text{fc}} \end{pmatrix},
-# \qquad \boldsymbol\eta^{\text{fc}} \sim \mathrm{Normal}(0, I). \tag{69}
+# \qquad \boldsymbol\eta^{\text{fc}} \sim \mathrm{Normal}(0, I). \tag{68}
 # ```
 #
 # The forecast week is then the joint model's forecast conditional on the draw's fitted patch trajectory, and the fitted model is unchanged.
 # Over the forecast week the mean import log odds $\bar o_{p,t}$ are the joint model's forecast arrivals against its forecast infections, and the arrival shares $s_{pq,t}$ follow its mean forecast infections, so each draw's import fraction $f_{p,t}$ runs on with its forecast trajectories.
-# The zone deviations take fresh innovations for the future knots through the same mean-reverting process, and the zone renewal of Equation (57) runs on to the end of the week.
+# The zone deviations take fresh innovations for the future knots through the same mean-reverting process, and the zone renewal of Equation (56) runs on to the end of the week.
 # Each zone's share of its patch's expected confirmed reports over the week, times its relative ascertainment, gives
 #
 # ```math
-# \pi^{\text{fc}}_{z} = \frac{a_z C_{z,(n,\,n+7]}}{\sum_{z' \in p} a_{z'} C_{z',(n,\,n+7]}}. \tag{70}
+# \pi^{\text{fc}}_{z} = \frac{a_z C_{z,(n,\,n+7]}}{\sum_{z' \in p} a_{z'} C_{z',(n,\,n+7]}}. \tag{69}
 # ```
 #
-# Each draw pairs with a joint-model forecast draw chosen at random and splits that draw's forecast confirmed cases in each patch over its zones by the Dirichlet-multinomial of Equation (64) at $\pi^{\text{fc}}$.
+# Each draw pairs with a joint-model forecast draw chosen at random and splits that draw's forecast confirmed cases in each patch over its zones by the Dirichlet-multinomial of Equation (63) at $\pi^{\text{fc}}$.
 #
 # The probability that a zone reports at least $K$ confirmed cases over the week follows from the same composition.
-# Given its patch's forecast total $N$, a zone's count is Beta-binomial, the marginal of the Dirichlet-multinomial of Equation (64), so for forecast draw $i$ with patch total $N_i$, share $\pi_{z,i}$ and concentration $\kappa_i$:
+# Given its patch's forecast total $N$, a zone's count is Beta-binomial, the marginal of the Dirichlet-multinomial of Equation (63), so for forecast draw $i$ with patch total $N_i$, share $\pi_{z,i}$ and concentration $\kappa_i$:
 #
 # ```math
-# P(y_z \ge K) = \frac{1}{n}\sum_i \Bigl[1 - F_{\mathrm{BB}(N_i,\, \kappa_i \pi_{z,i},\, \kappa_i (1 - \pi_{z,i}))}(K - 1)\Bigr]. \tag{71}
+# P(y_z \ge K) = \frac{1}{n}\sum_i \Bigl[1 - F_{\mathrm{BB}(N_i,\, \kappa_i \pi_{z,i},\, \kappa_i (1 - \pi_{z,i}))}(K - 1)\Bigr]. \tag{70}
 # ```
 #
 # The results report this at $K = 1$, $5$, $10$ and $20$, and the health-zone map colours zones by it at a chosen $K$, with a filter for zones that did or did not report a case over a past window.
@@ -2696,7 +2686,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # ```math
 # \mathrm{RS}_{A/B} =
 #     \frac{\overline{\mathrm{CRPS}}_{A}}{\overline{\mathrm{CRPS}}_{B}},
-#     \tag{72}
+#     \tag{71}
 # ```
 #
 # each mean taken over the forecasts both fits scored, so a comparator that happens to score zero on one forecast cannot send the ratio to infinity.
@@ -2717,14 +2707,14 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # \begin{cases}
 #   Y(t_0), & \text{occupancy}, \\
 #   \max\bigl\{Y(t_0) - Y(t_0 - h),\ 0\bigr\}, & \text{counts},
-# \end{cases} \tag{73}
+# \end{cases} \tag{72}
 # ```
 #
 # and takes its spread from the record's own first differences, each rescaled to a one-day step and entered with both signs,
 #
 # ```math
 # S = \Bigl\{ \pm \frac{Y_i - Y_{i-1}}{\sqrt{d_i - d_{i-1}}}
-#     \ :\ i = 2, \dots, m \Bigr\}. \tag{74}
+#     \ :\ i = 2, \dots, m \Bigr\}. \tag{73}
 # ```
 #
 # Under a driftless walk of per-day variance $\sigma^2$, a change over $w$ days has variance $w \sigma^2$.
@@ -2735,7 +2725,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # ```math
 # \tilde{Y} = \max\Bigl\{ \mu + \sum_{j=1}^{h} \varepsilon_j,\ 0 \Bigr\},
 # \qquad \varepsilon_j \overset{\text{iid}}{\sim} \mathrm{Uniform}(S),
-#     \tag{75}
+#     \tag{74}
 # ```
 #
 # so before the floor it has mean $\mu$ and variance $h \sigma^2$ for $\sigma^2 = |S|^{-1} \sum_{s \in S} s^2$,.
@@ -2761,7 +2751,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # Prevalence in that state on the cut-off day $T$ is
 #
 # ```math
-# P(T) = \sum_{s \ge 0} I(T - s)\, w(s). \tag{76}
+# P(T) = \sum_{s \ge 0} I(T - s)\, w(s). \tag{75}
 # ```
 #
 # A person is infected but not yet symptomatic while the incubation period exceeds $s$.

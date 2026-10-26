@@ -1807,27 +1807,24 @@ end
 end
 
 @testitem "patch_infection_model: the importation intensity is per origin" begin
-    using BVDOutbreakSize: patch_infection_model, sigmoid_ramp
+    using BVDOutbreakSize: patch_infection_model
     using Turing: DynamicPPL, returned, sample, Prior
     using Random: Xoshiro
 
-    n, np, rt_start, bp = 60, 3, 30, 10
+    n, np, rt_start = 60, 3, 30
     ## A flat kernel, so the importation a province receives is the sum of
     ## what the other two send at their own intensities and nothing else.
     K = [p == q ? 0.0 : 1.0 for p in 1:np, q in 1:np]
     base = patch_infection_model(
-        n, np; breakpoint = bp, rt_start,
+        n, np; rt_start,
         importation_kernel = K
     )
     ## Everything but the intensity is held at one draw, so the trajectories
     ## differ only through what the intensity does. `z_ε` also enters the
     ## destination effect, so the kernel spreads are zero.
-    function run(;
-            ε_bar = 0.02, σ_ε = 0.0, z_ε = [-1.0, 2.0],
-            β_ε = 0.0
-        )
+    function run(; ε_bar = 0.02, σ_ε = 0.0, z_ε = [-1.0, 2.0])
         m = DynamicPPL.fix(
-            base; ε_bar, σ_ε, z_ε, β_ε, σ_dest = 0.0, σ_flow = 0.0
+            base; ε_bar, σ_ε, z_ε, σ_dest = 0.0, σ_flow = 0.0
         )
         return returned(m, rand(Xoshiro(7), m))
     end
@@ -1845,7 +1842,7 @@ end
     ## The log deviations sum to zero, so `ε_bar` is the level: the origin
     ## intensities have geometric mean `ε_bar` whatever the spread.
     fixed = DynamicPPL.fix(
-        base; ε_bar = 0.02, σ_ε = 0.7, z_ε = [-1.0, 2.0], β_ε = 0.0
+        base; ε_bar = 0.02, σ_ε = 0.7, z_ε = [-1.0, 2.0]
     )
     chn = sample(Xoshiro(1), fixed, Prior(), 3; progress = false)
     for e in vec(collect(chn[:importation_epsilon_patch]))
@@ -1854,27 +1851,20 @@ end
         @test !all(≈(0.02), e)
     end
 
-    ## The detection ramp moves the intensity the way its sign says. On the
-    ## first renewal day every history is still the seed, so the arrivals
-    ## scale exactly by `exp(β_ε * ramp)` and nothing else.
-    ramp = sigmoid_ramp(n, bp)
+    ## Ituri alone is seeded, so on the first renewal day it is the only
+    ## origin and the other two receive everything Ituri sends.
     day = rt_start + 1
-    for β in (0.8, -0.8)
-        got = run(β_ε = β).importation_matrix[:, day]
-        want = shared.importation_matrix[:, day] .* exp(β * ramp[day])
-        @test got ≈ want
-    end
-    ## Ituri alone is seeded, so on that day it is the only origin and the
-    ## other two receive everything Ituri sends.
     @test iszero(shared.importation_matrix[1, day])
     @test all(>(0), shared.importation_matrix[2:np, day])
-    @test run(β_ε = 0.8).importation_matrix[2, day] >
-        shared.importation_matrix[2, day]
 
     ## The intensity is capped at one: an origin cannot send away more than
-    ## it generates, so pushing the ramp effect further changes nothing.
-    @test run(ε_bar = 0.9, β_ε = 5.0).importation_matrix[:, day] ≈
-        run(ε_bar = 0.9, β_ε = 50.0).importation_matrix[:, day]
+    ## it generates, however far its deviation pushes it.
+    wide = DynamicPPL.fix(base; ε_bar = 0.5, σ_ε = 3.0, z_ε = [2.0, -2.0])
+    chn_wide = sample(Xoshiro(1), wide, Prior(), 2; progress = false)
+    for e in vec(collect(chn_wide[:importation_epsilon_patch]))
+        @test all(<=(1), e)
+        @test any(==(1), e)
+    end
 end
 
 @testitem "patch_infection_model: Ituri alone is seeded when coupled" begin
@@ -1883,7 +1873,7 @@ end
     using Turing: DynamicPPL, returned
     using Random: Xoshiro
 
-    n, np, rt_start, bp = 60, 3, 30, 10
+    n, np, rt_start = 60, 3, 30
     has_frac(m) = any(
         v -> occursin("seed_fraction", string(v)),
         keys(DynamicPPL.VarInfo(Xoshiro(1), m))
@@ -1897,7 +1887,7 @@ end
 
     ## Coupled: the outbreak began in Ituri, so the primary patch takes the
     ## whole cryptic seed and the seed fraction is not a free dimension.
-    coupled = patch_infection_model(n, np; breakpoint = bp, rt_start)
+    coupled = patch_infection_model(n, np; rt_start)
     @test !has_frac(coupled)
     sc = returned(coupled, rand(Xoshiro(9), coupled))
     @test isempty(sc.seed_fraction)
@@ -1912,7 +1902,7 @@ end
     ## An all-zero kernel leaves a secondary patch no route to infections,
     ## so the sampled fractions still apply and seed it directly.
     uncoupled = patch_infection_model(
-        n, np; breakpoint = bp, rt_start,
+        n, np; rt_start,
         importation_kernel = zeros(np, np)
     )
     @test has_frac(uncoupled)
@@ -1930,7 +1920,7 @@ end
     @test shares ≈ vcat(1 / denom, su.seed_fraction ./ denom)
 
     ## One patch has nothing to seed either way.
-    @test !has_frac(patch_infection_model(n, 1; breakpoint = bp, rt_start))
+    @test !has_frac(patch_infection_model(n, 1; rt_start))
 end
 
 @testitem "forecast_provinces reads predict draws of a sampled patch chain" setup = [
@@ -2136,25 +2126,25 @@ end
     using Turing: DynamicPPL, returned, sample, Prior
     using Random: Xoshiro
 
-    n, np, rt_start, bp = 60, 4, 30, 10
-    coupled = patch_infection_model(n, np; breakpoint = bp, rt_start)
+    n, np, rt_start = 60, 4, 30
+    coupled = patch_infection_model(n, np; rt_start)
     vnames(m) = string.(keys(DynamicPPL.VarInfo(Xoshiro(3), m)))
     for v in ("σ_dest", "z_dest", "σ_flow", "z_flow", "ρ_flow_unit", "ρ_od_unit")
         @test v in vnames(coupled)
     end
     uncoupled = patch_infection_model(
-        n, np; breakpoint = bp, rt_start,
+        n, np; rt_start,
         importation_kernel = zeros(np, np)
     )
     @test !("σ_dest" in vnames(uncoupled))
     @test !("σ_flow" in vnames(uncoupled))
     ## With three patches the one double-centred flow is a circulation, so
     ## its reciprocity is -1 and not sampled.
-    three = patch_infection_model(n, 3; breakpoint = bp, rt_start)
+    three = patch_infection_model(n, 3; rt_start)
     @test "z_flow" in vnames(three)
     @test !("ρ_flow_unit" in vnames(three))
     ## With two patches every weighting cancels and there is no flow term.
-    two = patch_infection_model(n, 2; breakpoint = bp, rt_start)
+    two = patch_infection_model(n, 2; rt_start)
     @test !("σ_flow" in vnames(two))
     chn2 = sample(Xoshiro(1), two, Prior(), 1; progress = false)
     η2 = first(vec(collect(chn2[:importation_destination_effect])))

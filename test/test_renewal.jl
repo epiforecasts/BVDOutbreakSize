@@ -334,28 +334,6 @@ end
     @test all(out .≈ 3.14)
 end
 
-@testitem "sigmoid_ramp: logistic shape, missing gives zeros" begin
-    using BVDOutbreakSize: sigmoid_ramp
-    using StatsFuns: logistic
-
-    n = 40
-    day = 20
-    ramp_val = 7.0
-    r = sigmoid_ramp(n, day; ramp = ramp_val)
-    @test length(r) == n
-    ## Logistic at the breakpoint should be ≈ 0.5
-    @test isapprox(r[day], logistic(0.0); atol = 1.0e-8)
-    ## Well before breakpoint should be close to 0
-    @test r[1] < 0.1
-    ## Well after breakpoint should be close to 1
-    @test r[n] > 0.9
-    ## Monotone non-decreasing
-    @test issorted(r)
-
-    ## Missing day gives all zeros
-    @test all(sigmoid_ramp(n, missing) .== 0.0)
-end
-
 @testitem "seeding_age: returns n when cumulative never reaches 1" begin
     using BVDOutbreakSize: seeding_age
 

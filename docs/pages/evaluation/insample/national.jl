@@ -962,7 +962,7 @@ cumulative_density_fig #hide
 ## The per-stream fits walk Rt from day 1 (the default `rt_start`), while the
 ## joint walks from `RT_WALK_LEAD` days before the first situation report; the
 ## shared `display_start` is the joint renewal start so every stream reads over
-## the same established window. `ramp` matches the joint Rt figure.
+## the same established window.
 _rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n);
 stream_rt_fig = plot_rt_streams(
     [
@@ -997,7 +997,7 @@ stream_rt_fig = plot_rt_streams(
     ),
     n = obs.n, breakpoint = _BREAKPOINT,
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    display_start = _rt_start_plot, ramp = RESPONSE_RAMP
+    display_start = _rt_start_plot
 );
 
 #md # ```@raw html

@@ -26,8 +26,8 @@ A major version: the report gains a health-zone level below the provinces, with 
   The ramp made most of its rise over the walk's first twelve weekly knots, where the walk can draw the same path, so the data saw the effect only through its trade against the walk's steps and their scale.
   The walk keeps its half-normal step prior, which nests a constant $R_t$, and its centred knots, which `RandomWalkVector` now draws with no offset.
   The prior no longer expects transmission to fall after the response, so the prior median change in log $R_t$ over 26 weekly steps moves from −0.23 to 0.
-  The single-population composers lose their `breakpoint` keyword, which only set the ramp; the joint keeps it for the walk start and the importation ramp, and `reconstruct_rt` and `reconstruct_patch_rt` lose `breakpoint` and `ramp`.
-  `RT_INTERVENTION_RAMP` becomes `RESPONSE_RAMP`, since it now times only the importation ramp and the figure markers.
+  The importation intensity loses its change at detection too, so `importation_epsilon_effect` is gone and each origin's intensity is constant in time, with `RT_INTERVENTION_RAMP`, `sigmoid_ramp` and the figures' end-of-scale-up marker removed.
+  The single-population composers and `patch_infection_model` lose their `breakpoint` keyword, which only set the ramps; the joint keeps it for the walk start, and `reconstruct_rt` and `reconstruct_patch_rt` lose `breakpoint` and `ramp`.
   Fitted values change and every fit needs rerunning.
 - Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
   SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.

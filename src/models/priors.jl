@@ -1871,7 +1871,6 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
 """
 @model function patch_infection_model(
         n::Integer, n_patches::Integer;
-        breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
         rt_walk_start::Integer = rt_start,
         rt = patch_rt_model,
@@ -1883,7 +1882,6 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         ),
         importation_epsilon_prior = Beta(1, 100),
         importation_sd_prior = truncated(Normal(0, 0.5); lower = 0),
-        importation_effect_prior = Normal(0, 0.5),
         importation_destination_sd_prior = truncated(Normal(0, 1); lower = 0),
         importation_flow_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         importation_correlation_prior = Beta(2, 2),
@@ -1981,9 +1979,8 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
             seeds_matrix[p, j] = s_p[j]
         end
     end
-    ## 5. Importation intensity: one level per origin, partially pooled, and
-    ##    a common change at detection on the response ramp
-    ##    ([`sigmoid_ramp`](@ref)). Only sampled when the kernel couples the
+    ## 5. Importation intensity: one level per origin, partially pooled and
+    ##    constant in time. Only sampled when the kernel couples the
     ##    patches, since against an all-zero kernel it would be a prior-only
     ##    dimension.
     ##    Per origin because the provinces do not export alike and the kernel
@@ -1995,29 +1992,28 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    `n_patches - 1` sum-to-zero directions ([`sum_to_zero_basis`](@ref)),
     ##    which gives the distribution of `n_patches` independent
     ##    `N(0, σ_ε²)` draws with their mean subtracted, with no direction
-    ##    the likelihood cannot see. Time-varying because the
-    ##    outbreak being known changes movement, and the provinces that arrive
-    ##    either side of the breakpoint are what separates `β_ε`.
+    ##    the likelihood cannot see. There is no change at detection: a
+    ##    fitted step there would trade against the provinces' own `R_t`
+    ##    walks, which see the same arrivals, so any change in what a
+    ##    province receives comes through the walks and the sender's
+    ##    incidence.
     ε_matrix = zeros(Tp, n_patches, ng)
     if coupled
         ε_bar ~ importation_epsilon_prior
         σ_ε ~ importation_sd_prior
         z_ε ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
-        β_ε ~ importation_effect_prior
         log_ε_dev = sum_to_zero(sum_to_zero_factor(basis, σ_ε), z_ε)
-        ramp = sigmoid_ramp(ng, breakpoint)
         @inbounds for q in 1:n_patches
-            lvl = ε_bar * exp(log_ε_dev[q])
+            ## Capped at one: the origin cannot send away more than it
+            ## generates. The prior sits four orders of magnitude below
+            ## the cap, so this binds only in the far tail.
+            lvl = min(ε_bar * exp(log_ε_dev[q]), one(Tp))
             for t in 1:ng
-                ## Capped at one: the origin cannot send away more than it
-                ## generates. The prior sits four orders of magnitude below
-                ## the cap, so this binds only in the far tail.
-                ε_matrix[q, t] = min(lvl * exp(β_ε * ramp[t]), one(Tp))
+                ε_matrix[q, t] = lvl
             end
         end
         importation_epsilon := ε_bar
         importation_epsilon_sd := σ_ε
-        importation_epsilon_effect := β_ε
         importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
         ## The log flows `log K + W` have a multivariate normal prior whose
         ## mean is the log gravity kernel, so gravity is the prior and `W` is

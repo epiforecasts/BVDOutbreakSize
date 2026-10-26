@@ -731,7 +731,7 @@ end
     using Random: MersenneTwister
     using Dates: Date
     import FlexiChains
-    using BVDOutbreakSize: plot_rt, knot_days, RESPONSE_RAMP
+    using BVDOutbreakSize: plot_rt, knot_days
     rng = MersenneTwister(17)
     ndraws = 120
     n = 95
@@ -756,8 +756,7 @@ end
     )
     fig = plot_rt(
         chn; n = n, breakpoint = n - 11,
-        as_of_date = "2026-05-28", seeding = Date("2026-02-23"),
-        ramp = RESPONSE_RAMP
+        as_of_date = "2026-05-28", seeding = Date("2026-02-23")
     )
     @test fig isa CairoMakie.Makie.Figure
 end
@@ -768,7 +767,7 @@ end
     using Random: MersenneTwister
     using Dates: Date
     import FlexiChains
-    using BVDOutbreakSize: plot_rt_streams, knot_days, RESPONSE_RAMP
+    using BVDOutbreakSize: plot_rt_streams, knot_days
     rng = MersenneTwister(31)
     ndraws = 80
     n = 95
@@ -811,8 +810,7 @@ end
     fig = plot_rt_streams(
         streams; joint = joint, n = n,
         breakpoint = breakpoint, as_of_date = "2026-05-28",
-        seeding = Date("2026-02-23"), display_start = joint_walk,
-        ramp = RESPONSE_RAMP
+        seeding = Date("2026-02-23"), display_start = joint_walk
     )
     @test fig isa CairoMakie.Makie.Figure
 end
@@ -1753,8 +1751,7 @@ end
     using Random: MersenneTwister
     using Dates: Date
     import FlexiChains
-    using BVDOutbreakSize: plot_rt_patches, knot_days, PROVINCE_LABELS,
-        RESPONSE_RAMP
+    using BVDOutbreakSize: plot_rt_patches, knot_days, PROVINCE_LABELS
 
     rng = MersenneTwister(23)
     nd, n, np = 40, 60, 3
@@ -1779,8 +1776,7 @@ end
     fig = plot_rt_patches(
         chn; n, breakpoint = n - 11,
         as_of_date = "2026-05-28", seeding = Date("2026-02-23"),
-        n_patches = np, rt_start = walk_start, rt_walk_start = walk_start,
-        ramp = RESPONSE_RAMP
+        n_patches = np, rt_start = walk_start, rt_walk_start = walk_start
     )
     @test fig isa CairoMakie.Makie.Figure
     axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
@@ -1789,10 +1785,10 @@ end
     for ax in axes
         ## The national reference behind the province: three ribbons each.
         @test count(p -> p isa CairoMakie.Makie.Band, ax.scene.plots) == 6
-        ## No-growth line, plus the breakpoint, the end of the scale-up and
-        ## the cut-off as vertical rules.
+        ## No-growth line, plus the breakpoint and the cut-off as vertical
+        ## rules.
         @test count(p -> p isa CairoMakie.Makie.HLines, ax.scene.plots) == 1
-        @test count(p -> p isa CairoMakie.Makie.VLines, ax.scene.plots) == 3
+        @test count(p -> p isa CairoMakie.Makie.VLines, ax.scene.plots) == 2
     end
     ## The provinces are compared rather than each rescaled to its own range,
     ## so every panel carries the same y-limits, from zero.
@@ -1814,7 +1810,7 @@ end
         chn; n, breakpoint = n - 11,
         as_of_date = "2026-05-28", seeding = Date("2026-02-23"),
         n_patches = np, rt_start = walk_start, rt_walk_start = walk_start,
-        ramp = RESPONSE_RAMP, ncols = 2
+        ncols = 2
     )
     @test count(x -> x isa CairoMakie.Makie.Axis, wide.content) == np
 end
