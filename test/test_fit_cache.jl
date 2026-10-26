@@ -294,6 +294,11 @@ end
     )
     @test groups["joint"] == ["joint", "sens_no_patches"]
     @test "frozen_validation" in groups["frozen"]
+    ## Each May cut-off carries its confirmed and confirmed-deaths
+    ## single-stream fits beside the frozen joint, in the same CI group.
+    for c in default_frozen_cutoffs(), sid in FROZEN_CUTOFF_STREAM_FITS
+        @test "frozen_$(c)_$sid" in groups["frozen"]
+    end
     @test all(startswith("sens_"), groups["sensitivity"])
 end
 

@@ -146,6 +146,13 @@ const VALIDATION_STREAM_FITS = (
     ("confirmed_deaths", :confirmed_deaths),
     ("treatment", :isolation_beds),
 )
+## The individual single-stream models also frozen at each of the
+## McCabe-matched `frozen_cutoffs`, so the frozen-fit scoring can compare
+## each against the frozen joint at the same cut-off. Confirmed cases and
+## confirmed deaths are the only streams with truth to score from those
+## cut-offs: the suspected streams stop before the first horizon lands and
+## bed occupancy starts after them.
+const FROZEN_CUTOFF_STREAM_FITS = ("confirmed", "confirmed_deaths")
 
 """
 Fit ids of the single-stream models the forecast validation draws, for the
@@ -676,6 +683,15 @@ function build_fit_specs(
                 thunk = () -> fit_frozen_joint(c),
             )
         )
+        for sid in FROZEN_CUTOFF_STREAM_FITS
+            push!(
+                specs, (;
+                    id = "frozen_$(c)_$sid", kind = :frozen,
+                    model = () -> frozen_stream(sid, c).model,
+                    thunk = () -> fit_frozen_stream(sid, c),
+                )
+            )
+        end
     end
     ## Chamla's 8 June anchor, kept out of the McCabe-matched `frozen_cutoffs`;
     ## the estimate-evolution overlay pulls it in explicitly.

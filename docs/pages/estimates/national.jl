@@ -1117,8 +1117,9 @@ for id in frozen_forecast_ids
 end
 
 ## The frozen single-stream fits, forecast from their own chains as
-## `stream_forecasts.csv` forecasts the live ones. They are registered only
-## at the validation cut-off and only for still-reported streams.
+## `stream_forecasts.csv` forecasts the live ones. Each still-reported stream
+## has one at the validation cut-off, and confirmed cases and confirmed deaths
+## have one at each McCabe-matched cut-off (`FROZEN_CUTOFF_STREAM_FITS`).
 _frozen_stream_of = Dict(
     "cases" => (:reported_cases, "reported cases"),
     "deaths" => (:suspected_deaths, "suspected deaths"),
@@ -1126,10 +1127,20 @@ _frozen_stream_of = Dict(
     "confirmed_deaths" => (:confirmed_deaths, "confirmed deaths"),
     "treatment" => (:isolation_beds, "isolation beds")
 )
-for (_sid, _sf) in sort(collect(pairs(frozen_lastweek_streams)); by = first)
+_frozen_stream_fit_ids = [
+    [
+        ("frozen_validation_$sid", sid)
+            for sid in sort(collect(keys(frozen_lastweek_streams)))
+    ];
+    [
+        ("frozen_$(c)_$sid", sid)
+            for c in frozen_cutoffs for sid in FROZEN_CUTOFF_STREAM_FITS
+    ]
+]
+for (_id, _sid) in _frozen_stream_fit_ids
     _stream, _label = _frozen_stream_of[_sid]
-    _o = _sf.o
-    _spp = fit_forecast("frozen_validation_$_sid")
+    _o = load_fit(_id).o
+    _spp = fit_forecast(_id)
     for h in forecast_horizons
         _vals = forecast_stream(_spp, _stream; horizon = h)
         for (_d, _i) in enumerate(1:5:length(_vals))
