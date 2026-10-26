@@ -163,10 +163,7 @@ end
 
 "Seeded prior draw of the shared infection and onset process."
 function latent_draw(; n::Integer = N, seed::Integer = SEED)
-    m = BVDOutbreakSize._latent(
-        n, missing, infection_model,
-        onset_incidence_model
-    )
+    m = BVDOutbreakSize._latent(n, infection_model, onset_incidence_model)
     seed!(seed)
     return returned(m, rand(m))
 end
@@ -271,8 +268,7 @@ function scenarios(; n::Integer = N, joint::Bool = false, zone::Bool = false)
         Scenario(
             "latent (infection + onset staging)", "Latent",
             BVDOutbreakSize._latent(
-                n, missing, infection_model,
-                onset_incidence_model
+                n, infection_model, onset_incidence_model
             ), SEED
         )
     )
