@@ -31,7 +31,6 @@ chn_confirmed_deaths = load_fit("confirmed_deaths")
 chn_treatment = load_fit("treatment")
 chn_onsets = load_fit("onsets")
 frozen_lastweek = load_fit("frozen_validation")
-frozen_lastweek_streams = frozen_validation_stream_fits()
 frozen_by_cutoff = frozen_fits_by_cutoff()
 frozen_results = [frozen_by_cutoff[c] for c in frozen_cutoffs]
 if RUN_SENSITIVITY
@@ -1117,9 +1116,8 @@ for id in frozen_forecast_ids
 end
 
 ## The frozen single-stream fits, forecast from their own chains as
-## `stream_forecasts.csv` forecasts the live ones. Each still-reported stream
-## has one at the validation cut-off, and confirmed cases and confirmed deaths
-## have one at each McCabe-matched cut-off (`FROZEN_CUTOFF_STREAM_FITS`).
+## `stream_forecasts.csv` forecasts the live ones, for every id
+## `frozen_stream_fit_ids` lists.
 _frozen_stream_of = Dict(
     "cases" => (:reported_cases, "reported cases"),
     "deaths" => (:suspected_deaths, "suspected deaths"),
@@ -1127,20 +1125,12 @@ _frozen_stream_of = Dict(
     "confirmed_deaths" => (:confirmed_deaths, "confirmed deaths"),
     "treatment" => (:isolation_beds, "isolation beds")
 )
-_frozen_stream_fit_ids = [
-    [
-        ("frozen_validation_$sid", sid)
-            for sid in sort(collect(keys(frozen_lastweek_streams)))
-    ];
-    [
-        ("frozen_$(c)_$sid", sid)
-            for c in frozen_cutoffs for sid in FROZEN_CUTOFF_STREAM_FITS
-    ]
-]
-for (_id, _sid) in _frozen_stream_fit_ids
-    _stream, _label = _frozen_stream_of[_sid]
-    _o = load_fit(_id).o
-    _spp = fit_forecast(_id)
+for _f in frozen_stream_fit_ids(
+        validation_cutoff, frozen_cutoffs, validation_stream_ids(obs)
+    )
+    _stream, _label = _frozen_stream_of[_f.sid]
+    _o = load_fit(_f.id).o
+    _spp = fit_forecast(_f.id)
     for h in forecast_horizons
         _vals = forecast_stream(_spp, _stream; horizon = h)
         for (_d, _i) in enumerate(1:5:length(_vals))
@@ -1148,7 +1138,7 @@ for (_id, _sid) in _frozen_stream_fit_ids
                 frozen_forecast_archive,
                 (
                     _o.cutoff, h, _o.cutoff + Day(h), _label, _d,
-                    Float64(_vals[_i]), _sid,
+                    Float64(_vals[_i]), _f.sid,
                 )
             )
         end

@@ -263,7 +263,7 @@ A major version: the report gains a health-zone level below the provinces, with 
   Fitted values do not change.
 - The confirmed-cases and confirmed-deaths single-stream models are fitted at each of the three May frozen cut-offs and scored alongside the frozen joint (resolves #513).
   They are the only streams with truth to score from those cut-offs, so the frozen comparison of the joint against each stream's own model now covers every May cut-off rather than the one-week-back cut-off alone.
-  The six fits join the frozen fit group in the docs build, and existing fitted values do not change.
+  Existing fitted values do not change.
 
 ### Infrastructure
 
