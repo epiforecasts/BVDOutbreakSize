@@ -45,6 +45,16 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone importation kernel samples its distance decay and a log weight per destination zone, holding each origin's total into every province (#1030).
   The decay's `LogNormal(0, 1)` prior has its median at the fixed inverse-distance decay it replaces.
   Fitted values change.
+- The four daily treatment-centre flows (admissions, in-care deaths, rule-outs and absconds) take a negative-binomial dispersion of their own, rather than the dispersion of the occupancy, beds and in-care census (#1103).
+  At 100 draws of the joint posterior from the docs CI run 37423718825, the shared dispersion sat at 546 (322 to 1472), set by the stocks, and the flows scattered 2.1 to 5.0 times the variance it allowed (Pearson dispersion index by stream).
+  A dispersion fitted to the flows alone at those draws is about 14 and raises their log-likelihood by about 94.
+  As a seventh pooled stream it shared the wide pooling spread the stocks need, and the joint fit did not converge (R-hat 1.14, bulk ESS 21, worst in the province capacity shares).
+  The flow dispersion is centred on the stock dispersion, with log(1/√k_flow) Normal about log(1/√k_iso) with SD log(3)/2 and drawn directly.
+  The offset is the log ratio of the flows' extra coefficient of variation to the stocks'.
+  Its prior is set a priori, not from a fit: zero nests the shared dispersion, a threefold ratio either way sits at two SDs.
+  Those fits show the problem and were not used to set the prior.
+  Fitted values change.
+  The flows carry less weight, so the in-care fatality, stays and admission rates they inform can widen.
 - The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap` (#1123).
   The data pin each deviation rather than its scale, so the non-centred form tied the standard-normal draws to the scale along a funnel.
   On the joint posterior of the #1101 fit, whose model is the one before this change, the log scale correlates with the log mean square of its standard-normal draws at −0.93 for the background split and −0.96 for the capacity shares.
@@ -92,6 +102,12 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone deviations are drawn on the sum-to-zero basis within each patch, as the province deviations are (#980).
 - The health-zone meld also carries the joint's per-origin importation intensity, so each draw's between-patch arrivals follow its own trajectories and intensities rather than the posterior mean (#1011).
 - The health-zone forecast reads the joint's own forecast arrivals past the cut-off rather than holding the cut-off import odds (#1014).
+- The cut-off and forecast beds, occupancy and admissions are built by province and summed to the national figures, with nothing capped: each province's beds are its share of the capacity walk, and its forecast runs the fitted stock forward (#958).
+  The forecast draws the national occupancy and admissions from the national negative binomial and splits each across the provinces by the fitted split and its overdispersion, so the national forecast keeps the fitted spread.
+  The national bed shortfall is the bed demand above the national beds; each province's patients above its own beds are reported by province.
+- The provinces' 24h admissions are fitted as a split of the national admissions (#958).
+  Each province's share of the non-BVD admissions is its share of the non-BVD suspects moved by a sum-to-zero level (scale `Normal⁺(0, 0.5)`) and a weekly random walk over the printed days, which nest the constant share at zero.
+  A province that never prints admissions keeps its share of the non-BVD suspects.
 - Each province's case-fatality ratio is the national ratio shifted by a sum-to-zero contrast on the logit scale, so it lies between zero and one by construction (#1149).
   It was the national ratio times a log-scale multiplier, which nothing bounded, and one draw of 2000 in the SitRep 154 fit put Nord-Kivu at 1.06.
   The province point prevalence rejected that draw and failed the province page.
@@ -100,9 +116,31 @@ A major version: the report gains a health-zone level below the provinces, with 
   The health-zone fatality is built the same way, as a logit shift of its province's ratio at the joint posterior mean, with the same change of scale prior.
   The zone point prevalence shifts each joint draw's province ratio by the zone's contrast, so it no longer caps the zone ratio at one.
   Fitted values change and the joint and zone fits need refitting.
+- Each province detects a BVD onset as a suspected case with its own probability, the DRC ascertainment shifted by a sum-to-zero contrast on the logit scale, so it lies between zero and one by construction (#1153).
+  The national BVD suspected cases are each province's onsets through the onset-to-report delay times its probability, summed, and the suspected-case, laboratory, isolation and onset-curve streams read that sum.
+  The DRC ascertainment is now the logit centre of the province probabilities, so the report gives the national suspected-case ascertainment as those probabilities weighted by the province onsets to the cut-off, recorded as `p_drc_national` and published alongside `p_drc`.
+  The case composition's sum-to-zero log contrast becomes the confirmation contrast, which carries the provincial differences in testing, and the relative case ascertainment is the detection times that contrast.
+  The detection spread takes a half-normal scale of 0.5 on the logit scale, about 0.125 on the log scale at the prior centre of 0.75, and the confirmation contrast keeps its scale of 0.3 on the log scale.
+  The province occupancy splits carry the detection but no longer the confirmation contrast, since a suspect is admitted before testing.
+  A zero detection spread gives the previous model, except that the occupancy splits then use incidence alone.
+  The province point prevalence reads each province's detection directly, so it no longer rescales the relative ascertainment or caps it at one.
+  The zone point prevalence shifts that probability on the logit scale by the log of the zone's relative ascertainment.
+  The zone stage centres its ascertainment spread on the province spread of detection times confirmation, recorded as `province_ascertainment_log_sd`, rather than on the confirmation spread alone.
+  Fitted values change and the joint fit, and everything fitted from it, needs refitting.
 
 ### Data
 
+- The onset curve gains SitReps 151, 153 and 158, so its latest vintage is 19 October rather than 10 October (#1138, #1148).
+  The reader now reads a short bar whose dark dead segment passes as outline, drops a column that carries the next bar's outline height, reads no bar from the band's pink beside the last outline, and lets two agreeing soft columns outvote a middle column under the dashed line.
+  The rebuild adds 8 May to SitReps 133 and 134 and 2 May to SitRep 146, removes a 4 May bar from SitReps 112 and 143 to 145, and moves SitRep 120's 7 September from 17 to 24.
+  SitReps 150 and 154 stay out, and #1154 gives the reasons.
+- The model cut-off advances to SitRep 162, 23 October, and the onset curve gains SitRep 160, so its latest vintage is 21 October (#1154).
+  SitRep 160 removes 10 cases and 1 death from Beni's cumulative with no note (#1159), so Nord-Kivu and the national total rise by less than the printed 24h counts.
+  The reader now reads a bar from its outlined columns when every other column of its window has lost its top outline, and reads nothing left of the y-axis line, which also drops a 24 and 28 April bar of 1 from SitReps 106 and 107.
+  SitReps 161 and 162 redraw SitRep 160's extract, so the onset curve does not add them.
+  The care scanner reads Nord-Kivu's `patients sont pris en charge` with its CTE/CT fraction.
+  `data/onset_dashboard_history.csv` adds the dashboard snapshots of 22 and 24 October.
+  Fitted values change with the new data.
 - Nord-Ubangi is the eighth source province (#1147).
   Its 2019 population, 1 425 000, is from the same INS *Annuaire statistique RDC 2020* table as the other seven.
   Its centre, (3.8889, 20.9641), is the WorldPop-weighted mean of its 11 health-zone centroids, printed by `task province-centres` from the same INRB-UMIE build as the other seven.
@@ -137,6 +175,10 @@ A major version: the report gains a health-zone level below the provinces, with 
   Inside the pink incomplete-data band a day whose columns disagree reads the level run of columns centred nearest it, so 30 September and 1 October read 23 and 7 rather than 31 and 15.
   A rebuild changes seven earlier cells in the band, after which none of their dates falls between consecutive vintages: 7 September in SitReps 118 to 120 (17, 26 and 24 to 9, 14 and 17), 129's 18 September (13 to 5) and 19 September in 130 to 132 (16, 16 and 27 to 2, 2 and 10).
   On onset dates more than 56 days before the report, SitRep 143 differs from the dashboard's 2 October snapshot by 0.38 cases a day and at most 5 (`scripts/compare_onset_sources.py`).
+- The tick-column re-read above now also fires when the two bounding outlines differ in height.
+  A day on a tick is read again, without the gridline skip, when every column's skipped run falls more than two counts short of its own unskipped run and that unskipped run reaches either outline (#1138).
+  SitReps 150 and 151 still stay out of the onset curve.
+  SitRep 150's 29 July reads 69 against 51 from day-grid drift rather than a tick-column break, and SitRep 151's larger render reads a phantom bar of 3 on 12 October, a day on which the figure draws no bar.
 - The dashboard onset history reads the daily counts embedded in the page, since the INRB-UMIE dashboard draws its onset charts in the browser from 25 September (#1062).
   It adds the 2 October snapshot, the first since 23 September, and the earlier rows are unchanged.
   On the 23 September data, built both ways, the counts and the old chart reading agree on every row.
@@ -151,6 +193,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 - `data/observations.toml` carries per-health-zone confirmed cases and deaths to SitRep 154 (15 October), including Alimbongo (Nord-Kivu) from SitRep 141, scanned from Tableau 2 including the caption that drops `de santé` from SitRep 124, and `data/health_zones.csv` and `src/assets/health_zones.geojson` hold the zone boundaries (#779, #979, #980).
   Dakwa (Bas-Uélé), new at SitRep 147, has no polygon in the Ministry of Health health-zone map, so its case is carried in the Bas-Uélé unallocated row until the zone is mapped.
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
+- `province_admissions_history` block, sparse by province, to SitRep 159 (20 October), and province beds raised to the rate-implied beds where the patients exceed a stale printed count (#958).
 
 ### Report
 
@@ -226,6 +269,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Infrastructure
 
+- The docs fits save their chain to the cache as soon as sampling ends, so a fit that finishes near the job's time limit is kept if the job is then cancelled, and the re-run loads it rather than refitting.
+- The docs build keeps its resolved manifest for ten days rather than three, so a re-run of failed jobs after a long fit can still pin it.
 - The benchmark driver turns off Pkg's automatic precompilation, which under Julia 1.13.2 fails with "Unknown package" on indirect dependencies after AirspeedVelocity adds its own packages.
 - The docs commit their own `docs/package.json`, which pins `@nolebase/vitepress-plugin-enhanced-readabilities` and `@nolebase/ui` to 2.18.2.
   Their 2.21 releases on 13 and 14 October 2026 require vitepress 2, so `npm install` failed on the DocumenterVitepress 0.3.6 template, which asks for `^2.18.2` alongside vitepress 1 (#1134).
@@ -280,6 +325,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   The seed-prior test brackets the Nord-Kivu share at the first province report, the level the seed sets, rather than the share over the whole window, which also carries the later rise.
   Fitted values do not change.
 - The province bed and overview tables leave non-finite draws out of each cell and print "—" when none is finite, instead of failing; the province bed table test seeds its prior draws (#1086, resolves #1063).
+- Admissions are uncensored in the fit and in the forecast (#918).
+- The cut-off occupancy and bed shortfall are on the reported scale, the demand plus the reclassification offset (#640).
+- Province occupancy is the national modelled occupancy split on the demand shares, the basis the likelihood and forecast use, so a province over its beds, as Nord-Kivu prints, shows its patients above the beds rather than a capped occupancy (#920).
 
 ## v2.2.0
 
@@ -319,12 +367,12 @@ Changes since v2.1.0.
 ### Model
 
 - The province bed-capacity shares are centred on each province's modelled cumulative admissions to date, plus one admission, in place of population share (#945).
-- The importation kernel measures distance between province population centres, WorldPop-weighted over health zones, in place of capitals (#960).
   The share is recomputed each day, so it moves with the admissions.
   The deviations from that centre stay partially pooled, now with `τ_cap ~ Normal⁺(0, 1)`.
   `province_capacity_share` becomes a daily matrix.
   `province_capacity_share_sd` exposes the pooling scale `τ_cap`.
   The background split keeps its partially pooled population centre.
+- The importation kernel measures distance between province population centres, WorldPop-weighted over health zones, in place of capitals (#960).
 - Each onset date in the reporting triangle is scored once: a level at its first print, then corrections while its delay is inside the support (#948).
   The fit sees the whole curve rather than the trailing four weeks.
   A date a figure does not plot is differenced against the last figure that did, rather than dropped.

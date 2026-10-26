@@ -231,9 +231,10 @@ end
         chain_type = FlexiChains.VNChain, progress = false
     )
 
-    ## The pooling SD reaches the chain, so the gated tilde ran.
+    ## The pooling SD reaches the chain, so the gated tilde ran. The match
+    ## excludes the background admission walk SD, `σ_bga`.
     ks = collect(keys(chn))
-    σ_key = only(filter(k -> occursin("σ_bg", string(k)), ks))
+    σ_key = only(filter(k -> occursin(r"σ_bg(?!\w)", string(k)), ks))
     σ = vec(Array(chn[σ_key]))
     @test length(σ) == 20
     @test all(isfinite, σ)

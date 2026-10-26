@@ -249,13 +249,28 @@ function combine()
     ## (docs/build/1/, …) and its deploydocs flattens each build/i/ to
     ## gh-pages/<base>/. Plain deploydocs leaves the numbered subdir, so
     ## the deployed site's asset URLs 404. Ref LuxDL/DocumenterVitepress.jl#280.
-    return DocumenterVitepress.deploydocs(;
-        repo = "github.com/epiforecasts/BVDOutbreakSize",
-        target = "build",
-        branch = "gh-pages",
-        devbranch = "main",
-        push_preview = true
-    )
+    ##
+    ## The preview cleanup and sweep workflows also push to gh-pages and sit
+    ## outside the combine job's concurrency group, so a push can be rejected
+    ## as non-fast-forward. Each call clones gh-pages afresh and leaves
+    ## docs/build untouched, so a retry deploys on top of the new tip.
+    attempts = 3
+    for attempt in 1:attempts
+        try
+            return DocumenterVitepress.deploydocs(;
+                repo = "github.com/epiforecasts/BVDOutbreakSize",
+                target = "build",
+                branch = "gh-pages",
+                devbranch = "main",
+                push_preview = true
+            )
+        catch err
+            attempt == attempts && rethrow()
+            @warn "deploydocs failed; retrying" attempt exception = err
+            sleep(30 * attempt)
+        end
+    end
+    return nothing
 end
 
 if STAGE == "render-methods"

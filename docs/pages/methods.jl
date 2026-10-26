@@ -1162,6 +1162,17 @@ cfr_prior_fig #hide
 # c_t = p_{\text{DRC}}\, \text{bvd}_t + \lambda_{\text{bg},t}.
 # ```
 #
+# With the province compositions, each patch $p$ detects a BVD onset as a suspected case with its own probability $p_{\text{DRC},p}$, defined with the [province compositions](@ref methods-province-compositions) below.
+# Write $\text{bvd}_{p,t}$ for patch $p$'s onsets through $f_{\text{rep}}$.
+# The onsets in $\text{bvd}_t$ are then each patch's weighted by $p_{\text{DRC},p} / p_{\text{DRC}}$, so that
+#
+# ```math
+# p_{\text{DRC}}\, \text{bvd}_t = \sum_p p_{\text{DRC},p}\, \text{bvd}_{p,t}
+# ```
+#
+# in every stream below that reads the BVD suspected cases, and $p_{\text{DRC}}$ is the logit-scale centre of the patch probabilities.
+# The national reporting fraction we report is the patch probabilities weighted by their onsets to the cut-off, which differs from $p_{\text{DRC}}$ when the probabilities spread.
+#
 # The per-vintage increments are scored with a NegBinomial sharing the
 # dispersion $k$:
 #
@@ -1318,23 +1329,38 @@ cfr_prior_fig #hide
 # Capacity first moves over the first week, at the starting growth plus the first step, so we sample that first week's growth directly from its prior $\mathrm{N}\bigl(0, \sqrt{0.05^2 + \sigma_{\text{growth}}^2}\bigr)$.
 # It is pinned by the implied bed count, the reported occupancy divided by the reported occupancy rate (about $400$ rising to $452$ beds over 9-13 June).
 # The occupied beds are scored as the latent demand right-censored at the recorded implied capacity, so demand above a saturated capacity is left uncensored.
-# The daily admissions are right-censored at the recorded free-bed headroom, the implied capacity less the previous day's observed occupancy.
-# Both censoring bounds are fixed recorded data.
-# This keeps the admissions censor stable, where a bound tied to the modelled, wandering capacity would drift.
+# The censoring bound is fixed recorded data, so it does not drift with the modelled capacity.
 # The occupancy and a flow stream are scored as
 #
 # ```math
 # O_j \sim \mathrm{censored}\bigl(\mathrm{NegBinomial}(D_{t_j},\ k_{\text{iso}});\
 #     \text{upper} = C^{\text{cap}}_j\bigr),
 # \qquad
-# F_j \sim \mathrm{NegBinomial}(\mu^{F}_{t_j},\ k_{\text{iso}}), \tag{40}
+# F_j \sim \mathrm{NegBinomial}(\mu^{F}_{t_j},\ k_{\text{flow}}), \tag{40}
 # ```
 #
-# with each flow mean $\mu^{F}_t$ the matching modelled event series (the admissions, the in-care deaths, the rule-outs and the absconds), all sharing the treatment dispersion $k_{\text{iso}}$.
+# with each flow mean $\mu^{F}_t$ the matching modelled event series (the admissions, the in-care deaths, the rule-outs and the absconds).
+# The occupancy, the implied capacity and the census breakdown share the stock dispersion $k_{\text{iso}}$, partially pooled with the surveillance dispersions.
+# The four flows share a flow dispersion $k_{\text{flow}}$, centred on the stock dispersion:
+#
+# ```math
+# \log\bigl(1/\sqrt{k_{\text{flow}}}\bigr) \sim \mathrm{Normal}\bigl(\log(1/\sqrt{k_{\text{iso}}}),\ \tfrac{1}{2}\log 3\bigr).
+# ```
+#
+# Here $1/\sqrt{k}$ is the coefficient of variation that overdispersion adds to a count beyond Poisson, so the prior is on the log ratio of the flows' extra coefficient of variation to the stocks'.
+# A ratio of one gives the flows the stock dispersion.
+# We assume the ratio lies within a factor of three either way with 95% prior probability.
 # The implied capacity is carried by a NegBinomial of its own.
 # Demand above a saturated capacity is only partially identified, since the occupancy reveals that demand was at least the beds filled but not how much more.
 # The bed shortfall above capacity is therefore informed by the demand model and its priors rather than measured.
-# Bed demand is the uncapped diagnostic, and the model exposes the cut-off occupancy, the cut-off bed demand (the need under unconstrained supply), their difference (the bed shortfall) and the utilisation.
+# Bed demand is the uncapped diagnostic.
+# The model exposes the cut-off occupancy on the reported scale (the demand plus the reclassification offset, floored at zero) and the cut-off bed demand (the need under unconstrained supply).
+# It also exposes the bed shortfall (the bed demand above the national beds) and the utilisation (the modelled occupancy over the beds).
+# The modelled occupancy is not capped at the beds, so the utilisation is modelled need against beds and can exceed 100%.
+# With several patches, each province's cut-off beds are its share of the capacity walk and its occupancy is its demand share of the national occupancy.
+# The national beds and occupancy are the sums over the provinces.
+# A province's patients above its beds are its occupancy above its own beds, as Nord-Kivu's printed occupancy rate above 100% shows.
+# Summed over the provinces these can exceed the national shortfall, since one province can be over its beds while another has beds free.
 #
 # The fitted occupancy series is the all-patients column from 1 June (SitRep 018) onward.
 # From 13 June the report adds a two-row breakdown into confirmed and suspected beds that sums to the total each day.
@@ -1352,18 +1378,39 @@ cfr_prior_fig #hide
 #
 # The reports also print the patients in isolation and the beds by province, for whichever provinces report that day.
 # Both enter as splits of the printed sum of the provinces present, so the national terms above keep their likelihoods on every day.
-# Each patch's BVD admissions are its BVD reports $\text{bvd}_{p}$ through the admission delay, re-split so that together they are the national BVD admissions and each patch carries the case composition's relative ascertainment $a_p$ (defined with the province compositions below):
+# Each patch's BVD admissions are its detected BVD suspects through the admission delay, and together they are the national BVD admissions:
 #
 # ```math
-# \tilde A_{p,t} = \bigl(p_{\text{iso,bvd}}\, p_{\text{DRC}}\, \text{bvd}_{p} * f_{\text{adm}}\bigr)_t,
-# \qquad
-# A_{p,t} = \frac{a_p \tilde A_{p,t}}{\sum_q a_q \tilde A_{q,t}} \sum_q \tilde A_{q,t}.
+# A_{p,t} = \bigl(p_{\text{iso,bvd}}\, p_{\text{DRC},p}\, \text{bvd}_{p} * f_{\text{adm}}\bigr)_t.
 # ```
 #
-# Each patch's approximate stock is these admissions through the clinical-stay survival plus its share $w_p$ of the non-BVD admissions through the rule-out stay, and the national demand $D_t$ is shared out in proportion:
+# A suspect is admitted before testing, so the admissions do not carry the confirmation contrast of the case composition.
+#
+# Each patch takes a daily share $W_{p,t}$ of the non-BVD admissions.
+# It is the patch's share $w_p$ of the non-BVD suspects (defined with the province compositions below), moved by a static deviation and a weekly random walk:
 #
 # ```math
-# \tilde O_{p,t} = (A_{p} * S_{\text{clin}})_t + w_p\, (A_{\text{bg}} * S_{\text{ro}})_t,
+# W_{p,t} \propto w_p \exp\bigl((Q \mathbf{y}^{\text{bga}})_p + \eta_{p,t}\bigr),
+# \qquad
+# \mathbf{y}^{\text{bga}} \sim \mathrm{Normal}(0,\ \tau_{\text{bga}}^2 I_{M-1}),
+# \qquad
+# \boldsymbol{\eta}_{k} = \boldsymbol{\eta}_{k-1} + \sigma_{\text{bga}} Q \mathbf{z}_k,
+# \qquad
+# \mathbf{z}_k \sim \mathrm{Normal}(0,\ I_{M-1}),
+# ```
+#
+# normalised over the patches each day, with $\tau_{\text{bga}} \sim \mathrm{Normal}^{+}(0,\ 0.5)$ and $\sigma_{\text{bga}} \sim \mathrm{Normal}^{+}(0,\ 0.2)$.
+# Here $Q$ is the sum-to-zero basis over the $M$ provinces that print admissions, with zero rows for the provinces that never do.
+# Those provinces keep their share of the non-BVD suspects up to the daily normalisation, since no data inform their deviation.
+# We assume a province admits between half and twice the national share of its non-BVD suspects, and the level prior keeps two SDs of a deviation within twofold at its median scale.
+# The walk $\boldsymbol{\eta}$ is zero on the first day the province admissions are printed and has a knot $k$ every seven days to the last such day.
+# It is interpolated linearly between the knots and held flat outside them.
+# With $\tau_{\text{bga}} = \sigma_{\text{bga}} = 0$ each patch admits the share of the non-BVD suspects it reports, and without province admissions data $W_{p,t} = w_p$.
+# We assume a province's admission of non-BVD suspects can differ from its share of them and can change as treatment centres open.
+# Each patch's approximate stock is its BVD admissions through the clinical-stay survival plus its non-BVD admissions through the rule-out stay, and the national demand $D_t$ is shared out in proportion:
+#
+# ```math
+# \tilde O_{p,t} = (A_{p} * S_{\text{clin}})_t + \bigl((W_{p} A_{\text{bg}}) * S_{\text{ro}}\bigr)_t,
 # \qquad
 # S_{\text{ro}}(d) = (1 - \kappa)^d \Bigl(1 - \sum_{j \le d} f^{\text{ro}}_j\Bigr),
 # \qquad
@@ -1376,14 +1423,14 @@ cfr_prior_fig #hide
 # Beds are allocated in response to cases, so we centre the share on the patch's modelled cumulative admissions to date, BVD and background together:
 #
 # ```math
-# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + w_p A_{\text{bg},u}\bigr) + a_0\Bigr) \exp\bigl((Q \mathbf{y}^{\text{cap}})_p\bigr),
+# s_{p,t} \propto \Bigl(\sum_{u \le t} \bigl(A_{p,u} + W_{p,u} A_{\text{bg},u}\bigr) + a_0\Bigr) \exp\bigl((Q \mathbf{y}^{\text{cap}})_p\bigr),
 # \qquad
 # \mathbf{y}^{\text{cap}} \sim \mathrm{Normal}(0,\ \tau_{\text{cap}}^2 I_{P-1}),
 # \qquad
 # \tau_{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 1),
 # ```
 #
-# normalised over the patches each day, with $Q$ the sum-to-zero basis of the Rt deviations.
+# normalised over the patches each day.
 # A shift shared by every patch cancels in the normalisation, so the deviations sum to zero and no patch is a reference.
 # The floor $a_0$ is one admission, so a patch with no admissions yet still holds some beds.
 # The deviations are static, and the share moves over time only through its centre.
@@ -1401,7 +1448,10 @@ cfr_prior_fig #hide
 #
 # with $\rho^{\text{occ}}, \rho^{\text{cap}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
 # The occupancy is split on the uncapped demand, since a province can print more patients than beds.
+# The recorded province beds are the printed beds, or the beds implied by the printed occupancy rate where the patients exceed the printed beds and the rate implies more.
+# Each day's 24h admissions are split the same way on each patch's modelled admissions $A_{p,t} + W_{p,t} A_{\text{bg},t}$, with their own $\rho^{\text{adm}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
 # The occupancy split is scored weekly and the bed split on the days a count changes, since a stock reprinted daily is not a fresh draw.
+# The admissions are a flow, so every day is scored.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_flow_model</summary>
@@ -1954,19 +2004,26 @@ cfr_prior_fig #hide
 # The modelled per-patch confirmed increments carry each patch's onsets through the same onset-to-confirmation delay as the national confirmed stream — the onset-to-report delay $f_{\text{rep}}$ convolved with the report-to-receipt delay $f_{\text{rec}}$ — and the assay sensitivity $s$, binned to the vintage days.
 # The death increments use the onset-to-death delay convolved with the same receipt delay.
 # Write those modelled increments $\lambda_{p,i}$ for patch $p$ at vintage $i$.
-# Each patch's expected share weights them by a relative case ascertainment $a_p$, and on the death side also by a relative severity $\kappa_p$, the patch case-fatality ratio $\mathrm{CFR}_p$ over the national one:
+# Each patch's expected share weights them by a relative ascertainment $a_p$.
+# On the case side it also carries the patch's suspected-case detection, $d_p = p_{\text{DRC},p}$, and on the death side a relative severity $\kappa_p$, the patch case-fatality ratio $\mathrm{CFR}_p$ over the national one:
 #
 # ```math
-# \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
-#     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
-# \log a_p = \tau_a (Q \mathbf{z}^{a})_p, \qquad
+# \pi_{p,i} = \frac{d_p\, a_p\, \kappa_p\, \lambda_{p,i}}
+#     {\sum_q d_q\, a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
+# \mathrm{logit}\, p_{\text{DRC},p} = \mathrm{logit}\, p_{\text{DRC}} + \tau_d (Q \mathbf{z}^{d})_p, \qquad
+# \log a_p = \tau_a (Q \mathbf{z}^{a})_p,
+# ```
+#
+# ```math
 # \kappa_p = \frac{\mathrm{CFR}_p}{\mathrm{CFR}}, \qquad
 # \mathrm{logit}\, \mathrm{CFR}_p = \mathrm{logit}\, \mathrm{CFR} + \tau_\kappa (Q \mathbf{z}^{\kappa})_p,
 # ```
 #
-# with $\mathbf{z}^{a}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ the fixed sum-to-zero basis of Equation (6).
-# The log ascertainment multipliers and the logit case-fatality contrasts each sum to zero across patches.
-# Each patch case-fatality ratio therefore lies between zero and one, and $\tau_\kappa = 0$ gives every patch the national ratio.
+# with $d_p = 1$ in the death composition and $\kappa_p = 1$ in the case composition.
+# Here $\mathbf{z}^{d}, \mathbf{z}^{a}, \mathbf{z}^{\kappa} \sim \mathrm{Normal}(0, I_{P-1})$ and $Q$ is the fixed sum-to-zero basis of Equation (6).
+# The logit detection contrasts, the log ascertainment multipliers and the logit case-fatality contrasts each sum to zero across patches.
+# Each patch detection probability and case-fatality ratio therefore lies between zero and one, and $\tau_d = 0$ and $\tau_\kappa = 0$ give every patch the national value.
+# In the case composition $a_p$ is the confirmation contrast, which carries the provincial differences in testing, and $p_{\text{DRC},p}\, a_p$ is the relative case ascertainment.
 #
 # Each vintage is then allocated across the patches by stick-breaking, the last patch taking the remainder:
 #
@@ -1982,13 +2039,15 @@ cfr_prior_fig #hide
 #
 # ```math
 # \rho \sim \mathrm{Normal}^{+}(0,\ 0.1)\ \text{on}\ [0, 1], \qquad
+# \tau_d \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
 # \tau_a \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
 # \tau^{\text{d}}_a \sim \mathrm{Normal}^{+}(0,\ 0.1), \qquad
 # \tau_\kappa \sim \mathrm{Normal}^{+}(0,\ 0.15),
 # ```
 #
-# where $\tau_a$ is the case composition's ascertainment spread, and $\tau^{\text{d}}_a$ and $\tau_\kappa$ are the death composition's death-ascertainment and case-fatality spreads.
-# The case composition carries no severity term.
+# where $\tau_d$ is the suspected-case detection spread, $\tau_a$ is the case composition's confirmation spread, and $\tau^{\text{d}}_a$ and $\tau_\kappa$ are the death composition's death-ascertainment and case-fatality spreads.
+# A logit shift of $\tau_d$ moves the log detection probability by about $(1 - p_{\text{DRC}})\, \tau_d$.
+# At the prior centre of $0.75$ and $\tau_d = 0.5$ a typical province therefore detects within about 13 percent of $p_{\text{DRC}}$.
 # A logit shift of $\tau_\kappa$ moves the log case-fatality ratio by about $(1 - \mathrm{CFR})\, \tau_\kappa$.
 # At the prior mean ratio of $0.33$ and $\tau_\kappa = 0.15$ a typical province therefore sits within about ten percent of the national case-fatality ratio, the spread we give the death ascertainment.
 #
@@ -1997,16 +2056,19 @@ cfr_prior_fig #hide
 # The case-fatality ratio and the death-confirmation probability belong to the virus and to a national laboratory, so they cancel from the normalised death shares and leave each patch weighted by its delay-convolved incidence alone.
 # The deaths therefore pin the incidence split, and the cases identify the relative case ascertainment as the residual.
 # Within the death composition only the product $a_p \kappa_p$ is identified.
+# Within the case composition and the laboratory composition below only the product $p_{\text{DRC},p}\, a_p$ is identified.
+# The province occupancy splits carry the detection alone, and otherwise the priors separate the two.
 # The per-province vintages stop before the cut-off, so the last stretch of the window is national data only.
 #
 # A third composition scores the per-province analysed-specimen volume by calendar week, conditional on the national analysed total the laboratory pipeline already scores.
 # Write $c_{p,t}$ for patch $p$'s onsets carried through the onset-to-report and report-to-receipt delays, and $\lambda^{\text{rec}}_t = (\lambda_{\text{bg}} * f_{\text{rec}})_t$ for the national non-BVD background carried to receipt.
-# The national BVD volume $p_{\text{DRC}} \sum_q c_{q,t}$ is split by ascertainment-weighted incidence, so the two compositions agree on how many of a patch's cases reach the laboratory, and each patch adds its share $w_p$ of the background.
+# The national BVD volume $\sum_q p_{\text{DRC},q}\, c_{q,t}$ is split by the relative case ascertainment times incidence, so the two compositions agree on how many of a patch's cases reach the laboratory, and each patch adds its share $w_p$ of the background.
 # Summed over the printed days $t$ of week $i$, the modelled split is
 #
 # ```math
 # \pi^{\text{lab}}_{p,i} \propto \sum_{t \in i} \Bigl(
-#     p_{\text{DRC}} \sum_q c_{q,t}\, \frac{a_p c_{p,t}}{\sum_q a_q c_{q,t}}
+#     \sum_q p_{\text{DRC},q}\, c_{q,t}\,
+#     \frac{p_{\text{DRC},p}\, a_p c_{p,t}}{\sum_q p_{\text{DRC},q}\, a_q c_{q,t}}
 #     + w_p\, \lambda^{\text{rec}}_t \Bigr).
 # ```
 #
@@ -2035,6 +2097,21 @@ cfr_prior_fig #hide
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.province_composition_model(
 #md #         missing, zeros(2, 2))), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: province_suspected_ascertainment_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.province_suspected_ascertainment_model(
+#md #         4, 0.75)), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -2478,10 +2555,14 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # Exports accrue at the full modelled rate every future day, and the onset figure's increment is drawn once per future vintage on its total rather than per onset date.
 # We forecast the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the recovered total and the isolation and treatment beds.
 # A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
-# The bed occupancy is the censored count the occupancy likelihood scores.
-# Its future cap is the modelled capacity, floored at the last fitted cap, where the fitted days use the recorded capacity.
-# Admissions are capped at the capacity less the previous day's occupancy, the same headroom rule the fitted days use, so they can fall to near zero when the beds are forecast full.
-# We also report the modelled bed demand and its shortfall against the modelled capacity.
+# The occupied beds, admissions and in-care flows are the fitted treatment model run forward, so the latent stock is not capped.
+# Each future count is drawn through the measurement model its fitted days are scored with.
+# The national occupancy is drawn from the negative binomial censored at the national beds, and the national admissions from the uncensored negative binomial.
+# With province care data each national draw is split across the provinces by the fitted province split, on the provinces' demand for the occupancy and on their modelled admissions for the admissions.
+# Each split carries its fitted overdispersion, so the provinces add up to the national forecast and the national spread is the fitted one.
+# Each province's beds are its share of the capacity walk past the cut-off.
+# The in-care deaths and rule-outs are drawn nationally around the modelled flows.
+# We also report the modelled bed demand and its excess over the national beds.
 # The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
 # Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
 # The results are in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results").
@@ -2546,7 +2627,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # The provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at each origin's fitted intensity.
 # Each week's national forecast of confirmed cases and deaths is split across the provinces by the fitted province compositions.
 # The split uses each province's fitted delays, relative ascertainment and, for deaths, relative case-fatality ratio, so the provinces add up to the national forecast.
-# Each week's national forecast of the patients in isolation is split the same way, by the fitted occupancy split over each province's modelled bed demand, and each province's beds are its fitted share of the national capacity.
+# The patients in isolation, the beds and the admissions are forecast by province as above, so each adds up to the national forecast.
 # The symptom-onset curve is national only, so there is no province nowcast.
 # Each release archives the projection with its method recorded, and only forecasts of the current method are scored.
 #
@@ -2685,10 +2766,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # ```
 #
 # A person is infected but not yet symptomatic while the incubation period exceeds $s$.
-# After onset, a case is detected as a suspected case with the province's suspected-case ascertainment as its probability, and a detected case leaves the community after the onset-to-report delay.
-# The province ascertainment is the national one times the province's relative ascertainment.
-# We rescale it so that the provinces keep the national rate when weighted by their expected confirmed cases on the cut-off day, the weights the joint model uses to split the national suspected cases.
-# The joint model uses the relative ascertainment only to split national counts, so nothing bounds the product at one, and we cap it at one.
+# After onset, a case is detected as a suspected case with the province's suspected-case detection probability $p_{\text{DRC},p}$, and a detected case leaves the community after the onset-to-report delay.
 # An undetected case stays in the community until it dies or recovers.
 # It dies with the province case-fatality ratio as its probability, after the onset-to-death delay.
 # We assume an undetected survivor recovers after the onset-to-admission delay plus the treatment-centre stay of a patient who recovers.
@@ -2700,8 +2778,8 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # The health-zone model does not estimate the treatment-centre stay, so zone draw $j$ takes it from joint draw $j$.
 # It estimates each zone's ascertainment and fatality relative to its province.
 # A zone's case-fatality ratio is its province's from joint draw $j$ shifted on the logit scale by the zone's contrast.
-# A zone's ascertainment is its province's times the zone's contrast, rescaled as for the provinces so that the province's zones keep the province's rate.
-# The zone ascertainment contrast is fitted to confirmed cases, so we assume that suspected-case detection varies between the zones of a province as confirmed-case detection does.
+# A zone's detection probability is its province's from joint draw $j$ shifted on the logit scale by the log of the zone's relative ascertainment.
+# The zone ascertainment contrast is fitted to confirmed cases, so we assume that suspected-case detection varies between the zones of a province with their confirmed-case ascertainment.
 # Rates are per 100,000 residents, from the province populations and the WorldPop zone populations.
 #
 # ### Comparison with published estimates

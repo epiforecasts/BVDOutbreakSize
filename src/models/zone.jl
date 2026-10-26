@@ -48,6 +48,7 @@ const _ZONE_PARENT_KEYS = (
     importation_flow = :importation_flow_effect,
     importation = :importation_patch,
     ascertainment_sd = :province_ascertainment_sd,
+    ascertainment_log_sd = :province_ascertainment_log_sd,
     province_ascertainment = :province_ascertainment,
     province_severity = :province_cfr_relative,
     cfr = :CFR,
@@ -2142,8 +2143,16 @@ function zone_parent_inputs(chn)
     ## to its draws: a log-normal for each positive scale and a Beta for
     ## each composition overdispersion.
     priors = (;
+        ## The spread of the province relative case ascertainment, which
+        ## with the suspected-case detection on is detection times
+        ## confirmation, so the confirmation spread alone would understate
+        ## it. A chain fitted without the detection carries only the
+        ## latter.
         ascertainment_sd = _zone_parent_lognormal(
-            chn, keys_.ascertainment_sd, (log(0.2), 0.5)
+            chn,
+            _has_key(chn, keys_.ascertainment_log_sd) ?
+                keys_.ascertainment_log_sd : keys_.ascertainment_sd,
+            (log(0.2), 0.5)
         ),
         drift_sd = _zone_parent_lognormal(chn, keys_.drift_sd, (log(0.05), 0.5)),
         rho = _zone_parent_beta(chn, keys_.rho, (1.0, 24.0)),

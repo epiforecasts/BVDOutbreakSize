@@ -602,6 +602,7 @@ obs_delay_pair_fig #hide
 #
 # The surveillance parameters cover the reporting fractions, the stream dispersions, the laboratory pipeline and the isolation and recovered streams.
 # The six count streams each have a negative-binomial dispersion, partially pooled around a population-level dispersion $k$ (see [surveillance dispersion](@ref "Surveillance dispersion")).
+# The four daily treatment-centre flows share a separate flow dispersion $k_{\text{flow}}$, centred on the treatment-centre stock dispersion $k_{\text{iso}}$.
 
 #md # ```@raw html
 #md # <details><summary>Surveillance-parameter summary table</summary>
@@ -610,14 +611,15 @@ obs_delay_pair_fig #hide
 surveillance_summary = summary_table(
     chn_joint,
     [
-        :p_drc, :p_uganda, :k, :k_cases, :k_deaths, :k_confirmed,
+        :p_drc_national, :p_uganda, :k, :k_cases, :k_deaths, :k_confirmed,
         :k_confirmed_deaths, :dispersion_sd, :tau_test,
         :specimens_per_suspect, :lambda_bg,
         :suspected_positivity, :test_positivity, :expected_confirmed_T,
         :expected_analysed_T, :death_ascertainment, :background_cfr,
         :tau_death, :death_composition,
         :death_confirmation, :expected_confirmed_deaths_T,
-        :isolation_admission, :isolation_dispersion, :expected_isolation_T,
+        :isolation_admission, :isolation_dispersion,
+        :treatment_flow_dispersion, :expected_isolation_T,
         :expected_bed_demand_T, :bed_capacity, :bed_shortfall_T,
         :incare_cfr, :incare_cfr_modifier, :incare_confirm_modifier,
         :isolation_death_los_mean,
@@ -641,6 +643,7 @@ surveillance_summary #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Reporting fractions for the DRC and Uganda, stream dispersions, laboratory, isolation and recovery parameters, and the expected counts at the cut-off.
+#md # The DRC reporting fraction is the province detection probabilities weighted by their onsets to the cut-off.
 #md # </figcaption>
 #md # </figure>
 #md # </details>
@@ -669,6 +672,7 @@ surveillance_pair_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Joint posterior of the main surveillance parameters, with the prior overlaid.
+#md # The DRC ascertainment here is the logit-scale centre of the province detection probabilities rather than the national reporting fraction.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -979,7 +983,7 @@ joint_summary = summary_table(
     chn_joint,
     [
         :r, :r0, :doubling_time, :T, :R_T, :CFR, :C_T,
-        :p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
+        :p_drc_national, :p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
         Symbol("exports_state.travel_state.daily_travellers"),
     ]; digits = 2
 )
@@ -1016,6 +1020,7 @@ posterior_draws = DataFrame(
     R_T = vec(Array(chn_joint[:R_T])),
     CFR = vec(Array(chn_joint[:CFR])),
     p_drc = vec(Array(chn_joint[:p_drc])),
+    p_drc_national = vec(Array(chn_joint[:p_drc_national])),
     p_uganda = vec(Array(chn_joint[:p_uganda])),
     C_T = vec(Array(chn_joint[:C_T])),
     cumulative_onsets_T = cumulative_onsets_T,
