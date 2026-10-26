@@ -14,7 +14,11 @@
         spatial = patch_fit_args(obs)
         if !care
             spatial = merge(
-                spatial, (; province_isolation = nothing, province_capacity = nothing)
+                spatial,
+                (;
+                    province_isolation = nothing, province_capacity = nothing,
+                    province_admissions = nothing,
+                )
             )
         end
         return bvd_joint(
@@ -50,15 +54,15 @@ end
     @test DynamicPPL.logjoint(on, vi) ≈ lp rtol = 1.0e-10
 
     ## With the care splits the model without detection also splits the
-    ## occupancy by the confirmation contrast. With that contrast at zero
-    ## the two models agree.
+    ## occupancy and the admissions by the confirmation contrast. With that
+    ## contrast at zero the two models agree.
     flat = Dict(@varname(composition_state.τ_asc) => 0.0)
     off_care = fix(detection_joint(; detection = false), flat)
     vi_care = DynamicPPL.VarInfo(Xoshiro(12), off_care)
     on_care = fix(detection_joint(), merge(no_spread(z), flat))
     lp_care = DynamicPPL.logjoint(off_care, vi_care)
     @test DynamicPPL.logjoint(on_care, vi_care) ≈ lp_care rtol = 1.0e-10
-    ## A confirmation contrast moves the occupancy split only without the
+    ## A confirmation contrast moves the care splits only without the
     ## detection contrast.
     tilt = Dict(@varname(composition_state.τ_asc) => 0.5)
     @test !isapprox(
