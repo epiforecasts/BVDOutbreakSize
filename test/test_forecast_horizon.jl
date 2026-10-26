@@ -79,32 +79,32 @@
         "patch joint" => patch_joint(),
         "cases" => cases_only_model(
             N, 905; reported_history = RH,
-            suspected_daily_history = SDH, breakpoint = BP
+            suspected_daily_history = SDH
         ),
         "deaths" => deaths_only_model(
             N, 18; deaths_history = DH,
-            suspected_daily_deaths_history = SDDH, breakpoint = BP
+            suspected_daily_deaths_history = SDDH
         ),
         "confirmed" => confirmed_only_model(
             N, 40; confirmed_history = CH, lab_history = LH,
-            lab_daily_history = LDH, breakpoint = BP
+            lab_daily_history = LDH
         ),
         "confirmed deaths" => confirmed_deaths_only_model(
             N, 5, 18; deaths_history = DH,
-            confirmed_deaths_history = CDH, breakpoint = BP
+            confirmed_deaths_history = CDH
         ),
         "treatment" => treatment_only_model(
             N; isolation_history = ISO, bed_capacity_history = CAP,
             treatment_admissions_history = ADM,
             treatment_deaths_history = TDTH,
-            treatment_ruleout_history = RO, breakpoint = BP
+            treatment_ruleout_history = RO
         ),
         "onsets" => onsets_only_model(
-            N; onset_curve_history = OC, breakpoint = BP
+            N; onset_curve_history = OC
         ),
         "exports" => exports_joint_only_model(
             N, 2, 1; export_case_days = [20, 25],
-            export_death_days = [30], breakpoint = BP
+            export_death_days = [30]
         ),
     ]
 

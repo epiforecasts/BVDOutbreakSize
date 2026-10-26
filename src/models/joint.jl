@@ -18,13 +18,13 @@
 ## `forecast` horizon both run past the cut-off `n`, and the future
 ## infections, onsets and reproduction number are tracked.
 @model function _latent(
-        n::Integer, breakpoint, infection, onset_incidence;
+        n::Integer, infection, onset_incidence;
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     fkw = forecast === nothing ? (;) : (; forecast)
     infection_state ~ to_submodel(
-        infection(n; breakpoint, rt_start, rt_walk_start, fkw...), false
+        infection(n; rt_start, rt_walk_start, fkw...), false
     )
     onset_state ~ to_submodel(
         onset_incidence(infection_state.infections), false
@@ -318,7 +318,6 @@ exports likelihood only. See [`exports_model`](@ref).
 @model function exports_only_model(
         n::Integer, exported_cases::Union{Missing, Integer};
         export_case_days::AbstractVector{<:Integer} = Int[],
-        breakpoint::Union{Missing, Real} = missing,
         source_population::Real = ITURI_POPULATION,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -326,7 +325,7 @@ exports likelihood only. See [`exports_model`](@ref).
         ascertainment = pooled_ascertainment_model()
     )
     latent ~ to_submodel(
-        _latent(n, breakpoint, infection, onset_incidence), false
+        _latent(n, infection, onset_incidence), false
     )
     asc_state ~ to_submodel(ascertainment)
     exports_state ~ to_submodel(
@@ -348,7 +347,6 @@ deaths likelihood only. See [`deaths_model`](@ref).
         n::Integer, total_deaths::Union{Missing, Integer};
         deaths_history = (; days = Int[], counts = Int[]),
         suspected_daily_deaths_history = (; days = Int[], counts = Int[]),
-        breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
         deaths = deaths_model,
@@ -357,7 +355,7 @@ deaths likelihood only. See [`deaths_model`](@ref).
     )
     ckw = forecast === nothing ? (;) : (; cutoff = n)
     latent ~ to_submodel(
-        _latent(n, breakpoint, infection, onset_incidence; forecast), false
+        _latent(n, infection, onset_incidence; forecast), false
     )
     dispersion_state ~ to_submodel(dispersion)
     deaths_state ~ to_submodel(
@@ -387,7 +385,6 @@ then conditions on the reported-cases likelihood. See
         n::Integer, reported_cases::Union{Missing, Integer};
         reported_history = (; days = Int[], counts = Int[]),
         suspected_daily_history = (; days = Int[], counts = Int[]),
-        breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
         cases = reported_cases_model,
@@ -397,7 +394,7 @@ then conditions on the reported-cases likelihood. See
     )
     ckw = forecast === nothing ? (;) : (; cutoff = n)
     latent ~ to_submodel(
-        _latent(n, breakpoint, infection, onset_incidence; forecast), false
+        _latent(n, infection, onset_incidence; forecast), false
     )
     dispersion_state ~ to_submodel(dispersion)
     asc_state ~ to_submodel(ascertainment)
@@ -440,7 +437,6 @@ draws [`forecast_stream`](@ref) reads.
         lab_history = (; days = Int[], counts = Int[]),
         lab_daily_history = (; days = Int[], counts = Int[]),
         tests_analysed::Union{Missing, Integer} = missing,
-        breakpoint::Union{Missing, Real} = missing,
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross_cases::AbstractVector{<:Integer} = Int[],
         confirmed_break_sd::Real = 25.0,
@@ -454,7 +450,7 @@ draws [`forecast_stream`](@ref) reads.
     )
     ckw = forecast === nothing ? (;) : (; cutoff = n)
     latent ~ to_submodel(
-        _latent(n, breakpoint, infection, onset_incidence; forecast), false
+        _latent(n, infection, onset_incidence; forecast), false
     )
     dispersion_state ~ to_submodel(dispersion)
     asc_state ~ to_submodel(ascertainment)
@@ -522,7 +518,6 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross_cases::AbstractVector{<:Integer} = Int[],
         confirmed_break_sd::Real = 25.0,
-        breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
         cases = reported_cases_model,
@@ -537,7 +532,7 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
     )
     ckw = forecast === nothing ? (;) : (; cutoff = n)
     latent ~ to_submodel(
-        _latent(n, breakpoint, infection, onset_incidence; forecast), false
+        _latent(n, infection, onset_incidence; forecast), false
     )
     dispersion_state ~ to_submodel(dispersion)
     asc_state ~ to_submodel(ascertainment)
@@ -633,7 +628,6 @@ the digitised level.
             onset_days = Int[], report_days = Int[],
             prev_report_days = Int[], increments = Int[],
         ),
-        breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
         onset_report = onset_reporting_model,
@@ -641,7 +635,7 @@ the digitised level.
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     latent ~ to_submodel(
-        _latent(n, breakpoint, infection, onset_incidence; forecast), false
+        _latent(n, infection, onset_incidence; forecast), false
     )
     onset_report_state ~ to_submodel(
         onset_report(
@@ -687,7 +681,6 @@ uses ([`lab_delay_model`](@ref)). See [`confirmed_deaths_model`](@ref).
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross_deaths::AbstractVector{<:Integer} = Int[],
         confirmed_break_sd::Real = 25.0,
-        breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
         deaths = deaths_model,
@@ -700,7 +693,7 @@ uses ([`lab_delay_model`](@ref)). See [`confirmed_deaths_model`](@ref).
     )
     ckw = forecast === nothing ? (;) : (; cutoff = n)
     latent ~ to_submodel(
-        _latent(n, breakpoint, infection, onset_incidence; forecast), false
+        _latent(n, infection, onset_incidence; forecast), false
     )
     dispersion_state ~ to_submodel(dispersion)
     asc_state ~ to_submodel(ascertainment)
@@ -753,7 +746,6 @@ See [`exports_deaths_model`](@ref).
 @model function exports_deaths_only_model(
         n::Integer, exports_deaths::Union{Missing, Integer};
         export_death_days::AbstractVector{<:Integer} = Int[],
-        breakpoint::Union{Missing, Real} = missing,
         source_population::Real = ITURI_POPULATION,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -763,7 +755,7 @@ See [`exports_deaths_model`](@ref).
         ascertainment = pooled_ascertainment_model()
     )
     latent ~ to_submodel(
-        _latent(n, breakpoint, infection, onset_incidence), false
+        _latent(n, infection, onset_incidence), false
     )
     dispersion_state ~ to_submodel(dispersion)
     asc_state ~ to_submodel(ascertainment)
@@ -803,7 +795,6 @@ drop it. See [`exports_model`](@ref) and [`exports_deaths_model`](@ref).
         exports_deaths::Union{Missing, Integer};
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
-        breakpoint::Union{Missing, Real} = missing,
         source_population::Real = ITURI_POPULATION,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -815,7 +806,7 @@ drop it. See [`exports_model`](@ref) and [`exports_deaths_model`](@ref).
     )
     ckw = forecast === nothing ? (;) : (; cutoff = n)
     latent ~ to_submodel(
-        _latent(n, breakpoint, infection, onset_incidence; forecast), false
+        _latent(n, infection, onset_incidence; forecast), false
     )
     dispersion_state ~ to_submodel(dispersion)
     asc_state ~ to_submodel(ascertainment)
@@ -1157,11 +1148,13 @@ the modelled daily confirmed cases scaled by the recovery probability
 and lagged by a confirmation-to-recovery delay (see
 [`recovered_model`](@ref)).
 
-`breakpoint` is the intervention day passed to the reproduction-number
-walk (e.g. the first WHO situation report). `genetic` injects the genetic
-seeding submodel when `tmrca_days` is given. The analysed volume is scaled
-by specimens analysed per suspect ([`specimen_intensity_model`](@ref)),
-which `τ_test` alone, being a probability, cannot exceed one of.
+`breakpoint` is the day of the first WHO situation report. The
+reproduction-number walk starts `rt_walk_lead` days before it and the
+importation intensities change on a ramp centred on it. `genetic` injects
+the genetic seeding submodel when `tmrca_days` is given. The analysed
+volume is scaled by specimens analysed per suspect
+([`specimen_intensity_model`](@ref)), which `τ_test` alone, being a
+probability, cannot exceed one of.
 
 Tracked deterministics: `C_T` (cumulative infections by the cut-off), the
 established reproduction number `R0` (= the first `R_t`), `r` and

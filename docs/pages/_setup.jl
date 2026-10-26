@@ -509,7 +509,6 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## nested submodels stay distinct; this map only relabels them for display.
     display_names = Dict{Symbol, String}(
         Symbol("rt_state.sigma_rw") => "Rt step size",
-        Symbol("rt_state.intervention_effect") => "intervention effect",
         Symbol("gi_state.gi_mean") => "generation interval mean",
         Symbol("gi_state.gi_sd") => "generation interval SD",
         Symbol("inc_state.delay_mean") => "incubation period mean",

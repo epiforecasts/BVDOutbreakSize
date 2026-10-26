@@ -294,7 +294,7 @@ end
     nb = length(knot_days(n; week = 7, start = 20))
     for np in (2, 3, 4)
         m = patch_rt_model(
-            n, np, log(1.5); rt_start = 20, breakpoint = 60.0
+            n, np, log(1.5); rt_start = 20
         )
         draw = rand(Xoshiro(np), m)
         has(k) = any(v -> DynamicPPL.getsym(v) == k, keys(draw))
@@ -359,7 +359,7 @@ end
     ## `σ_drift² (np - 1)` whatever the Bartlett draw. So the prior reaches
     ## the common-shape limit `σ_drift → 0` as often as its own prior does.
     n, np = 120, 4
-    m = patch_rt_model(n, np, log(1.5); rt_start = 20, breakpoint = 60.0)
+    m = patch_rt_model(n, np, log(1.5); rt_start = 20)
     chn = sample(Xoshiro(2), m, Prior(), 2000; progress = false)
     rets = vec(returned(m, chn))
     σs = vec(chn[DynamicPPL.VarName{:σ_drift}()])
@@ -388,7 +388,7 @@ end
     ## sigma_delta -> 0: every province collapses onto the common national
     ## trend, so they share one temporal Rt shape at a fixed ratio.
     flat = patch_rt_model(
-        n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
+        n, np, log(1.5); rt_start = 20,
         region_sd_prior = truncated(Normal(0, 1.0e-12); lower = 0),
         region_drift_sd_prior = truncated(Normal(0, 1.0e-12); lower = 0)
     )
@@ -402,7 +402,7 @@ end
     ## A large drift scale lets the provincial trajectories genuinely
     ## separate over time, which a constant modifier could not represent.
     wide = patch_rt_model(
-        n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
+        n, np, log(1.5); rt_start = 20,
         region_drift_sd_prior = truncated(Normal(0.5, 1.0e-3); lower = 0)
     )
     ## The Ituri / Nord-Kivu contrast must actually move over the window.
@@ -832,7 +832,6 @@ end
 
     rt = reconstruct_patch_rt(
         chn; n = obs.n,
-        breakpoint = obs.who_first_sitrep_days,
         n_patches = np,
         rt_start = rt_start, rt_walk_start = rt_walk_start
     )
@@ -854,7 +853,6 @@ end
     ## the central trend exactly. Each province is then scaled by its own susceptible fraction.
     nat = BVDOutbreakSize._reconstruct_rt_walk(
         chn; n = obs.n,
-        breakpoint = obs.who_first_sitrep_days,
         rt_start = rt_start, rt_walk_start = rt_walk_start
     )
     frac = [
@@ -890,7 +888,6 @@ end
     )
     @test_throws ErrorException reconstruct_patch_rt(
         chn1; n = obs.n,
-        breakpoint = obs.who_first_sitrep_days,
         n_patches = np,
         rt_start = rt_start, rt_walk_start = rt_walk_start
     )
@@ -1044,7 +1041,7 @@ end
     rt_start = clamp(n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, n)
     rt_walk_start = clamp(round(Int, bp) - RT_WALK_LEAD, rt_start, n)
 
-    m = patch_rt_model(n, 3, log(1.5); breakpoint = bp, rt_start, rt_walk_start)
+    m = patch_rt_model(n, 3, log(1.5); rt_start, rt_walk_start)
     seed!(1)
     ratios = Float64[]
     for _ in 1:600
@@ -1273,7 +1270,7 @@ end
     ## change leaves the parameter set identical and only breaks the read.
     for q in (
             "rt_state.sigma_rw", "rt_state.log_R0", "rt_state.log_Rt_knots",
-            "rt_state.intervention_effect", "gi_state.gi_mean", "gi_state.gi_sd",
+            "gi_state.gi_mean", "gi_state.gi_sd",
             "inc_state.delay_mean", "inc_state.delay_sd",
             "cases_state.report_state.α", "cases_state.report_state.θ",
             "confirmed_state.receipt_state.d.delay_mean",
@@ -1704,8 +1701,7 @@ end
     ## survive the reversion.
     function last_knot_spread(halflife; draws = 500)
         m = patch_rt_model(
-            206, 3, log(2.0); breakpoint = 100.0,
-            rt_start = 1, rt_walk_start = 1,
+            206, 3, log(2.0); rt_start = 1, rt_walk_start = 1,
             region_halflife_prior = Dirac(halflife)
         )
         ks = [

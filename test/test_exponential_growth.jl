@@ -195,10 +195,10 @@ end
     ## start), but the reproduction-number random walk can be held flat at the
     ## established `R0` until a later day `rt_walk_start` (the first situation
     ## report), so no unsupported Rt drift happens over the pre-surveillance
-    ## window where the dynamics are unidentified. With `breakpoint = missing`
-    ## there is no intervention ramp, so `Rt` must be exactly constant on every
-    ## day from day 1 up to the first walk knot at `rt_walk_start`, while the
-    ## renewal still seeds and grows from the earlier `rt_start`.
+    ## window where the dynamics are unidentified. `Rt` must be exactly
+    ## constant on every day from day 1 up to the first walk knot at
+    ## `rt_walk_start`, while the renewal still seeds and grows from the
+    ## earlier `rt_start`.
     n = 109
     rt_start = 45
     rt_walk_start = 81
@@ -235,16 +235,15 @@ end
     ## number `R_T = Rt[n]` describe the same instant, so they must never
     ## disagree in sign: `r < 0` must imply `R_T < 1` and `r >= 0` must imply
     ## `R_T >= 1`. The realised last-two-days slope `log I[n] - log I[n-1]`
-    ## can disagree (the intervention ramp can depress the final renewal step
-    ## so `I[n] < I[n-1]` while `Rt[n] >= 1`), so `r` is instead derived from
+    ## can disagree (it lags a change in the walk, so `I[n] < I[n-1]` can
+    ## hold while `Rt[n] >= 1`), so `r` is instead derived from
     ## `R_T` and the generation interval via Euler–Lotka, which keeps the
     ## relationship exact by construction.
     n = 109
     rt_start = 45       # genetic-TMRCA day + renewal-start lead
-    breakpoint = 84     # intervention ramp near the cut-off
 
     seed!(11)
-    m = infection_model(n; breakpoint, rt_start)
+    m = infection_model(n; rt_start)
     rng = default_rng()
     ndraws = 1500
     disagree = 0

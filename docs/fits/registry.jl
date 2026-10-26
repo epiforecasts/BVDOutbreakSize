@@ -372,21 +372,18 @@ function build_fit_specs(
     ## one-week-back forecast validation, not just the joint alone.
     function frozen_stream(model_id::AbstractString, cutoff_date)
         o = freeze_observations(cutoff_date)
-        bp = o.n - o.who_first_sitrep_days
         model = if model_id == "cases"
             cases_only_model(
                 o.n, o.reported_cases;
                 reported_history = o.reported_history,
-                suspected_daily_history = o.suspected_daily_history,
-                breakpoint = bp
+                suspected_daily_history = o.suspected_daily_history
             )
         elseif model_id == "deaths"
             deaths_only_model(
                 o.n, o.total_deaths;
                 deaths_history = o.deaths_history,
                 suspected_daily_deaths_history =
-                    o.suspected_daily_deaths_history,
-                breakpoint = bp
+                    o.suspected_daily_deaths_history
             )
         elseif model_id == "confirmed"
             confirmed_only_model(
@@ -395,8 +392,7 @@ function build_fit_specs(
                 lab_history = o.lab_history,
                 lab_daily_history = o.lab_daily_history,
                 confirmed_break_days = o.confirmed_break_days,
-                confirmed_break_gross_cases = o.confirmed_break_gross_cases,
-                breakpoint = bp
+                confirmed_break_gross_cases = o.confirmed_break_gross_cases
             )
         elseif model_id == "confirmed_deaths"
             confirmed_deaths_only_model(
@@ -408,8 +404,7 @@ function build_fit_specs(
                 confirmed_deaths_history = o.confirmed_deaths_history,
                 confirmed_break_days = o.confirmed_break_days,
                 confirmed_break_gross_deaths =
-                    o.confirmed_break_gross_deaths,
-                breakpoint = bp
+                    o.confirmed_break_gross_deaths
             )
         elseif model_id == "treatment"
             treatment_only_model(
@@ -424,8 +419,7 @@ function build_fit_specs(
                     o.treatment_absconded_history,
                 occupancy_break_days = o.occupancy_break_days,
                 confirmed_break_days = o.confirmed_break_days,
-                confirmed_break_gross_cases = o.confirmed_break_gross_cases,
-                breakpoint = bp
+                confirmed_break_gross_cases = o.confirmed_break_gross_cases
             )
         else
             error(
@@ -528,8 +522,7 @@ function build_fit_specs(
                 obs.n, obs.exported_cases,
                 obs.exports_deaths;
                 export_case_days = obs.export_case_days,
-                export_death_days = obs.export_death_days,
-                breakpoint = breakpoint
+                export_death_days = obs.export_death_days
             ),
             m -> nuts_sample(
                 m;
@@ -543,8 +536,7 @@ function build_fit_specs(
                 obs.n, obs.total_deaths;
                 deaths_history = obs.deaths_history,
                 suspected_daily_deaths_history =
-                    obs.suspected_daily_deaths_history,
-                breakpoint = breakpoint
+                    obs.suspected_daily_deaths_history
             ),
             m -> nuts_sample(
                 m;
@@ -557,8 +549,7 @@ function build_fit_specs(
             () -> cases_only_model(
                 obs.n, obs.reported_cases;
                 reported_history = obs.reported_history,
-                suspected_daily_history = obs.suspected_daily_history,
-                breakpoint = breakpoint
+                suspected_daily_history = obs.suspected_daily_history
             ),
             m -> nuts_sample(
                 m;
@@ -575,8 +566,7 @@ function build_fit_specs(
                 lab_daily_history = obs.lab_daily_history,
                 confirmed_break_days = obs.confirmed_break_days,
                 confirmed_break_gross_cases =
-                    obs.confirmed_break_gross_cases,
-                breakpoint = breakpoint
+                    obs.confirmed_break_gross_cases
             ),
             m -> nuts_sample(
                 m;
@@ -595,8 +585,7 @@ function build_fit_specs(
                 confirmed_deaths_history = obs.confirmed_deaths_history,
                 confirmed_break_days = obs.confirmed_break_days,
                 confirmed_break_gross_deaths =
-                    obs.confirmed_break_gross_deaths,
-                breakpoint = breakpoint
+                    obs.confirmed_break_gross_deaths
             ),
             m -> nuts_sample(
                 m;
@@ -619,8 +608,7 @@ function build_fit_specs(
                 occupancy_break_days = obs.occupancy_break_days,
                 confirmed_break_days = obs.confirmed_break_days,
                 confirmed_break_gross_cases =
-                    obs.confirmed_break_gross_cases,
-                breakpoint = breakpoint
+                    obs.confirmed_break_gross_cases
             ),
             m -> nuts_sample(
                 m;
@@ -633,8 +621,7 @@ function build_fit_specs(
             () -> onsets_only_model(
                 obs.n;
                 onset_curve_history = obs.onset_curve_history,
-                export_case_days = obs.export_case_days,
-                breakpoint = breakpoint
+                export_case_days = obs.export_case_days
             ),
             m -> nuts_sample(
                 m;

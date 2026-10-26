@@ -1130,9 +1130,8 @@ rt_release = [
 rt_release_trajectory = let
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
     mat = reconstruct_rt(
-        chn_joint; n = obs.n, breakpoint = _BREAKPOINT,
-        rt_start = _rt_start_plot, rt_walk_start = rt_walk_start,
-        ramp = RT_INTERVENTION_RAMP
+        chn_joint; n = obs.n, rt_start = _rt_start_plot,
+        rt_walk_start = rt_walk_start
     )
     first_release_day = clamp(
         value(minimum(rt_release_df.date) - obs.seeding) + 1,
@@ -1233,9 +1232,7 @@ end
 ## `plot_rt_streams` does per stream.
 function _stream_rt_trajectory(chn, dates; rt_start, rt_walk_start)
     mat = reconstruct_rt(
-        chn; n = obs.n, breakpoint = _BREAKPOINT,
-        rt_start = rt_start, rt_walk_start = rt_walk_start,
-        ramp = RT_INTERVENTION_RAMP
+        chn; n = obs.n, rt_start = rt_start, rt_walk_start = rt_walk_start
     )
     first_date = isempty(dates) ? obs.seeding : minimum(dates)
     first_day = clamp(value(first_date - obs.seeding) + 1, rt_start, obs.n)
@@ -1939,26 +1936,18 @@ recovery = recovery_results()
 recovery_national_quantities = [
     "C_T", "T", "R_T", "r", "CFR", "p_drc", "tau_test", "lambda_bg",
     "growth_state.G", "rt_state.sigma_rw", "onset_report_state.τ",
-    "rt_state.intervention_effect",
 ]
 recovery_labels = Dict(
     "growth_state.G" => "G", "rt_state.sigma_rw" => "Rt step size",
     "onset_report_state.τ" => "onset read SD",
-    "rt_state.intervention_effect" => "intervention effect",
 )
 recovery_fig = isempty(recovery.params) ? nothing : plot_recovery(
         recovery.params, recovery.draws, recovery.prior;
         quantities = recovery_national_quantities,
-        labels = merge(
-            recovery_labels,
-            Dict(
-                "r" => "r (as exp(r))",
-                "rt_state.intervention_effect" => "intervention effect (as exp)",
-            )
-        ),
+        labels = merge(recovery_labels, Dict("r" => "r (as exp(r))")),
         panel_labels = merge(recovery_labels, Dict("r" => "r")),
         log_x = ["C_T", "lambda_bg"],
-        difference = ["r", "rt_state.intervention_effect"]
+        difference = ["r"]
     );
 
 #md # ```@raw html
@@ -1971,7 +1960,7 @@ isempty(recovery.params) ? Markdown.parse("No parameter-recovery run is availabl
 #md # ```@raw html
 #md # <figcaption>
 #md # Each seed's posterior median with its 50% and 90% intervals divided by its true value (top), so a recovered quantity straddles one.
-#md # The growth rate is shown as the ratio of daily growth factors and the intervention effect as the ratio of the reproduction-number multipliers it implies.
+#md # The growth rate is shown as the ratio of daily growth factors.
 #md # Below, each quantity is on its own scale, with the prior before the factor-of-five selection in grey, each seed's posterior in its colour and its true value dashed.
 #md # </figcaption>
 #md # </figure>

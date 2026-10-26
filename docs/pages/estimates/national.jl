@@ -373,7 +373,7 @@ infection_pair_fig = plot_pair(
     chn_joint,
     [
         :R_T, :r, :T, :CFR,
-        Symbol("rt_state.sigma_rw"), Symbol("rt_state.intervention_effect"),
+        Symbol("rt_state.sigma_rw"),
     ];
     prior = prior_chn, labels = display_names
 );
@@ -488,35 +488,6 @@ rt_fig #hide
 #md # ```
 
 # The same trajectory split by province, the per-province summary and the spatial hyperparameters are on the [province estimates](@ref "Reproduction number by province") page.
-
-#md # ```@raw html
-#md # <details><summary>Intervention-effect summary table</summary>
-#md # ```
-
-intervention_effect = vec(
-    Array(
-        chn_joint[Symbol("rt_state.intervention_effect")]
-    )
-);
-intervention_table = streams_table(
-    "Rt multiplier exp(effect)" => exp.(intervention_effect);
-    digits = 2
-);
-
-#md # ```@raw html
-#md # </details>
-#md # <figure class="bvd-figure">
-#md # ```
-
-intervention_table #hide
-
-#md # ```@raw html
-#md # <figcaption>
-#md # The response effect on the reproduction number as a multiplier.
-#md # A value below one is the factor by which the response lowers the reproduction number once the scale-up completes.
-#md # </figcaption>
-#md # </figure>
-#md # ```
 
 # ### Observation delays
 #
@@ -1211,12 +1182,12 @@ stream_fits = [
 ## single-stream composers do not (the alias lives in `bvd_joint`, not the
 ## shared latent submodel), so theirs is rebuilt from the walk parameters every
 ## chain carries and read at the cut-off, the last day of the reconstructed
-## path. `ramp` matches the model's 21-day intervention scale-up.
+## path.
 function _fit_rt_draws(f)
     f.fit == "joint" && return vec(Array(f.chn[:R_T]))
     rt = reconstruct_rt(
-        f.chn; n = obs.n, breakpoint = _BREAKPOINT,
-        rt_start = f.rt_start, rt_walk_start = f.rt_walk_start, ramp = RT_INTERVENTION_RAMP
+        f.chn; n = obs.n, rt_start = f.rt_start,
+        rt_walk_start = f.rt_walk_start
     )
     return Float64[rt[i, obs.n] for i in axes(rt, 1)]
 end

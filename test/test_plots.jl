@@ -749,8 +749,6 @@ end
             FlexiChains.Parameter(Symbol("rt_state.sigma_rw")) => reshape(
                 abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1
             ),
-            FlexiChains.Parameter(Symbol("rt_state.intervention_effect")) =>
-                reshape(-abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
             FlexiChains.Parameter(Symbol("rt_state.log_Rt_knots")) => kcol,
             FlexiChains.Parameter(:T) =>
                 reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)
@@ -789,11 +787,6 @@ end
                 ),
                 FlexiChains.Parameter(Symbol("rt_state.sigma_rw")) => reshape(
                     abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1
-                ),
-                FlexiChains.Parameter(
-                    Symbol("rt_state.intervention_effect")
-                ) => reshape(
-                    -abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1
                 ),
                 FlexiChains.Parameter(Symbol("rt_state.log_Rt_knots")) => kcol
             )
@@ -1631,7 +1624,7 @@ end
     using Random: MersenneTwister
     import FlexiChains
     using BVDOutbreakSize: reconstruct_patch_rt, reconstruct_rt, knot_days,
-        interpolate_knots, RT_INTERVENTION_RAMP
+        interpolate_knots
 
     rng = MersenneTwister(5)
     nd, n, np = 40, 60, 3
@@ -1645,9 +1638,6 @@ end
     rt_keys = Dict(
         P(Symbol("rt_state.log_R0")) => reshape(fill(log(1.5), nd), nd, 1),
         P(Symbol("rt_state.sigma_rw")) => reshape(fill(0.05, nd), nd, 1),
-        P(Symbol("rt_state.intervention_effect")) => reshape(
-            fill(-0.3, nd), nd, 1
-        ),
         P(Symbol("rt_state.log_Rt_knots")) => reshape(
             [0.2 .* randn(rng, nb - 1) for _ in 1:nd], nd, 1
         )
@@ -1657,14 +1647,13 @@ end
         merge(rt_keys, Dict(P(:delta_knots) => reshape(knots, nd, 1)))
     )
     args = (;
-        n, breakpoint = n - 11, n_patches = np, rt_start = walk_start,
-        rt_walk_start = walk_start, week = 7, ramp = RT_INTERVENTION_RAMP,
+        n, n_patches = np, rt_start = walk_start,
+        rt_walk_start = walk_start, week = 7,
     )
 
     national = reconstruct_rt(
         chain([zeros(np * nb) for _ in 1:nd]);
-        n, breakpoint = n - 11, rt_start = walk_start,
-        rt_walk_start = walk_start, week = 7, ramp = RT_INTERVENTION_RAMP
+        n, rt_start = walk_start, rt_walk_start = walk_start, week = 7
     )
     ## Zero deviations leave the national trajectory untouched in every
     ## panel, mask included: nothing rescales a province to the trend.
@@ -1706,8 +1695,7 @@ end
 @testitem "reconstruct_rt: scaled by the susceptible fraction the day before" begin
     using Random: MersenneTwister
     import FlexiChains
-    using BVDOutbreakSize: reconstruct_patch_rt, reconstruct_rt, knot_days,
-        RT_INTERVENTION_RAMP
+    using BVDOutbreakSize: reconstruct_patch_rt, reconstruct_rt, knot_days
 
     rng = MersenneTwister(6)
     nd, n, np = 20, 50, 2
@@ -1717,7 +1705,6 @@ end
     col(v) = reshape(v, nd, 1)
     base = Dict(
         P(Symbol("rt_state.log_R0")) => col(fill(log(1.5), nd)),
-        P(Symbol("rt_state.intervention_effect")) => col(fill(-0.3, nd)),
         P(Symbol("rt_state.sigma_rw")) => col(fill(0.05, nd)),
         P(Symbol("rt_state.log_Rt_knots")) =>
             col([0.2 .* randn(rng, nb - 1) for _ in 1:nd]),
@@ -1740,8 +1727,7 @@ end
     )
     full = FlexiChains.FlexiChain{Symbol}(nd, 1, base)
     args = (;
-        n, breakpoint = n - 11, rt_start = walk_start,
-        rt_walk_start = walk_start, week = 7, ramp = RT_INTERVENTION_RAMP,
+        n, rt_start = walk_start, rt_walk_start = walk_start, week = 7,
     )
     ## A chain without the fraction is the walk as sampled.
     walk = reconstruct_rt(full; args...)
@@ -1783,9 +1769,6 @@ end
         Dict(
             P(Symbol("rt_state.log_R0")) => reshape(fill(log(1.5), nd), nd, 1),
             P(Symbol("rt_state.sigma_rw")) => reshape(fill(0.05, nd), nd, 1),
-            P(Symbol("rt_state.intervention_effect")) => reshape(
-                fill(-0.3, nd), nd, 1
-            ),
             P(Symbol("rt_state.log_Rt_knots")) => reshape(
                 [0.2 .* randn(rng, nb - 1) for _ in 1:nd], nd, 1
             ),

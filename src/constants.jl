@@ -176,12 +176,11 @@ const RT_WALK_LEAD = 28
 """
     RT_INTERVENTION_RAMP
 
-Time scale in days of the logistic ramp over which the outbreak-response
-intervention takes effect on `R_t`, centred on the `breakpoint`
-([`sigmoid_ramp`](@ref)). Ramped rather than an instantaneous step,
-because the response damps transmission over weeks. Both the model and
-every `reconstruct_rt` caller read this constant, so a reconstruction
-cannot drift from the value the model fitted.
+Time scale in days of the logistic ramp of the outbreak-response
+scale-up, centred on the `breakpoint` ([`sigmoid_ramp`](@ref)). The
+importation intensities change along it, and the reproduction-number
+figures mark the day it completes. `R_t` itself has no response term: its
+weekly walk carries the change.
 """
 const RT_INTERVENTION_RAMP = 21.0
 

@@ -193,23 +193,20 @@ end
 ## --- Reproduction number ------------------------------------------------
 
 """
-Weekly piecewise-linear log-scale reproduction number over `n` days, with
-a smooth intervention ramp. Knots sit at weekly spacing
-([`knot_days`](@ref)) and follow a Gaussian random walk with step SD
-`sigma_rw`. Daily log-`R_t` is the linear interpolation between knots
-([`interpolate_knots`](@ref)). An intervention at `breakpoint` (e.g. the
-first WHO situation report) adds a sampled effect `intervention_effect`
-shaped by a logistic ramp ([`sigmoid_ramp`](@ref)) of scale `ramp` (default
-21 days, roughly the time a response takes to bite), so transmission
-changes gradually rather than instantly. `breakpoint = missing` drops the
-term. `Rt = exp.(log_Rt)`.
+Weekly piecewise-linear log-scale reproduction number over `n` days. Knots
+sit at weekly spacing ([`knot_days`](@ref)) and follow a Gaussian random
+walk with step SD `sigma_rw`. Daily log-`R_t` is the linear interpolation
+between knots ([`interpolate_knots`](@ref)). `Rt = exp.(log_Rt)`.
 
-The knots after the first are sampled as `log_Rt_knots`, the total
-log-`R_t` on each knot day with the ramp included. The walk is centred on
-those knots net of the ramp ([`RandomWalkVector`](@ref)), so the prior is
-the same random walk plus ramp. The data pin the total level, and in these
-coordinates the effect moves it only through the ramp's shape between
-knots.
+The knots after the first are sampled as `log_Rt_knots`, the log-`R_t` on
+each knot day, in centred form ([`RandomWalkVector`](@ref)). The data pin
+the level on each knot day, which is the sampled coordinate.
+
+The walk carries every change in transmission, the outbreak response
+included. It has no separate response term. A step change in `R_t` over
+the response scale-up is a path the walk already contains, so a sampled
+effect on a fixed ramp would trade against the walk's steps and its step
+size rather than add information.
 
 The walk base `log_R0` is not sampled here. It is passed in, derived
 forward from the sampled growth rate `r` and the generation interval
@@ -223,32 +220,23 @@ which clamps to `R0` before its first knot.
 
 The random-walk step SD prior is a half-normal SD 0.1, so the weekly
 log-`R_t` is unlikely to change by more than about 20% (two SD ≈ 0.2) from
-one week to the next. The walk starts at `rt_start`, so every knot sits in
-the observed window rather than drifting over the unobserved pre-report
-stretch.
-
-The intervention effect is constrained non-positive
-(`truncated(Normal(0, 0.4); upper = 0)`). A declared WHO response (case
-finding, isolation, vaccination) can only reduce transmission or leave it
-unchanged. The half-normal admits anything from no effect (mode) to a
-substantial decline.
+one week to the next, and `sigma_rw = 0` is a constant `R_t`. The walk
+starts at `rt_start`, so every knot sits in the observed window rather than
+drifting over the unobserved pre-report stretch.
 
 With `forecast` a [`ForecastHorizon`](@ref) the walk runs past `n` on
 knots a week apart ([`future_knot_days`](@ref)), with standard-normal
-innovations `z_future` scaled by the same `sigma_rw`, and the ramp carries
-on. `Rt` then covers the horizon too.
+innovations `z_future` scaled by the same `sigma_rw`. `Rt` then covers the
+horizon too.
 
-Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`,
-with `log_R` the walk's knots net of the ramp, `log_R0` first.
+Returns `(; Rt, log_R, days, sigma_rw, log_R0)`, with `log_R` the walk's
+knots, `log_R0` first.
 """
 @model function rt_walk_model(
         n::Integer, log_R0_base::Real;
         week::Integer = 7,
-        breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
-        ramp::Real = RT_INTERVENTION_RAMP,
         sigma_prior = truncated(Normal(0, 0.1); lower = 0),
-        effect_prior = truncated(Normal(0, 0.4); upper = 0),
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     days = knot_days(n; week, start = rt_start)
@@ -258,15 +246,11 @@ with `log_R` the walk's knots net of the ramp, `log_R0` first.
     ## deterministic so it stays available on the chain.
     log_R0 := log_R0_base
     sigma_rw ~ sigma_prior
-    intervention_effect ~ effect_prior
     ng = n + horizon_days(forecast)
-    ramp_shape = sigmoid_ramp(ng, breakpoint; ramp)
-    ## The total log-Rt on the knot days after the first, ramp included. A
-    ## single knot still draws one value so the chain key exists; it is
-    ## unused.
-    shift = intervention_effect .* ramp_shape[days[min(2, nb):nb]]
-    log_Rt_knots ~ RandomWalkVector(log_R0, sigma_rw, shift)
-    log_R = vcat(log_R0, log_Rt_knots[1:(nb - 1)] .- shift[1:(nb - 1)])
+    ## The log-Rt on the knot days after the first. A single knot still
+    ## draws one value so the chain key exists; it is unused.
+    log_Rt_knots ~ RandomWalkVector(log_R0, sigma_rw, max(nb - 1, 1))
+    log_R = vcat(log_R0, log_Rt_knots[1:(nb - 1)])
     ## Past the cut-off the walk continues from its last fitted knot, one
     ## knot a week, with innovations of its own step size. They are a new
     ## variable, so the fitted knots and their density are untouched.
@@ -276,10 +260,8 @@ with `log_R` the walk's knots net of the ramp, `log_R0` first.
         log_R = vcat(log_R, log_R[end] .+ cumsum(sigma_rw .* z_future))
         days = vcat(days, fdays)
     end
-    log_Rt = interpolate_knots(log_R, days, ng)
-    log_Rt = log_Rt .+ intervention_effect .* ramp_shape
-    Rt = exp.(log_Rt)
-    return (; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)
+    Rt = exp.(interpolate_knots(log_R, days, ng))
+    return (; Rt, log_R, days, sigma_rw, log_R0)
 end
 
 ## --- Seeding and the generating infection process -----------------------
@@ -397,8 +379,7 @@ censored bound `tmrca ~ censored(Normal(T, sd); upper = tmrca_days)` stays
 informative. It pulls the origin to sit at or before the MRCA, so the
 cryptic duration `m·G` cannot be too short.
 
-The realised cut-off size is `C_T = cumulative[n]`. The `breakpoint` is
-forwarded to the reproduction-number submodel. Returns
+The realised cut-off size is `C_T = cumulative[n]`. Returns
 `(; infections, cumulative, Rt, g, seed_at_renewal_start, population, m, τ,
 R0, r0, r, doubling_time_initial, T, C_T, C_T_prior, doubling_time,
 seeding_age)`, where `r`/`doubling_time` are the current growth derived from
@@ -413,7 +394,6 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
 """
 @model function infection_model(
         n::Integer;
-        breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
         rt_walk_start::Integer = rt_start,
         rt = rt_walk_model,
@@ -439,7 +419,7 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
     ## drift. `rt_walk_start` defaults to `rt_start`.
     fkw = forecast === nothing ? (;) : (; forecast)
     rt_state ~ to_submodel(
-        rt(n, log(R0); breakpoint, rt_start = rt_walk_start, fkw...)
+        rt(n, log(R0); rt_start = rt_walk_start, fkw...)
     )
     Rt = rt_state.Rt
     ## The renewal-start seed is the daily incidence `C_T = exp(r·T)` reached
@@ -460,9 +440,9 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
     ## through forward Euler–Lotka, the inverse of the `r_to_R0` above. This
     ## makes the reported growth rate consistent with the adjusted `R_T` by
     ## construction, so `r < 0` iff `R_T < 1`. The realised last-two-days
-    ## slope is not used: the intervention ramp depresses the final renewal
-    ## step, so that slope can disagree in sign with `R_T`. Only `:=`
-    ## quantities read it, so the gradient does not tape it.
+    ## slope is not used: it lags a change in the walk, so it can disagree
+    ## in sign with `R_T`. Only `:=` quantities read it, so the gradient
+    ## does not tape it.
     r = _detached(_cutoff_growth_rate, Rt, cumulative, population, g, n)
     return (;
         infections, cumulative, Rt, g, seed_at_renewal_start = seed0,
@@ -1663,7 +1643,6 @@ and `Rt_matrix` covers the horizon.
 @model function patch_rt_model(
         n::Integer, n_patches::Integer,
         log_R0_base::Real;
-        breakpoint::Union{Missing, Real} = missing,
         week::Integer = 7,
         rt_start::Integer = 1,
         rt_walk_start::Integer = rt_start,
@@ -1679,13 +1658,12 @@ and `Rt_matrix` covers the horizon.
     ## `rt_walk_start` maps to `rt_start` in the inner model, matching the
     ## convention in [`infection_model`](@ref). Attached prefixed (no
     ## `false`), so the walk's parameters reach the chain as
-    ## `rt_state.sigma_rw`, `rt_state.log_R0`, `rt_state.log_Rt_knots` and
-    ## `rt_state.intervention_effect`, the names the analysis and sensitivity
-    ## pages read. Attaching it unprefixed surfaces them bare and fails at
+    ## `rt_state.sigma_rw`, `rt_state.log_R0` and `rt_state.log_Rt_knots`,
+    ## the names the analysis and sensitivity pages read. Attaching it unprefixed surfaces them bare and fails at
     ## render time on a KeyError.
     fkw = forecast === nothing ? (;) : (; forecast)
     rt_state ~ to_submodel(
-        rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start, fkw...)
+        rt(n, log_R0_base; rt_start = rt_walk_start, fkw...)
     )
     Rt_national = rt_state.Rt
     ## The deviations live on the same weekly knots as the national walk, so
@@ -1715,7 +1693,6 @@ and `Rt_matrix` covers the horizon.
             δ_halflife = zero(Tp1),
             sigma_rw = rt_state.sigma_rw,
             log_R0 = rt_state.log_R0,
-            intervention_effect = rt_state.intervention_effect,
         )
     end
     ## Mean reversion. The deviations are an AR(1) toward zero on the knots,
@@ -1801,7 +1778,6 @@ and `Rt_matrix` covers the horizon.
         Rt_matrix, Rt_national, δ_patch, δ_knots,
         σ_level, σ_δ, Ω, drift_factor = F_drift, δ_halflife,
         sigma_rw = rt_state.sigma_rw, log_R0 = rt_state.log_R0,
-        intervention_effect = rt_state.intervention_effect,
     )
 end
 
@@ -1944,7 +1920,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     rt_state ~ to_submodel(
         rt(
             n, n_patches, log(R0);
-            breakpoint, rt_start, rt_walk_start, fkw...
+            rt_start, rt_walk_start, fkw...
         ), false
     )
     Rt_matrix = rt_state.Rt_matrix
@@ -2009,9 +1985,10 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         end
     end
     ## 5. Importation intensity: one level per origin, partially pooled, and
-    ##    a common change at detection on the ramp the reproduction number
-    ##    already uses. Only sampled when the kernel couples the patches,
-    ##    since against an all-zero kernel it would be a prior-only dimension.
+    ##    a common change at detection on the response ramp
+    ##    ([`sigmoid_ramp`](@ref)). Only sampled when the kernel couples the
+    ##    patches, since against an all-zero kernel it would be a prior-only
+    ##    dimension.
     ##    Per origin because the provinces do not export alike and the kernel
     ##    only carries size and distance. Pooled because the small provinces
     ##    export too little for their own level to be identified, so

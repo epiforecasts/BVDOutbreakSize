@@ -346,9 +346,8 @@ CSV.write(
 ## reported patients in isolation and beds over the same eight weeks, keyed
 ## by source province.
 province_ts_rt_args = (;
-    n = obs.n, breakpoint = _BREAKPOINT, rt_start = _rt_start_plot,
+    n = obs.n, rt_start = _rt_start_plot,
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
-    ramp = RT_INTERVENTION_RAMP,
 )
 province_ts_inc = province_increment_matrix(
     obs.province_confirmed_history, PROVINCE_NAMES, N_PATCHES

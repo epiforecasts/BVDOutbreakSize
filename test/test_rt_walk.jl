@@ -1,50 +1,41 @@
-## The national reproduction-number walk samples the total log-Rt at each
-## knot after the first, intervention ramp included, and centres the walk on
-## those knots net of the ramp. These items pin that structure and check it
-## against the standard-normal innovation form it reparameterises.
+## The national reproduction-number walk samples the log-Rt at each knot
+## after the first in centred form, with no separate response term. These
+## items pin that structure and check it against the standard-normal
+## innovation form of the same walk.
 
 @testsnippet RtWalkFixtures begin
     using BVDOutbreakSize
-    using BVDOutbreakSize: knot_days, sigmoid_ramp, interpolate_knots,
-        RT_INTERVENTION_RAMP
+    using BVDOutbreakSize: knot_days, interpolate_knots
     using Turing: @model, to_submodel, returned, logjoint, @varname,
         DynamicPPL
     using Distributions: Normal, Poisson, product_distribution, truncated
     using Random: Xoshiro
 
-    ## Cut-off day 60, the walk from day 12 and the ramp centred on day 30,
-    ## so the ramp moves across the knots.
+    ## Cut-off day 60 and the walk from day 12.
     const N = 60
     const WS = 12
-    const BP = 30
     const OBS = collect(20:5:N)
 
     ## Reference: the walk as standard-normal innovations `z` scaled by
-    ## `sigma_rw` and summed from `log_R0`, with the ramp added daily.
+    ## `sigma_rw` and summed from `log_R0`.
     @model function innovation_walk(
             n::Integer, log_R0_base::Real;
-            breakpoint, rt_start::Integer = 1, week::Integer = 7,
-            ramp::Real = RT_INTERVENTION_RAMP
+            rt_start::Integer = 1, week::Integer = 7
         )
         days = knot_days(n; week, start = rt_start)
         nb = length(days)
         log_R0 := log_R0_base
         sigma_rw ~ truncated(Normal(0, 0.1); lower = 0)
         z ~ product_distribution(fill(Normal(0, 1), nb - 1))
-        intervention_effect ~ truncated(Normal(0, 0.4); upper = 0)
         log_R = log_R0 .+ vcat(zero(log_R0), cumsum(sigma_rw .* z))
-        log_Rt = interpolate_knots(log_R, days, n) .+
-            intervention_effect .* sigmoid_ramp(n, breakpoint; ramp)
-        return (; Rt = exp.(log_Rt), log_R)
+        return (; Rt = exp.(interpolate_knots(log_R, days, n)), log_R)
     end
 
     ## The infection process scored against counts, so the log joint carries
     ## a likelihood that reads the whole Rt path through the renewal.
     @model function scored(rt, y)
         lat ~ to_submodel(
-            infection_model(
-                N; breakpoint = BP, rt_start = 1, rt_walk_start = WS, rt
-            ), false
+            infection_model(N; rt_start = 1, rt_walk_start = WS, rt), false
         )
         y ~ product_distribution(Poisson.(lat.infections[OBS] .+ 1.0e-8))
         return lat
@@ -58,9 +49,7 @@
     function to_innovations(θ, θold, log_R0)
         days = knot_days(N; start = WS)
         σ = θ[@varname(rt_state.sigma_rw)]
-        e = θ[@varname(rt_state.intervention_effect)]
-        net = θ[KNOTS] .- e .* sigmoid_ramp(N, BP)[days[2:end]]
-        z = diff(vcat(log_R0, net)) ./ σ
+        z = diff(vcat(log_R0, θ[KNOTS])) ./ σ
         for k in keys(θ)
             k == KNOTS && continue
             θold = DynamicPPL.setindex!!(θold, θ[k], k)
@@ -75,45 +64,44 @@ end
     using Random: Xoshiro
     using Statistics: mean, var
 
-    offset = [0.0, -0.1, -0.3, -0.4]
-    d = RandomWalkVector(0.3, 0.1, offset)
+    d = RandomWalkVector(0.3, 0.1, 4)
     @test length(d) == 4
-    x = [0.35, 0.1, 0.0, 0.0]
-    level = x .- offset
-    expected = logpdf(Normal(0.3, 0.1), level[1]) +
-        sum(logpdf(Normal(level[i - 1], 0.1), level[i]) for i in 2:4)
+    x = [0.35, 0.2, 0.3, 0.1]
+    expected = logpdf(Normal(0.3, 0.1), x[1]) +
+        sum(logpdf(Normal(x[i - 1], 0.1), x[i]) for i in 2:4)
     @test logpdf(d, x) ≈ expected rtol = 1.0e-12
 
-    ## Draws are the walk plus the offset, with variance growing by one step
+    ## Draws are the walk from its start, with variance growing by one step
     ## per knot.
     rng = Xoshiro(7)
     draws = [rand(rng, d) for _ in 1:20_000]
-    @test mean(x[4] for x in draws) ≈ 0.3 + offset[4] atol = 0.01
+    @test mean(x[4] for x in draws) ≈ 0.3 atol = 0.01
     @test var(x[1] for x in draws) ≈ 0.1^2 rtol = 0.1
     @test var(x[4] for x in draws) ≈ 4 * 0.1^2 rtol = 0.1
 
-    ## A zero SD still gives a finite density, peaked on the offset path.
-    d0 = RandomWalkVector(0.0, 0.0, [0.1, 0.2])
-    @test isfinite(logpdf(d0, [0.1, 0.2]))
-    @test logpdf(d0, [0.1, 0.2]) > logpdf(d0, [0.1 + 1.0e-6, 0.2])
+    ## A zero SD still gives a finite density, peaked on the flat path.
+    d0 = RandomWalkVector(0.1, 0.0, 2)
+    @test isfinite(logpdf(d0, [0.1, 0.1]))
+    @test logpdf(d0, [0.1, 0.1]) > logpdf(d0, [0.1 + 1.0e-6, 0.1])
 end
 
-@testitem "rt_walk_model: the knots are the total log Rt on knot days" setup = [
+@testitem "rt_walk_model: the knots are the log Rt on knot days" setup = [
     RtWalkFixtures,
 ] begin
-    m = rt_walk_model(N, log(1.4); breakpoint = BP, rt_start = WS)
+    m = rt_walk_model(N, log(1.4); rt_start = WS)
     days = knot_days(N; start = WS)
     for seed in 1:5
         θ = rand(Xoshiro(seed), m)
         @test haskey(θ, @varname(log_Rt_knots))
         @test !haskey(θ, @varname(z))
+        ## No response term: the walk alone sets Rt.
+        @test !haskey(θ, @varname(intervention_effect))
         s = returned(m, θ)
-        ## Ramp included: the sampled knots are the daily total at each knot
-        ## day after the first, and the returned walk is net of the ramp.
         @test log.(s.Rt[days[2:end]]) ≈ θ[@varname(log_Rt_knots)]
-        e = θ[@varname(intervention_effect)]
-        @test s.log_R ≈ log.(s.Rt[days]) .- e .* sigmoid_ramp(N, BP)[days]
+        @test s.log_R ≈ log.(s.Rt[days])
         @test s.log_R[1] == log(1.4)
+        ## Flat at R0 up to the first knot.
+        @test all(s.Rt[1:WS] .≈ 1.4)
     end
 end
 
@@ -149,7 +137,7 @@ end
 
     y = [3, 5, 8, 12, 20, 30, 45, 60, 80]
     for model in (
-            rt_walk_model(N, log(1.4); breakpoint = BP, rt_start = WS),
+            rt_walk_model(N, log(1.4); rt_start = WS),
             scored(rt_walk_model, y),
         )
         vi = DynamicPPL.link(DynamicPPL.VarInfo(Xoshiro(3), model), model)

@@ -2202,11 +2202,8 @@ Reconstruct each posterior draw's daily reproduction-number trajectory
 before `rt_start`). The saved chain stores only the cut-off `R_T`, so each
 draw's daily `Rt` is rebuilt by mirroring [`rt_walk_model`](@ref): weekly
 knots ([`knot_days`](@ref)) from `rt_walk_start` at `rt_state.log_R0` and
-then the sampled total levels `rt_state.log_Rt_knots` net of the ramp,
-linearly interpolated to the day grid ([`interpolate_knots`](@ref)) and
-shifted by the sampled `rt_state.intervention_effect` along a logistic
-ramp ([`sigmoid_ramp`](@ref)) centred at the outbreak-response
-`breakpoint`.
+then the sampled levels `rt_state.log_Rt_knots`, linearly interpolated to
+the day grid ([`interpolate_knots`](@ref)).
 Each day is then scaled by the draw's susceptible fraction at the end of
 the day before, the chain's `susceptible_fraction`, so the trajectory is
 net of depletion ([`adjusted_rt`](@ref)). A chain without that series is
@@ -2214,13 +2211,10 @@ returned unscaled.
 Shared by [`plot_rt`](@ref) and [`plot_rt_streams`](@ref).
 """
 function reconstruct_rt(
-        chn; n::Integer, breakpoint::Real,
-        rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
-        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP
+        chn; n::Integer, rt_start::Integer = 1,
+        rt_walk_start::Integer = rt_start, week::Integer = 7
     )
-    rt = _reconstruct_rt_walk(
-        chn; n, breakpoint, rt_start, rt_walk_start, week, ramp
-    )
+    rt = _reconstruct_rt_walk(chn; n, rt_start, rt_walk_start, week)
     _has_key(chn, :susceptible_fraction) || return rt
     fractions = _draw_vectors(chn, :susceptible_fraction)
     for i in axes(rt, 1)
@@ -2241,12 +2235,10 @@ end
 
 ## The walk's daily Rt per draw, before depletion.
 function _reconstruct_rt_walk(
-        chn; n::Integer, breakpoint::Real,
-        rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
-        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP
+        chn; n::Integer, rt_start::Integer = 1,
+        rt_walk_start::Integer = rt_start, week::Integer = 7
     )
     log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
-    effect = _draws(chn, Symbol("rt_state.intervention_effect"))
     ## `rt_state.log_Rt_knots` is vector-valued: one vector of knot levels
     ## after the first per draw. Pull each draw's full vector from the chain
     ## slice.
@@ -2268,21 +2260,17 @@ function _reconstruct_rt_walk(
                 "(the breakpoint grid day, n - who_first_sitrep_days)."
         )
     end
-    ramp_shape = sigmoid_ramp(n, breakpoint; ramp)
-    ramp_knots = ramp_shape[days[2:end]]
     ndraws = length(log_R0)
 
     ## Per-draw daily Rt, masked to the draw's own established window
     ## (cumulative infections ≥ 1, i.e. grid day ≥ n - round(T)).
     rt = Matrix{Union{Missing, Float64}}(missing, ndraws, n)
     for i in 1:ndraws
-        net = krows[i][1:(nb - 1)] .- effect[i] .* ramp_knots
-        log_R = vcat(log_R0[i], net)
-        walk = interpolate_knots(log_R, days, n)
+        log_R = vcat(log_R0[i], krows[i][1:(nb - 1)])
         ## Days before the renewal start clamp to the established R0, the
         ## walk base. The model fills them with the analytic cryptic
         ## exponential and they are masked out here.
-        log_Rt = walk .+ effect[i] .* ramp_shape
+        log_Rt = interpolate_knots(log_R, days, n)
         start = clamp(rt_start, 1, n)
         for d in start:n
             rt[i, d] = exp(log_Rt[d])
@@ -2514,7 +2502,7 @@ function plot_rt(
         week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP,
         n_traj::Integer = 100
     )
-    rt = reconstruct_rt(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp)
+    rt = reconstruct_rt(chn; n, rt_start, rt_walk_start, week)
     ndraws = size(rt, 1)
 
     ## Median and ribbons over established draws only (skip masked days).
@@ -2598,8 +2586,8 @@ end
 ## the fit's own established mask applied through `reconstruct_rt`. Returns a
 ## NamedTuple of the 30/60/90% lower/upper quantiles and the established days
 ## `est` to draw.
-function _rt_bands(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp, ds)
-    rt = reconstruct_rt(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp)
+function _rt_bands(chn; n, rt_start, rt_walk_start, week, ds)
+    rt = reconstruct_rt(chn; n, rt_start, rt_walk_start, week)
     return _rt_bands_matrix(rt; n, ds)
 end
 
@@ -2687,14 +2675,14 @@ function plot_rt_streams(
     ## The joint is the shared reference drawn behind every stream, so
     ## reconstruct it once.
     bj = _rt_bands(
-        joint.chn; n, breakpoint, rt_start = joint.rt_start,
-        rt_walk_start = joint.rt_walk_start, week, ramp, ds
+        joint.chn; n, rt_start = joint.rt_start,
+        rt_walk_start = joint.rt_walk_start, week, ds
     )
     sbands = Tuple{Any, NamedTuple}[]
     for s in streams
         b = _rt_bands(
-            s.chn; n, breakpoint, rt_start = s.rt_start,
-            rt_walk_start = s.rt_walk_start, week, ramp, ds
+            s.chn; n, rt_start = s.rt_start,
+            rt_walk_start = s.rt_walk_start, week, ds
         )
         push!(sbands, (s, b))
     end
@@ -2789,15 +2777,11 @@ A chain carrying no usable deviations is an error here rather than a silent
 national trajectory repeated per panel.
 """
 function reconstruct_patch_rt(
-        chn; n::Integer, breakpoint::Real,
-        n_patches::Integer = length(PROVINCE_NAMES),
+        chn; n::Integer, n_patches::Integer = length(PROVINCE_NAMES),
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
-        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP
+        week::Integer = 7
     )
-    national = _reconstruct_rt_walk(
-        chn; n, breakpoint, rt_start, rt_walk_start,
-        week, ramp
-    )
+    national = _reconstruct_rt_walk(chn; n, rt_start, rt_walk_start, week)
     days = knot_days(n; week, start = rt_walk_start)
     nb = length(days)
     knots = try
@@ -2879,11 +2863,10 @@ function plot_rt_patches(
     ds = clamp(display_start, 1, n)
 
     patch_rt = reconstruct_patch_rt(
-        chn; n, breakpoint, n_patches = np,
-        rt_start, rt_walk_start, week, ramp
+        chn; n, n_patches = np, rt_start, rt_walk_start, week
     )
     bands = [_rt_bands_matrix(patch_rt[p]; n, ds) for p in 1:np]
-    bn = _rt_bands(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp, ds)
+    bn = _rt_bands(chn; n, rt_start, rt_walk_start, week, ds)
 
     ## Shared y-cap from the panels' typical 90% upper band, as in
     ## `plot_rt_streams`. A median over days rather than a maximum, so one

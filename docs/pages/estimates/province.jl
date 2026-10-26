@@ -39,10 +39,8 @@ MarkdownTable(report_dates(obs.cutoff)) #hide
 ## reproduction number by province figure further down.
 province_summary_rt = reconstruct_patch_rt(
     chn_joint;
-    n = obs.n, breakpoint = _BREAKPOINT, n_patches = N_PATCHES,
-    rt_start = _rt_start_plot,
-    rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
-    ramp = RT_INTERVENTION_RAMP
+    n = obs.n, n_patches = N_PATCHES, rt_start = _rt_start_plot,
+    rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
 );
 ## The week-ahead province forecast, read from the same draws as the
 ## province forecasts page.

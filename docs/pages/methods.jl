@@ -346,18 +346,19 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # with $d_k$ the day of knot $k$.
-# The outbreak response adds a sampled effect shaped by a logistic ramp at the first WHO situation report on 18 May 2026.
-# We assume the response takes about three weeks (21 days) to take effect, and that it can only reduce transmission.
-# The effect is therefore constrained to be non-positive:
+# The trend has no separate term for the outbreak response.
+# We assume the walk carries every change in transmission after it starts, the effect of the response included.
+# A step standard deviation of zero gives a constant reproduction number.
+# We sample the knot levels themselves rather than scaled standard-normal steps.
+#
+# We time the outbreak response by a logistic ramp at the first WHO situation report on 18 May 2026, and we assume the response takes about three weeks (21 days) to scale up:
 #
 # ```math
-# \log R^{\text{trend}}_t \mathrel{+}= \beta_R\, S(t), \qquad
-# S(t) = \mathrm{logistic}\!\left(\frac{t - t_{\text{bp}}}{21}\right),
-# \qquad
-# \beta_R \sim \mathrm{Normal}^{-}(0,\ 0.4). \tag{5}
+# S(t) = \mathrm{logistic}\!\left(\frac{t - t_{\text{bp}}}{21}\right). \tag{5}
 # ```
 #
-# We sample each knot after the first as its total log reproduction number, $\log R^{\text{trend}}_k + \beta_R\, S(d_k)$, and recover the walk by subtracting the ramp.
+# Here $t_{\text{bp}}$ is the day of that report.
+# The ramp sets the timing of the change in importation intensity below.
 #
 # The deviations live on the trend's weekly knots $k = 1, \dots, K$.
 # They are correlated across patches, they revert toward zero, and they sum to zero at every knot so that no patch is privileged.
@@ -558,7 +559,7 @@ MarkdownTable(vintage_table) #hide
 # \qquad K_{q,q} = 0. \tag{14}
 # ```
 #
-# The intensity is one level per origin, partially pooled, and it changes at detection on the logistic ramp $S(t)$ the reproduction number uses:
+# The intensity is one level per origin, partially pooled, and it changes at detection on the response ramp $S(t)$ of Equation (5):
 #
 # ```math
 # \varepsilon_{q,t} = \min\!\Bigl(
@@ -2543,7 +2544,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # Forecasts are drawn from the fitted model itself.
 # We run the model past the cut-off and treat each day after it as an observation that is missing.
 # For each posterior draw we keep the fitted parameters and draw the missing observations from the model.
-# The reproduction number continues its weekly walk with fresh innovations at its fitted step size, and the intervention ramp carries on.
+# The reproduction number continues its weekly walk with fresh innovations at its fitted step size.
 # The renewal, every delay and ascertainment, and each stream's own likelihood then produce the future counts, so the forecast carries parameter and observation uncertainty.
 # The walks for the non-BVD background and the bed capacity continue the same way.
 # Up to the cut-off the model and its density are unchanged, so the forecast needs no refit.
@@ -2788,7 +2789,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # | Component | [mccabe2026](@citet) | This work |
 # |---|---|---|
 # | [Infection process](@ref "Infection process") | Continuous-time closed forms | Discrete-time meta-population renewal on a daily grid, provinces coupled by importation, national incidence their sum |
-# | [Reproduction number](@ref "Reproduction number") | One constant exponential growth rate | Flat at $R_0$ to the first WHO report, then a weekly log-scale random walk with a response ramp, plus a mean-reverting per-province deviation |
+# | [Reproduction number](@ref "Reproduction number") | One constant exponential growth rate | Flat at $R_0$ to the first WHO report, then a weekly log-scale random walk, plus a mean-reverting per-province deviation |
 # | [Seeding and growth](@ref "Seeding and growth") | Start fixed from a single seed | Two-phase seeding, a cryptic exponential phase floored from below by the [genetic bound](@ref "Genetic bound on outbreak age") |
 # | Parameter treatment | Each fixed, a set of scenarios reported | Priors on the reproduction number, case-fatality ratio, delays, traveller volume and dispersion, all sampled in one posterior |
 # | [Onset-to-death delay](@ref "Onset-to-death delay") | Isiro 2012 point estimate of [rosello2015](@citet) | Bayesian reanalysis of the same line list [bdbv_linelist_analysis_2026](@cite), so the delay carries uncertainty |

@@ -628,9 +628,10 @@ upto(x::AbstractVector, n::Integer) = length(x) <= n ? x : x[1:n]
 Smooth intervention ramp over an `n`-day grid: the logistic curve
 `1 / (1 + e^{−(t − day) / ramp})` for each day `t`, rising from ≈0 well
 before `day` to ≈1 well after, with `ramp` setting the transition width
-in days. Multiplied by a sampled effect size and added to log-`R_t`, this
-gives an intervention (e.g. the first WHO situation report) a gradual
-ramped effect on transmission rather than an instantaneous step. Returns
+in days. Multiplied by a sampled effect size, this gives the response to
+an intervention (e.g. the first WHO situation report) a gradual ramped
+effect rather than an instantaneous step, as on the importation
+intensities in [`patch_infection_model`](@ref). Returns
 a length-`n` `Float64` vector. `day = missing` gives an all-zero ramp (no
 intervention). Type-stable and AD-transparent in the effect size it
 multiplies.
@@ -650,41 +651,34 @@ function sigmoid_ramp(n::Integer, day::Real; ramp::Real = RT_INTERVENTION_RAMP)
 end
 
 """
-Gaussian random walk in centred form, shifted by a known offset: entry `i`
-is the walk's level `i` plus `offset[i]`. The walk starts at `start`, and
-each level is `Normal` about the one before it with SD `σ`. The shifted
-values themselves are the sampled coordinates. `σ` is floored at `eps` so a
-zero draw still gives a proper density. [`rt_walk_model`](@ref) draws its
-weekly log-`R_t` knots from it, with the intervention ramp as the offset.
+Gaussian random walk in centred form over `n` levels. The walk starts at
+`start`, and each level is `Normal` about the one before it with SD `σ`.
+The levels themselves are the sampled coordinates. `σ` is floored at `eps`
+so a zero draw still gives a proper density. [`rt_walk_model`](@ref) draws
+its weekly log-`R_t` knots from it.
 """
-struct RandomWalkVector{
-        S <: Real, T <: Real, V <: AbstractVector{<:Real},
-    } <: Distributions.ContinuousMultivariateDistribution
+struct RandomWalkVector{S <: Real, T <: Real} <:
+    Distributions.ContinuousMultivariateDistribution
     "Level the first step is taken from."
     start::S
     "Per-step SD."
     σ::T
-    "Shift added to each level."
-    offset::V
+    "Number of levels."
+    n::Int
 end
 
-Base.length(d::RandomWalkVector) = length(d.offset)
+Base.length(d::RandomWalkVector) = d.n
 Base.eltype(::Type{<:RandomWalkVector}) = Float64
 
 function Distributions._logpdf(d::RandomWalkVector, x::AbstractVector)
-    T = float(
-        promote_type(
-            typeof(d.start), typeof(d.σ), eltype(d.offset), eltype(x)
-        )
-    )
+    T = float(promote_type(typeof(d.start), typeof(d.σ), eltype(x)))
     σ = d.σ + eps(typeof(float(d.σ)))
     c = -log(σ) - T(log(2π) / 2)
     s = zero(T)
     prev = d.start
-    @inbounds for i in eachindex(x, d.offset)
-        level = x[i] - d.offset[i]
-        s += c - ((level - prev) / σ)^2 / 2
-        prev = level
+    @inbounds for i in eachindex(x)
+        s += c - ((x[i] - prev) / σ)^2 / 2
+        prev = x[i]
     end
     return s
 end
@@ -694,9 +688,9 @@ function Distributions._rand!(
     )
     σ = d.σ + eps(typeof(float(d.σ)))
     prev = d.start
-    @inbounds for i in eachindex(x, d.offset)
+    @inbounds for i in eachindex(x)
         prev += σ * randn(rng)
-        x[i] = prev + d.offset[i]
+        x[i] = prev
     end
     return x
 end
