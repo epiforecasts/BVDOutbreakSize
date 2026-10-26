@@ -240,6 +240,16 @@ Its count falls twice: on 18 June (SitRep 035) from 94 cases and 10 deaths to 17
 Each fall is a reattribution of counts the report had carried as unallocated into named zones, so on those dates the zone rows rise by more than the province (163 zone cases against a province increment of 86 on 18 June, and 374 clamped zone cases against 347 on 22 July).
 The composition model leaves those two Ituri vintages out: `zone_increment_matrix` zeroes the patch's column on any date its unallocated count falls and lists the dates, and since the increments are differences of cumulative counts the next vintage is unaffected.
 
+A named zone's cumulative count can also fall, which `zone_cumulative_falls` reports when the fall is more than one.
+The increment there is clamped to zero, which reads the zone as having no new count that vintage.
+Where the table prints the 24h columns (`Situation du jour (24 h)`, from SitRep 060), the zone's own `Nouv. cas` or `Total décès confirmés` figure that day replaces the clamped zero.
+These figures are recorded only on the flagged zone-vintages, in the sparse blocks `[zone_confirmed_revision_24h]` and `[zone_death_revision_24h]`, one `[block.province.zone]` sub-table each with its own `dates` and `values`.
+They are read with `pdftotext -layout`, and the `source =` string quotes each cell.
+A blank 24h cell is recorded as 0, since the province row's 24h figure is the sum of the printed zone cells.
+A printed negative (Katwa's `-2*` on 26 July, the harmonisation itself) is recorded as printed and read as no new death.
+Every other zone-vintage keeps its cumulative difference, and the vintages the death composition leaves out for a zone fall stay out.
+The three falls on 11 June (SitRep 028) have no 24h column and stay clamped.
+
 Spelling varies between vintages.
 The scanner's alias table resolves `Gethy` to `gety`, `Nai-Nia` (SitRep 030) to `nia_nia`, `MakisoKisangani` (SitRep 064) and the wrapped `Makiso-` / `Kisangani` to `makiso_kisangani`, the wrapped `Boma` / `Mangbetu` to `boma_mangbetu`, `Bambu-mine` to `bambu` and `Mungbwalu` to `mongbwalu`, plus the variants the mirror's `aliases.csv` records from vintages this archive lacks (`Nyakunde`, `Rumba`, `Mongbalu`, `Tchomai`, `Wanierukula`, `Manguripa`).
 Hyphen, space and accent differences need no entry.

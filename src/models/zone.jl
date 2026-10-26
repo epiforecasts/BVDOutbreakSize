@@ -2533,9 +2533,15 @@ function zone_fit_inputs(
         zone_reattribution_days(obs.zone_confirmed_history),
         zone_reattribution_days(death_history)
     )
+    ## The printed 24h figures that replace a clamped zero where a zone's
+    ## cumulative falls ([`zone_increments`](@ref)).
+    printed_cases = hasproperty(obs, :zone_confirmed_revision_24h) ?
+        obs.zone_confirmed_revision_24h : Dict{String, Any}()
+    printed_deaths = hasproperty(obs, :zone_death_revision_24h) ?
+        obs.zone_death_revision_24h : Dict{String, Any}()
     per_patch = zone_increment_matrix(
         obs.zone_confirmed_history, patch_names;
-        reattribution
+        reattribution, printed = printed_cases
     )
     excluded = [
         (;
@@ -2643,12 +2649,10 @@ function zone_fit_inputs(
                 "$(zone_names[z])` is reported on different vintage days to " *
                 "the confirmed-case tables; both compositions read one grid."
         )
-        prev = 0
-        for v in 1:nv
-            c = Int(h.counts[v])
-            death_counts[z, v] = max(c - prev, 0)
-            prev = c
-        end
+        death_counts[z, :] = zone_increments(
+            h.counts, days,
+            _zone_printed(printed_deaths, zone_province[z], zone_names[z])
+        )
     end
     for (p, zs) in enumerate(patch_ranges)
         isempty(zs) && continue

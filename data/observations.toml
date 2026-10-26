@@ -1196,3 +1196,74 @@ sud_ubangi.unallocated = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 nord_ubangi.wapinda = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
 nord_ubangi.unallocated = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 source = "INSP situation reports, Tableau 2 (Répartition des cas et décès confirmés par province et zone de santé): per-health-zone cumulative confirmed deaths within each province. A zone absent from a vintage's table has no confirmed deaths yet and is recorded as 0. `unallocated` is the report's own row of deaths not yet attributed to a zone (Autres ZS, Non identifiées, A ventiler; NA is recorded as 0). Scanned by scripts/scan_zone_tableau2.jl, which requires the zone rows plus the unallocated row to sum exactly to the province_death_history value on every date that block carries, and to the printed province row and the national total on the 14 dates it does not (SitReps 018, 019, 020, 021, 022, 023, 024, 025, 026, 027, 028, 030, 031, 073). SitReps 034, 055, 059, 081, 083, 089 are left out because their zone rows do not sum to their own printed province row. MIRROR DATE: 2026-07-01 (SitRep 048) from the INRB-UMIE mirror's per-zone cumulative_confirmed_deaths, summing to the national 452 with a zero NA row; every zone lies between its 30 June and 2 July values. SitReps 137-141 (28 September-2 October) appended from scripts/scan_zone_tableau2.jl, every zone summing to the committed province value and every province to the national total. Alimbongo (Nord-Kivu) enters at SitRep 141 (2 October, 4 cases and 2 deaths, named in the report as 'Nouvelle zone de sante touchee'), zero before. SitRep 140 prints its Ituri A ventiler cases cell as 'AN' rather than 'NA'; the scanner reads both as the empty cell. SitRep 143 (4 October) appended from scripts/scan_zone_tableau2.jl, every zone summing to the committed province value and every province to the national total; a blind reader's transcription of Tableau 2 agrees with the scan on every cell. SitRep 142 (3 October) is not published on insp.cd and the INRB-UMIE mirror is not used to fill it here, so the block steps from 2 to 4 October. No new zone (64/167). SitReps 144 (5 October) and 145 (6 October) appended from scripts/scan_zone_tableau2.jl, every zone plus the Ituri A ventiler row (493 deaths on both days) summing to the committed province value and every province to the national total; two blind readers' transcriptions of Tableau 2 agree with each other and with the scan on every cell. No new zone (64/167). SitReps 146 to 149 (7 to 10 October) appended from scripts/scan_zone_tableau2.jl, every zone plus the Ituri A ventiler row (493 deaths) summing to the committed province value and every province to the national total. SitRep 148 prints 'NA!' in the A ventiler Letalite cell, which the scanner ignores. SitRep 147 adds Dakwa (Bas-Uele, 1 case and 0 deaths on 8, 9 and 10 October; 'Avec l'ajout de la zone de sante de Dakwa au Bas Uele, 65 zones de sante sur 167'), which matches no feature of the Ministry of Health health-zone shapefile behind data/health_zones.csv (its 11 Bas-Uele zones are Aketi, Ango, Bili, Bondo, Buta, Ganga, Likati, Monga, Poko, Titule and Viadana, and the report still counts 11), so it has no population or centroid. Until it is given a polygon or an alias to its parent zone, its counts are carried in bas_uele.unallocated (1 case, 0 deaths from 8 October), which keeps the zone rows partitioning the province; this is the first non-Ituri unallocated count, and it is ours rather than the report's. Read once from the text layer and the page images and compared cell by cell with the scan, with no disagreement; no second blind reader was available for this update. SitReps 150 and 151 (11 and 12 October) appended from scripts/scan_zone_tableau2.jl, every zone plus the Ituri A ventiler row (493 deaths on both days) summing to the committed province value and every province to the national total. Dakwa (0 deaths on both days) stays in bas_uele.unallocated. No new zone (65/167). Read once from the text layer and the page images and compared cell by cell with the scan, with no disagreement; no second blind reader was available for this update. SitRep 152 (13 October) appended from scripts/scan_zone_tableau2.jl, every zone plus the Ituri A ventiler row (493 deaths) summing to the committed province value and every province to the national 4 441. Dakwa (0 deaths) stays in bas_uele.unallocated. Read by two independent blind readers and compared cell by cell with the scan, with no disagreement. SitReps 153 and 154 (14 and 15 October) appended from scripts/scan_zone_tableau2.jl, every zone plus the Ituri A ventiler row (493 deaths on both days) summing to the committed province value and every province to the national 4 478 and 4 510. Each zone's step equals its printed 'Total deces confirmes' day column. Dakwa (0 deaths on both days) stays in bas_uele.unallocated. Read once from the text layer and once from the page images and compared cell by cell with the scan, with no disagreement; no second blind reader was available for this update. nord_ubangi.wapinda and nord_ubangi.unallocated are 0 on every date to SitRep 154. SitReps 155 to 159 (16 to 20 October) appended from scripts/scan_zone_tableau2.jl, every zone plus the Ituri A ventiler row (493 deaths throughout) summing to the committed province value and every province to the national 4 536, 4 561, 4 602, 4 646 and 4 687. Wapinda 1 death (a community death at SitRep 155). Dakwa (0 deaths) stays in bas_uele.unallocated. Read by two independent blind readers (text layer and page images) and compared cell by cell with the scan, with no disagreement."
+
+# The printed 24h figure of Tableau 2 (Situation du jour (24 h): Nouv. cas
+# and Total décès confirmés) on each zone-vintage whose cumulative count
+# falls by more than one between consecutive vintages, the falls
+# `zone_cumulative_falls` flags. A fall is a revision, so the cumulative
+# difference is negative and the increment is clamped to zero; the 24h
+# figure is the zone's new count that day and replaces the clamped zero.
+# Only those cells are recorded: on every other zone-vintage the increment
+# is still the cumulative difference. A blank 24h cell is read as 0, as
+# the province row's 24h figure is the sum of the printed zone cells.
+[zone_confirmed_revision_24h]
+source = "INSP situation reports, Tableau 2, Situation du jour (24 h) column Nouv. cas, read with pdftotext -layout on the zone-vintages where the zone's cumulative confirmed cases fall: SitRep 065 (18 July) Wamba blank under a Haut-Uele province cell of '—'; SitRep 069 (22 July) Ariwara, Aungba, Boga and Drodro blank and Butembo 4, the Ituri zone cells summing to the province row's 73 and the Nord-Kivu cells to its 18. The falls of SitRep 028 (11 June, Butembo and Katwa) are not recorded, since that table has no 24h columns."
+
+[zone_confirmed_revision_24h.haut_uele.wamba]
+dates = ["2026-07-18"]
+values = [0]
+
+[zone_confirmed_revision_24h.ituri.ariwara]
+dates = ["2026-07-22"]
+values = [0]
+
+[zone_confirmed_revision_24h.ituri.aungba]
+dates = ["2026-07-22"]
+values = [0]
+
+[zone_confirmed_revision_24h.ituri.boga]
+dates = ["2026-07-22"]
+values = [0]
+
+[zone_confirmed_revision_24h.ituri.drodro]
+dates = ["2026-07-22"]
+values = [0]
+
+[zone_confirmed_revision_24h.nord_kivu.butembo]
+dates = ["2026-07-22"]
+values = [4]
+
+[zone_death_revision_24h]
+source = "INSP situation reports, Tableau 2, Situation du jour (24 h) column Total décès confirmés, read with pdftotext -layout on the zone-vintages where the zone's cumulative confirmed deaths fall: SitRep 060 (13 July) Nia-Nia 0; SitRep 065 (18 July) Wamba blank under a Haut-Uele province cell of '—'; SitRep 069 (22 July) Bambu 4, Bunia 7, and Kambala and Mambasa blank, the Ituri zone cells summing to the province row's 45; SitRep 073 (26 July) Katwa -2, footnoted 'Harmonisation de nombre de décès par zone de santé dans la province de Nord-Kivu (moins 2 décès)', so the printed figure is the revision itself and is read as no new death; SitRep 139 (30 September) Rwampara 0. The fall of SitRep 028 (11 June, Beni) is not recorded, since that table has no 24h columns."
+
+[zone_death_revision_24h.haut_uele.wamba]
+dates = ["2026-07-18"]
+values = [0]
+
+[zone_death_revision_24h.ituri.bambu]
+dates = ["2026-07-22"]
+values = [4]
+
+[zone_death_revision_24h.ituri.bunia]
+dates = ["2026-07-22"]
+values = [7]
+
+[zone_death_revision_24h.ituri.kambala]
+dates = ["2026-07-22"]
+values = [0]
+
+[zone_death_revision_24h.ituri.mambasa]
+dates = ["2026-07-22"]
+values = [0]
+
+[zone_death_revision_24h.ituri.nia_nia]
+dates = ["2026-07-13"]
+values = [0]
+
+[zone_death_revision_24h.ituri.rwampara]
+dates = ["2026-09-30"]
+values = [0]
+
+[zone_death_revision_24h.nord_kivu.katwa]
+dates = ["2026-07-26"]
+values = [-2]
