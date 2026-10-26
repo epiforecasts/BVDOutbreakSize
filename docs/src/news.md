@@ -22,7 +22,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
-- The national reproduction-number walk has no separate response term, so `rt_state.intervention_effect` and the logistic ramp on log $R_t$ are gone and the walk alone carries the change in transmission after the first situation report (#PR).
+- The national reproduction-number walk has no separate response term, so `rt_state.intervention_effect` and the logistic ramp on log $R_t$ are gone and the walk alone carries the change in transmission after the first situation report (#1164).
   The ramp made most of its rise over the walk's first twelve weekly knots, where the walk can draw the same path, so the data saw the effect only through its trade against the walk's steps and their scale.
   On the joint published as `results-3151`, the response multiplier $e^{\beta_R}$ has a 90% interval of 0.45 to 0.96 against a prior interval of 0.46 to 0.98, and the fit's worst-mixing parameters are the walk's step size (R-hat 1.03, bulk ESS 60) and the first ten knots of the walk (its in-sample evaluation page).
   The walk keeps its half-normal step prior, which nests a constant $R_t$, and its centred knots, which `RandomWalkVector` now draws with no offset.
