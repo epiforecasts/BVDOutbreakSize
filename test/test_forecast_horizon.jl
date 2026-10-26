@@ -42,9 +42,10 @@
         prev_report_days = [0, 0, 0, 0, 25, 25, 25, 25, 0],
         increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
     )
-    ## Four patches, the shape of the headline fit. The province tables are
+    ## Four patches, the first four of the headline fit's, enough to exercise
+    ## the coupling at a fraction of the cost. The province tables are
     ## partitions of the national confirmed and confirmed-death increments.
-    const NP = length(PROVINCE_NAMES)
+    const NP = 4
     const PROV = [4 5 3; 2 1 3; 1 0 1; 1 0 0]
     const PROV_DAYS = [28, 35, 40]
     const PROVD = [1 1; 1 1; 0 0; 0 1]

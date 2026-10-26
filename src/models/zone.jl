@@ -1,5 +1,5 @@
 # Health-zone composition model, the second stage of a two-stage Markov
-# melding. Stage one is the four-patch joint fit. Stage two takes its
+# melding. Stage one is the joint province model. Stage two takes its
 # posterior as the prior on the quantity the two stages share and fits the
 # per-zone confirmed-case and death tables as a within-patch composition,
 # with no feedback to stage one.
@@ -45,10 +45,14 @@ const _ZONE_PARENT_KEYS = (
     infections = :infections_patch,
     C_T = :C_T,
     importation_epsilon = :importation_epsilon_patch,
+    importation_flow = :importation_flow_effect,
     importation = :importation_patch,
     ascertainment_sd = :province_ascertainment_sd,
+    ascertainment_log_sd = :province_ascertainment_log_sd,
     province_ascertainment = :province_ascertainment,
     province_severity = :province_cfr_relative,
+    cfr = :CFR,
+    province_cfr = :CFR_patch,
     rho = :province_composition_rho,
     rho_death = :province_death_composition_rho,
     drift_sd = :region_drift_sd,
@@ -610,8 +614,11 @@ deformed by `scale`, on the log-odds scale so it stays below one:
 where `ō` is the mean log odds that an infection in `p` was imported and
 `s_{pq}` the share of `p`'s mean arrivals sent by `q`. A patch with no
 arrival share keeps its mean odds.
+
+`blocks` are the draw's kernel blocks ([`zone_gravity_blocks`](@ref)), or
+`nothing` for the fixed gravity blocks of `mix`.
 """
-function zone_draw_mixing(mix, scale, e)
+function zone_draw_mixing(mix, scale, e, blocks = nothing)
     np, n = size(mix.import_log_odds)
     Tp = promote_type(
         eltype(mix.import_log_odds),
@@ -638,8 +645,10 @@ function zone_draw_mixing(mix, scale, e)
     end
     origin_weight = e === nothing ? mix.origin_weight :
         mix.origin_weight .* e[mix.patch_of_zone]
+    within, between = blocks === nothing ? (mix.within, mix.between) :
+        (blocks.within, blocks.between)
     return (;
-        mix.within, mix.between, origin_weight, import_fraction = frac,
+        within, between, origin_weight, import_fraction = frac,
         mix.patch_of_zone,
     )
 end
@@ -658,17 +667,20 @@ days before the grid start, every pre-`t0` term of
 [`zone_fixed_terms`](@ref) is the undeformed one times one factor per
 patch, which `zone_pre` holds for each zone. `mixing` is the draw's
 between-patch movement ([`zone_draw_mixing`](@ref)), `nothing` when the
-zones do not mix. The result also carries the generation interval `g` and
+zones do not mix; `blocks` is its gravity kernel blocks, or `nothing` for
+the fixed kernel. The result also carries the generation interval `g` and
 the binned operators `report_bin` and `death_bin` of the draw.
 """
-function zone_deformation(zd, scale, e = nothing, delays = nothing)
+function zone_deformation(
+        zd, scale, e = nothing, delays = nothing, blocks = nothing
+    )
     dl = delays === nothing ?
         (;
             zd.g, zd.force_pre, zd.infections_pre, zd.report_bin,
             zd.death_bin,
         ) : delays
     mixing = zd.mixing === nothing ? nothing :
-        zone_draw_mixing(zd.mixing, scale, e)
+        zone_draw_mixing(zd.mixing, scale, e, blocks)
     return merge(
         _zone_deformed_patches(zd, dl, scale),
         (; mixing, dl.g, dl.report_bin, dl.death_bin)
@@ -844,6 +856,25 @@ function _mean_parent_vector(chn, key::Symbol)
         m .+= Float64.(v)
     end
     return m ./ length(vs)
+end
+
+## Posterior mean over draws of the province model's weighted kernel
+## ([`destination_weighted_kernel`](@ref)) from its per-draw log weights,
+## `vec` of an `n × n` matrix; empty for a chain without them.
+function _mean_parent_kernel(chn, key::Symbol)
+    _has_key(chn, key) || return zeros(0, 0)
+    ws = _draw_vectors(chn, key)
+    isempty(ws) && return zeros(0, 0)
+    np = isqrt(length(first(ws)))
+    np^2 == length(first(ws)) || throw(
+        DimensionMismatch("$key: $(length(first(ws))) entries is not square.")
+    )
+    K = province_importation_kernel(PROVINCE_POPULATIONS[1:np])
+    acc = zeros(np, np)
+    for w in ws
+        acc .+= destination_weighted_kernel(K, reshape(Float64.(w), np, np))
+    end
+    return acc ./ length(ws)
 end
 
 ## Beta matched by moments to the parent's draws of a probability. A
@@ -1360,7 +1391,9 @@ expected reports ([`zone_binned_increments`](@ref)). `def` is the patch
 trajectory, generation interval and delays the draw's shared quantity
 implies ([`zone_deformation`](@ref)); its default is the cut, the province
 model's posterior mean. Called by the model and, per draw, by the render.
-Returns `(; shares, forces, infections, imports, increments)`.
+Returns `(; shares, forces, infections, imports, increments, δ_daily,
+pre)`, the last two the daily deviations and each zone's pre-`t0` term at
+its initial share, which the renewal and the binning read.
 """
 function zone_forward(
         zd, δ_knots::AbstractMatrix, w0::AbstractVector,
@@ -1373,10 +1406,12 @@ function zone_forward(
         def.I_bar, def.g, δ_daily, w0, zd.patch_ranges,
         zd.t0, def.force_pre; mix, ε
     )
-    increments = zone_binned_increments(
-        def.report_bin, st.infections, def.zone_pre .* w0
+    pre = def.zone_pre .* w0
+    increments = zone_binned_increments(def.report_bin, st.infections, pre)
+    return (;
+        st.shares, st.forces, st.infections, st.imports, increments,
+        δ_daily, pre,
     )
-    return (; st.shares, st.forces, st.infections, st.imports, increments)
 end
 
 ## Cumulative zone infections to the last grid day: the pre-`t0` patch
@@ -1423,6 +1458,40 @@ end
 ## dispersion `ρ`, with `ρ` and `1 − ρ` floored at machine epsilon so a
 ## proposal at either end of `[0, 1]` gives a finite, positive `κ`.
 _zone_kappa(ρ::Real) = safe_rate(one(ρ) - ρ) / safe_rate(ρ)
+
+## The terms of one draw that the share renewal and the deviations are built
+## from, given the sampled values `θ`: the fields `z_w`, `σ_level`,
+## `z_level`, `δ_halflife`, `σ_δ`, `z_drift` (the innovations of all
+## `n_knots` knots, future ones included), `ρ_corr` (`nothing` with the
+## zone correlation off) and `ε_within`, `τ_mix`, `z_mix` (each `nothing`
+## with mixing off). Returns `(; ℓ, knot_args, δ_knots, w0, ε)`: the
+## correlation length (`nothing` with the correlation off), the arguments
+## of [`deviation_knots`](@ref) and its knots `(n_zones × n_knots)`, the
+## initial shares and the per-zone mixing fractions, the shared level moved
+## on the logit scale by `τ_mix` times the centred `z_mix` (`nothing` with
+## mixing off). `bvd_zone` and the zone kernel benchmarks both build their
+## draw from it.
+function _zone_draw_terms(zd, θ::NamedTuple, n_knots::Integer)
+    ℓ = θ.ρ_corr === nothing ? nothing :
+        -zd.correlation_distance / log(safe_rate(θ.ρ_corr))
+    level_factors = ℓ === nothing ? Matrix{Float64}[] :
+        zone_correlation_factors(zd.zone_distances, ℓ)
+    drift_factors = ℓ === nothing ? Matrix{Float64}[] :
+        zone_correlation_factors(zd.zone_walk_distances, ℓ)
+    w0 = zone_initial_shares(θ.z_w, zd.patch_ranges, zd.share_scale)
+    φ = exp2(-zd.week / θ.δ_halflife)
+    knot_args = (
+        θ.z_level, θ.z_drift, θ.σ_level, θ.σ_δ, φ, zd.patch_ranges,
+        level_factors, drift_factors, zd.walking, n_knots,
+    )
+    δ_knots = deviation_knots(knot_args...)
+    ε = θ.ε_within === nothing ? nothing :
+        logistic.(
+            logit(θ.ε_within) .+
+            θ.τ_mix .* (θ.z_mix .- sum(θ.z_mix) / length(θ.z_mix))
+        )
+    return (; ℓ, knot_args, δ_knots, w0, ε)
+end
 
 ## Shares at the knot days as an `(n_zones × n_knots)` matrix.
 function _zone_shares_at_knots(
@@ -1590,13 +1659,17 @@ a death table do not disperse alike. The two do not share one.
 
 Cases observe incidence times case-finding and deaths incidence times
 lethality, so each composition carries its own multiplier over the zones of
-a patch, [`relative_multiplier`](@ref): relative ascertainment on the cases
-and relative fatality on the deaths. Both are the province model's own
-per-province construction, log contrasts summing to zero within the group,
-partially pooled at a scale whose prior is the province posterior for the
-same scale between provinces. A composition identifies only the product of
-a multiplier and the incidence split, so the pooling is what separates
-them: as the scale shrinks the shares weight zones by incidence alone.
+a patch: relative ascertainment on the cases and relative fatality on the
+deaths. Both are the province model's own per-province construction,
+contrasts summing to zero within the group and partially pooled. The
+ascertainment is a log multiplier ([`relative_multiplier`](@ref)) whose
+scale takes its prior from the province posterior. The fatality is a logit
+shift of the province's case-fatality ratio, at the province model's
+posterior mean on the logit scale, so each zone's ratio is a probability
+and its multiplier on the deaths is the zone ratio over the province one.
+A composition identifies only the product of a multiplier and the
+incidence split, so the pooling is what separates them: as the scale
+shrinks the shares weight zones by incidence alone.
 
 Both are relative to the zone's own province. A factor common to a patch
 cancels in a within-patch composition, so the province level of each
@@ -1624,9 +1697,13 @@ so the zone stage only distributes them over the destination patch's
 zones and the same movement is not counted at both levels. Within
 a patch the spill is the zone stage's own mechanism and carries its own
 intensity, `ε_w ~ Beta(1, 20)` with a pooled per-origin deviation
-`τ (z − z̄)` on the logit scale. Mixing is off when the health-zone
-metadata does not cover every zone or the parent chain carries no
-between-patch movement (`zd.mixing === nothing`).
+`τ (z − z̄)` on the logit scale. Both blocks are rebuilt per draw at a
+sampled distance decay `γ ~ LogNormal(0, 1)` and weighted by destination
+zone with log weights centred within each patch, `σ_ω ~ Normal⁺(0, 0.5)`
+([`zone_gravity_blocks`](@ref)); every origin's total into each patch is
+held, so they move only the split over a patch's zones. Mixing is off
+when the health-zone metadata does not cover every zone or the parent
+chain carries no between-patch movement (`zd.mixing === nothing`).
 
 ### Deterministics
 
@@ -1641,11 +1718,14 @@ n_knots)`, `share_knots_zone` `(n_zones × n_knots)`, `delta_T_zone`,
 parameters, in the order of `_ZONE_DELAY_KEYS`),
 `zone_ascertainment_national` and `zone_severity_national` (the same
 multipliers against the national average, the province model's contrast
-times the zone's own),
+times the zone's own), `zone_severity_log_odds` (the zone's logit shift
+of its province's case-fatality ratio),
 `correlation_reference_zone` (`ρ_corr`) and `correlation_length_zone`
 (`ℓ`), `parent_eta_zone` (the whitened shared draw `η`),
 `parent_patch_T_zone` (the sampled patch infections on the last grid day)
-and, with mixing, `mixing_epsilon_zone`. Daily trajectories are rebuilt
+and, with mixing, `mixing_epsilon_zone`, `mixing_decay_zone` (`γ`),
+`mixing_destination_sd_zone` (`σ_ω`) and `mixing_destination_zone` (the log
+weights `ω`, one per zone). Daily trajectories are rebuilt
 from these by [`zone_forward`](@ref).
 
 ### Forecast
@@ -1667,9 +1747,11 @@ quantity is computed on the fitted days as without a forecast.
         zd;
         region_sd_prior = truncated(Normal(0, 0.3); lower = 0),
         region_halflife_prior = LogNormal(log(42), 0.6),
-        severity_sd_prior = truncated(Normal(0, 0.1); lower = 0),
+        severity_sd_prior = truncated(Normal(0, 0.15); lower = 0),
         mixing_within_prior = Beta(1, 20),
         mixing_departure_prior = truncated(Normal(0, 0.5); lower = 0),
+        mixing_decay_prior = LogNormal(0, 1),
+        mixing_destination_prior = truncated(Normal(0, 0.5); lower = 0),
         offset_prior = Normal(0, 1),
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
@@ -1709,9 +1791,10 @@ quantity is computed on the fitted days as without a forecast.
     ## Deaths per infection are taken as near-uniform across the zones of a
     ## patch, which is what lets the death composition pin the incidence
     ## split and the case composition identify ascertainment as the
-    ## residual. The prior is tight and fixed rather than inherited, the
-    ## asymmetry the province model makes between death ascertainment and
-    ## provincial lethality.
+    ## residual. The prior is tight and fixed rather than inherited. Its
+    ## scale is on the logit scale, where a shift `s` moves the log ratio by
+    ## about `(1 - CFR) s`, so 0.15 is about 0.1 on the log scale at the prior
+    ## mean ratio of 0.33, as for the provinces.
     σ_severity ~ severity_sd_prior
     z_severity ~ product_distribution(fill(offset_prior, n_contrast))
     ## Sampled only when used, or they would be prior-only dimensions.
@@ -1729,11 +1812,17 @@ quantity is computed on the fitted days as without a forecast.
         ε_within ~ mixing_within_prior
         τ_mix ~ mixing_departure_prior
         z_mix ~ product_distribution(fill(offset_prior, nz))
-        ε_mix = logistic.(
-            logit(ε_within) .+ τ_mix .* (z_mix .- sum(z_mix) / nz)
-        )
+        ## The gravity decay, and log weights centred within each patch, so
+        ## both move only the split over a patch's zones.
+        γ_zone ~ mixing_decay_prior
+        σ_destination ~ mixing_destination_prior
+        z_destination ~ product_distribution(fill(offset_prior, n_contrast))
+        ω_destination = σ_destination .*
+            (zd.mixing.gravity.destination_basis * z_destination)
+        blocks = zone_gravity_blocks(zd.mixing.gravity, γ_zone, ω_destination)
     else
-        ε_mix = nothing
+        ε_within = τ_mix = z_mix = nothing
+        blocks = nothing
     end
     ## The shared quantity, whitened, as the docstring's "shared quantity"
     ## section describes it.
@@ -1780,25 +1869,16 @@ quantity is computed on the fitted days as without a forecast.
             zone_parent_scale(zd.meld_weights, zd.meld_L, η, np, zd.n) :
             nothing
     end
-    def = zone_deformation(zx, scale, e_mix, delays)
+    def = zone_deformation(zx, scale, e_mix, delays, blocks)
     ## The correlation of two zones a reference distance apart, the prior
     ## taken from the province model's own learned correlation between its
     ## patches at the distance between their population centres.
     on = !isempty(zd.zone_distances)
-    level_factors = Matrix{Float64}[]
-    drift_factors = Matrix{Float64}[]
     if on
         ρ_corr ~ Beta(pp.correlation[1], pp.correlation[2])
-        ℓ_corr = -zd.correlation_distance / log(safe_rate(ρ_corr))
-        correlation_reference_zone := ρ_corr
-        correlation_length_zone := ℓ_corr
-        level_factors = zone_correlation_factors(zd.zone_distances, ℓ_corr)
-        drift_factors = zone_correlation_factors(
-            zd.zone_walk_distances, ℓ_corr
-        )
+    else
+        ρ_corr = nothing
     end
-    w0 = zone_initial_shares(z_w, zd.patch_ranges, zd.share_scale)
-    φ = exp2(-zd.week / δ_halflife)
     ## The province model's deviation construction
     ## ([`deviation_knots`](@ref)), with one group per patch and the zones of
     ## a patch as its units.
@@ -1811,12 +1891,19 @@ quantity is computed on the fitted days as without a forecast.
     else
         z_drift_all = z_drift
     end
-    δ_knots_all = deviation_knots(
-        z_level, z_drift_all, σ_level, σ_δ, φ, zd.patch_ranges,
-        level_factors, drift_factors, zd.walking, K + Kf
+    terms = _zone_draw_terms(
+        zd, (;
+            z_w, σ_level, z_level, δ_halflife, σ_δ, z_drift = z_drift_all,
+            ρ_corr, ε_within, τ_mix, z_mix,
+        ), K + Kf
     )
-    δ_knots = H == 0 ? δ_knots_all : δ_knots_all[:, 1:K]
-    fw = zone_forward(zx, δ_knots_all, w0, ε_mix, def)
+    if on
+        correlation_reference_zone := ρ_corr
+        correlation_length_zone := terms.ℓ
+    end
+    w0, ε_mix = terms.w0, terms.ε
+    δ_knots = H == 0 ? terms.δ_knots : terms.δ_knots[:, 1:K]
+    fw = zone_forward(zx, terms.δ_knots, w0, ε_mix, def)
     asc = relative_multiplier(
         z_ascertainment, σ_ascertainment, zd.multiplier_basis
     )
@@ -1833,11 +1920,19 @@ quantity is computed on the fitted days as without a forecast.
     )
     ## The allocated deaths of every vintage, through the
     ## infection-to-confirmed-death delay rather than the case delay.
-    D = zone_binned_increments(def.death_bin, fw.infections, def.zone_pre .* w0)
-    sev = relative_multiplier(
+    D = zone_binned_increments(def.death_bin, fw.infections, fw.pre)
+    ## Relative fatality on the logit scale against the province ratio, so
+    ## each zone's ratio is a probability and a zero contrast is the
+    ## province's. Deaths scale with the ratio, so the multiplier on the
+    ## shares is the zone ratio over the province one, at the province
+    ## model's posterior-mean ratio.
+    sev_logit = relative_contrast(
         z_severity, σ_severity, zd.multiplier_basis
     )
+    sev = logistic.(zd.province_cfr_logit .+ sev_logit) ./
+        logistic.(zd.province_cfr_logit)
     zone_severity_sd := σ_severity
+    zone_severity_log_odds := sev_logit
     zone_severity_relative := sev
     zone_severity_national := zd.province_severity .* sev
     @addlogprob! zone_composition_logpdf(
@@ -1860,7 +1955,7 @@ quantity is computed on the fitted days as without a forecast.
                 zd, zf, fw, zone_binned_increments(
                     delays === nothing ? zf.report_future :
                         delays.report_future,
-                    fw.infections, def.zone_pre .* w0
+                    fw.infections, fw.pre
                 ), asc, ρ, nd
             ), false
         )
@@ -1879,6 +1974,9 @@ quantity is computed on the fitted days as without a forecast.
         mixing_epsilon_zone := ε_mix
         mixing_within_zone := ε_within
         mixing_departure_zone := τ_mix
+        mixing_decay_zone := γ_zone
+        mixing_destination_sd_zone := σ_destination
+        mixing_destination_zone := ω_destination
         import_share_T_zone := [
             fw.imports[nd, z] / max(fw.infections[nd, z], eps(Float64))
                 for z in 1:nz
@@ -1999,7 +2097,9 @@ the shared quantity of [`zone_meld_block`](@ref), which deforms the
 centres and draws the delays.
 Returns `(; log_infections, g, f, death_pmf, delay_log_draws,
 origin_epsilon, import_log_odds, priors, province_ascertainment,
-province_severity)`.
+province_severity, province_cfr_logit)`, the last the mean logit of each
+province's case-fatality ratio (one national value when the chain has no
+province death split).
 """
 function zone_parent_inputs(chn)
     chn = _zone_parent_chain(chn)
@@ -2024,6 +2124,9 @@ function zone_parent_inputs(chn)
     ## the between-patch flows the zone stage applies are the province
     ## model's rather than a second estimate of them.
     origin_epsilon = _geomean_parent_vector(chn, keys_.importation_epsilon)
+    ## The province model's weighted kernel at its posterior mean over draws,
+    ## empty for a chain fitted without log weights on the kernel.
+    flow_kernel = _mean_parent_kernel(chn, keys_.importation_flow)
     ## The province model's own relative ascertainment and fatality, at its
     ## posterior mean. A factor common to a patch cancels in a within-patch
     ## composition, so these never reach the likelihood; they carry the
@@ -2032,6 +2135,7 @@ function zone_parent_inputs(chn)
         chn, keys_.province_ascertainment
     )
     province_severity = _mean_parent_vector(chn, keys_.province_severity)
+    province_cfr_logit = _mean_parent_cfr_logit(chn)
     import_log_odds = _mean_parent_log_odds(
         chn, keys_.importation, keys_.infections
     )
@@ -2039,8 +2143,16 @@ function zone_parent_inputs(chn)
     ## to its draws: a log-normal for each positive scale and a Beta for
     ## each composition overdispersion.
     priors = (;
+        ## The spread of the province relative case ascertainment, which
+        ## with the suspected-case detection on is detection times
+        ## confirmation, so the confirmation spread alone would understate
+        ## it. A chain fitted without the detection carries only the
+        ## latter.
         ascertainment_sd = _zone_parent_lognormal(
-            chn, keys_.ascertainment_sd, (log(0.2), 0.5)
+            chn,
+            _has_key(chn, keys_.ascertainment_log_sd) ?
+                keys_.ascertainment_log_sd : keys_.ascertainment_sd,
+            (log(0.2), 0.5)
         ),
         drift_sd = _zone_parent_lognormal(chn, keys_.drift_sd, (log(0.05), 0.5)),
         rho = _zone_parent_beta(chn, keys_.rho, (1.0, 24.0)),
@@ -2051,9 +2163,24 @@ function zone_parent_inputs(chn)
     )
     return (;
         log_infections = logI, g, f, death_pmf, delay_log_draws,
-        origin_epsilon, import_log_odds, priors,
-        province_ascertainment, province_severity,
+        origin_epsilon, flow_kernel, import_log_odds, priors,
+        province_ascertainment, province_severity, province_cfr_logit,
     )
+end
+
+## Mean over the parent's draws of the logit of each province's
+## case-fatality ratio, or of the national ratio, one value for every
+## patch, when the chain has no province death split.
+function _mean_parent_cfr_logit(chn)
+    keys_ = _ZONE_PARENT_KEYS
+    _has_key(chn, keys_.province_cfr) ||
+        return [mean(logit.(_zone_parent_draws(chn, keys_.cfr)))]
+    vs = _draw_vectors(chn, keys_.province_cfr)
+    m = zeros(Float64, length(first(vs)))
+    for v in vs
+        m .+= logit.(Float64.(v))
+    end
+    return m ./ length(vs)
 end
 
 ## One zone's cumulative series, or `nothing` when the table omits it.
@@ -2082,7 +2209,8 @@ end
 $(TYPEDSIGNATURES)
 
 The two blocks of the zone importation kernel, both normalisations of one
-gravity pull over every zone ([`gravity_pull`](@ref)).
+gravity pull over every zone ([`gravity_pull`](@ref)) at distance decay
+`decay` ([`zone_gravity_blocks`](@ref)).
 
 `within[z, q]`, for `z` and `q` in the same patch, is column-stochastic
 within that patch, so a zone's within-patch spill is a transfer that
@@ -2098,10 +2226,12 @@ K^b_{zq} = K_{p(z)p(q)}\\,
 
 so its column over a destination patch's zones sums to that patch's entry
 of `parent_kernel`, the province model's own
-[`province_importation_kernel`](@ref). Summed over the zones of a patch,
-the zone stage's between-patch flow is the province model's for the same
-origin intensity, which is what keeps one movement from being counted at
-both levels.
+[`province_importation_kernel`](@ref) weighted by its fitted per-flow
+deviation ([`destination_weighted_kernel`](@ref)). Summed over the zones of
+a patch, the zone stage's between-patch flow is the province model's for
+the same origin intensity, which is what keeps one movement from being
+counted at both levels. The parent kernel is the posterior mean of the
+province model's weighted kernel over its draws.
 """
 function zone_importation_blocks(
         pops::AbstractVector, coords::AbstractVector,
@@ -2109,40 +2239,102 @@ function zone_importation_blocks(
         parent_kernel::AbstractMatrix;
         decay::Real = PROVINCE_DISTANCE_DECAY
     )
-    nz = length(pops)
-    pull = gravity_pull(
-        pops; distances = province_distance_matrix(coords), decay
+    g = zone_gravity_inputs(pops, coords, patch_of_zone, parent_kernel)
+    return zone_gravity_blocks(g, decay, zeros(length(pops)))
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The fixed inputs of [`zone_gravity_blocks`](@ref), built once per fit: the
+log populations, the log distances between centroids (zero where two
+coincide, so the pull is the population alone), the off-diagonal and
+same-patch masks, the parent kernel entry of every zone pair in different
+patches, the patch indicator `(n_patches × n_zones)` and the block-diagonal
+sum-to-zero basis `(n_zones × Σ_p (n_p − 1))` of the destination weights.
+"""
+function zone_gravity_inputs(
+        pops::AbstractVector, coords::AbstractVector,
+        patch_of_zone::AbstractVector{<:Integer},
+        parent_kernel::AbstractMatrix
     )
+    nz = length(pops)
     np = size(parent_kernel, 1)
     length(patch_of_zone) == nz && all(p -> 1 <= p <= np, patch_of_zone) ||
         throw(
         DimensionMismatch(
-            "zone_importation_blocks: every zone's patch must index the " *
+            "zone_gravity_inputs: every zone's patch must index the " *
                 "$np-patch parent kernel."
         )
     )
-    within = zeros(Float64, nz, nz)
-    between = zeros(Float64, nz, nz)
-    col = zeros(Float64, np)
-    @inbounds for q in 1:nz
-        pq = patch_of_zone[q]
-        ## Column totals of the pull into each patch, so both blocks
-        ## normalise over one sweep of the origin's column.
-        fill!(col, 0.0)
-        for z in 1:nz
-            col[patch_of_zone[z]] += pull[z, q]
-        end
-        for z in 1:nz
-            p = patch_of_zone[z]
-            col[p] > 0 || continue
-            if p == pq
-                within[z, q] = pull[z, q] / col[p]
-            else
-                between[z, q] = parent_kernel[p, pq] * pull[z, q] / col[p]
-            end
-        end
+    d = province_distance_matrix(coords)
+    poz = patch_of_zone
+    return (;
+        log_pop = log.(Float64.(pops)),
+        log_distance = [
+            d[z, q] > 0 ? log(d[z, q]) : 0.0 for z in 1:nz, q in 1:nz
+        ],
+        off_diagonal = [Float64(z != q) for z in 1:nz, q in 1:nz],
+        same_patch = [
+            Float64(z != q && poz[z] == poz[q]) for z in 1:nz, q in 1:nz
+        ],
+        parent_between = [
+            poz[z] == poz[q] ? 0.0 : Float64(parent_kernel[poz[z], poz[q]])
+                for z in 1:nz, q in 1:nz
+        ],
+        indicator = [Float64(poz[z] == p) for p in 1:np, z in 1:nz],
+        destination_basis = _zone_destination_basis(poz, np),
+        patch_of_zone = poz,
+    )
+end
+
+## The sum-to-zero basis of each patch's zones on the diagonal, so
+## `σ Q z` is `relative_multiplier`'s log contrast in one product.
+function _zone_destination_basis(patch_of_zone, np)
+    zones = [findall(==(p), patch_of_zone) for p in 1:np]
+    k_all = sum(max(length(zs) - 1, 0) for zs in zones)
+    Q = zeros(length(patch_of_zone), k_all)
+    off = 0
+    for zs in zones
+        k = length(zs) - 1
+        k >= 1 || continue
+        Q[zs, (off + 1):(off + k)] = sum_to_zero_basis(k + 1)
+        off += k
     end
-    return (; within, between)
+    return Q
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The blocks ([`zone_pattern_blocks`](@ref)) of the log gravity pull at decay
+`γ` plus the log destination weights `ω`.
+"""
+function zone_gravity_blocks(g, γ::Real, ω::AbstractVector)
+    return zone_pattern_blocks(g, zone_log_gravity(g, γ) .+ ω)
+end
+
+"The log gravity pull `log N_z − γ log d_zq`, the centre of the zone kernel."
+zone_log_gravity(g, γ::Real) = g.log_pop .- γ .* g.log_distance
+
+"""
+$(TYPEDSIGNATURES)
+
+The within and between blocks of a log pattern `L`, `L[z, q]` the log
+relative pull of destination `z` on origin `q`. Each origin's column of
+`exp(L)` is normalised over every destination patch, within its own patch
+to one and into another to the parent kernel entry, so the totals into
+each patch do not depend on `L` and it moves only the split over a patch's
+zones.
+"""
+function zone_pattern_blocks(g, L::AbstractMatrix)
+    pull = g.off_diagonal .* exp.(L)
+    col = g.indicator * pull
+    ## An origin with no pull into a patch keeps a zero column, not 0/0.
+    share = pull ./ ifelse.(col .> 0, col, one.(col))[g.patch_of_zone, :]
+    return (;
+        within = share .* g.same_patch, between = share .* g.parent_between,
+    )
 end
 
 """
@@ -2561,6 +2753,9 @@ function zone_fit_inputs(
         province_severity = _zone_province_factor(
             parent.province_severity, patch_of_zone
         ),
+        province_cfr_logit = Float64[
+            parent.province_cfr_logit[min(p, end)] for p in patch_of_zone
+        ],
         forecast,
     )
     dates = [obs.seeding + Day(d - 1) for d in days]
@@ -2630,7 +2825,17 @@ function _zone_mixing_or_nothing(
     kernel = province_importation_kernel(
         PROVINCE_POPULATIONS[1:min(np, length(PROVINCE_POPULATIONS))]
     )
-    blocks = zone_importation_blocks(pops, coords, patch_of_zone, kernel)
+    if !isempty(parent.flow_kernel)
+        size(parent.flow_kernel) == size(kernel) || throw(
+            DimensionMismatch(
+                "zone stage: a $(size(parent.flow_kernel)) parent kernel " *
+                    "for $np patches."
+            )
+        )
+        kernel = parent.flow_kernel
+    end
+    gravity = zone_gravity_inputs(pops, coords, patch_of_zone, kernel)
+    blocks = zone_gravity_blocks(gravity, PROVINCE_DISTANCE_DECAY, zeros(nz))
     ## The intensity is a relative weight across origin patches inside a
     ## pattern that is normalised over the destination patch, so its overall
     ## scale cancels; it is centred at one so the weights stay near unity,
@@ -2641,7 +2846,7 @@ function _zone_mixing_or_nothing(
         blocks.within, blocks.between, origin_weight, patch_of_zone,
         import_log_odds = reshape(parent.import_log_odds, np, n),
         arrival_shares = _zone_arrival_shares(ε_bar, kernel, I_bar),
-        patch_epsilon = ε_bar, kernel,
+        patch_epsilon = ε_bar, kernel, gravity,
     )
 end
 

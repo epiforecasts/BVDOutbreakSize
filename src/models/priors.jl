@@ -386,7 +386,7 @@ full generation interval of differentiable history. The renewal recursion
 ([`renewal_infections`](@ref)) then grows the trajectory over
 `renewal_start+1 … n` under the time-varying `R_t`, depleting a pool of
 `population`. The default is the summed 2019 INS resident population of the
-seven affected provinces ([`PROVINCE_SOURCE_POPULATIONS`](@ref)).
+eight affected provinces ([`PROVINCE_SOURCE_POPULATIONS`](@ref)).
 
 The total outbreak age is `T = m·G + τ_obs` (cryptic duration plus the
 observation span `τ_obs = n − renewal_start`). The genetic seeding bound is
@@ -1287,9 +1287,14 @@ following the Stan prior-choice recommendations. Returns
 end
 
 """
-Partially-pooled negative-binomial dispersions for the `n_streams`
-passive-surveillance count streams in the joint model (suspected cases,
-suspected deaths, confirmed cases and confirmed deaths). Each stream draws
+Partially-pooled negative-binomial dispersions for the `n_streams` count
+streams in the joint model (suspected cases, suspected deaths, confirmed
+cases, confirmed deaths, the treatment-centre stocks and the recovered).
+The treatment-centre daily flows take a dispersion drawn about the stocks'
+dispersion, `log(1/sqrt(k_flow)) ~ Normal(log(1/sqrt(k_iso)), log(3)/2)`,
+a prior on the log ratio of the two overdispersion CVs set a priori (a
+threefold ratio at two SDs) and reasoned in [`treatment_flow_model`](@ref).
+Each stream draws
 its own dispersion from a shared population, so heterogeneous streams (a
 handful of deaths against hundreds of suspects against a daily laboratory
 volume) do not share one global `k` that the dominant stream pulls around,
@@ -1421,7 +1426,7 @@ as the national walk, linearly interpolated to the daily grid.
 intact, so the national streams see exactly the `Rt` process the headline
 model fits and it is the target the provinces pool toward. The provinces
 are not equally observed: Ituri carries most of the laboratory positives
-and the pooled `other` patch few. Shrinking toward a common trend lets the
+and the five smallest patches few. Shrinking toward a common trend lets the
 sparse patches borrow strength from Ituri and deviate only where the data
 insist. With `μ(t)` present the deviation covariance `Σ` is still
 free, so the cross-patch correlation is learned rather than assumed.
@@ -1466,10 +1471,10 @@ the correlation carries information the sds do not.
 ### What the data can and cannot identify here
 
 The composition of the confirmed cases identifies the contrast between
-provinces. The pooled `other` patch carries little signal. Expect `Ω` to
-be largely prior-driven and that patch's `Rt` to be pinned mostly by the
-deviation prior rather than by data, which is why `Σ` is given a proper
-shrinkage prior rather than a flat one.
+provinces. Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi carry
+little signal. Expect `Ω` to be largely prior-driven and those patches'
+`Rt` to be pinned mostly by the deviation prior rather than by data, which
+is why `Σ` is given a proper shrinkage prior rather than a flat one.
 
 `σ_drift → 0`, and with it every `σ_δ`, recovers a common `Rt` shape shared by every
 province, a fixed ratio between them. It is a special case of this model rather than an
@@ -1664,6 +1669,10 @@ function _daily_deviations(δ_knots::AbstractMatrix, days, n::Integer)
     return δ
 end
 
+## A correlation from a draw on `(0, 1)`, so a Beta prior on `(ρ + 1) / 2`
+## is a prior on `ρ ∈ (−1, 1)`.
+_unit_to_correlation(x) = 2 * x - 1
+
 """
 Multi-patch latent infection process. Runs a renewal equation per spatial
 patch with a shared generation interval, a shared incubation period, and
@@ -1688,6 +1697,16 @@ kernel is a structural assumption, and `ε` is weakly identified against the
 secondary-patch seeds, since both raise a secondary province's early
 incidence. Read `ε` as the scale of coupling the data will tolerate rather
 than as a measured flow.
+
+Gravity is the prior mean of the flows. The log flows `log K + W` have a
+multivariate normal prior with mean `log K` and covariance
+`σ_dest² C_dest + σ_flow² R(ρ_flow)`, a destination effect correlated
+`ρ_od` with each province's origin deviation plus a double-centred flow
+term with reciprocity correlation `ρ_flow`
+([`importation_flow_factor`](@ref)). The deviation `W` is drawn
+non-centred and is the data's departure from gravity. Each origin's column
+is rescaled to its gravity total ([`destination_weighted_kernel`](@ref)),
+so `W` moves where an origin's exports land and not how many it sends.
 
 Passing an all-zero kernel uncouples the provinces. `ε` is then not
 sampled, since against a zero kernel it would be a dimension the likelihood
@@ -1746,8 +1765,12 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_prior = Beta(1, 100),
         importation_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         importation_effect_prior = Normal(0, 0.5),
+        importation_destination_sd_prior = truncated(Normal(0, 1); lower = 0),
+        importation_flow_sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        importation_correlation_prior = Beta(2, 2),
         seed_fraction_prior = LogNormal(log(0.05), 1.0),
         basis = sum_to_zero_basis(n_patches),
+        flow_basis = flow_pair_basis(n_patches),
         incubation = (nmax) -> censored_delay_model(
             nmax;
             mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
@@ -1876,6 +1899,51 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon_sd := σ_ε
         importation_epsilon_effect := β_ε
         importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
+        ## The log flows `log K + W` have a multivariate normal prior whose
+        ## mean is the log gravity kernel, so gravity is the prior and `W` is
+        ## the data's departure from it. `W = L ζ` is non-centred on the
+        ## factor `L` of [`importation_flow_factor`](@ref), with `Σ = L Lᵀ`
+        ## the sum of a destination effect and a flow term.
+        ##
+        ## The destination draws correlate `ρ_od` with each province's origin
+        ## deviation and stay standard normal.
+        σ_dest ~ importation_destination_sd_prior
+        z_dest ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
+        ρ_od_unit ~ importation_correlation_prior
+        ρ_od = _unit_to_correlation(ρ_od_unit)
+        z_od = ρ_od .* z_ε .+ sqrt(1 - ρ_od^2) .* z_dest
+        dest_dev = sum_to_zero(sum_to_zero_factor(basis, σ_dest), z_od)
+        ## The flow term's correlation matrix gives each flow correlation
+        ## `ρ_flow` with its reverse.
+        n_sym = size(flow_basis.symmetric, 2)
+        n_flow = n_sym + size(flow_basis.antisymmetric, 2)
+        if n_flow > 0
+            σ_flow ~ importation_flow_sd_prior
+            z_flow ~ product_distribution(fill(Normal(0, 1), n_flow))
+            if n_sym > 0
+                ρ_flow_unit ~ importation_correlation_prior
+                ρ_flow = _unit_to_correlation(ρ_flow_unit)
+            else
+                ρ_flow = -one(Tp)
+            end
+            flow_sd = σ_flow
+            ζ = vcat(z_od, z_flow)
+            importation_flow_sd := σ_flow
+            importation_reciprocity := ρ_flow
+        else
+            flow_sd = zero(Tp)
+            ρ_flow = -one(Tp)
+            ζ = z_od
+        end
+        L_flow = importation_flow_factor(
+            basis, flow_basis, σ_dest, flow_sd, ρ_flow
+        )
+        log_weight = reshape(L_flow * ζ, n_patches, n_patches)
+        weighted = destination_weighted_kernel(importation_kernel, log_weight)
+        importation_destination_sd := σ_dest
+        importation_destination_effect := dest_dev
+        importation_origin_destination_correlation := ρ_od
+        importation_flow_effect := vec(log_weight)
     end
     ## 6. Multi-patch renewal. Each province runs its own renewal at its own
     ##    reproduction number and the national trajectory is their sum. There
@@ -1884,8 +1952,8 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    the reproduction number the country actually ran at is read back off
     ##    the summed infections in step 9.
     renewal_state = patch_infections(
-        Rt_matrix, g, seeds_matrix,
-        importation_kernel, ε_matrix, populations
+        Rt_matrix, g, seeds_matrix, coupled ? weighted : importation_kernel,
+        ε_matrix, populations
     )
     infections_matrix = renewal_state.infections
     importation_matrix = renewal_state.importation
@@ -2067,4 +2135,60 @@ Returns `(; w, pooling_sd)`.
     w = exp.(log_w .- peak)
     w ./= sum(w)
     return (; w, pooling_sd = τ_bg)
+end
+
+"""
+Per-patch probability that a BVD onset is detected as a suspected case,
+partially pooled about the DRC ascertainment `centre` on the logit scale,
+
+```math
+\\mathrm{logit}\\, p_p = \\mathrm{logit}\\, p_{\\text{DRC}}
+    + \\tau (Q \\mathbf{z})_p,
+\\qquad \\mathbf{z} \\sim \\mathrm{N}(\\mathbf{0}, I_{n-1}),
+```
+
+with `Q` the sum-to-zero basis ([`sum_to_zero_basis`](@ref)), so the
+contrast has no reference patch and each `p_p` lies in (0, 1) for any draw.
+`τ = 0` gives every patch the national probability. [`bvd_joint`](@ref)
+builds the national BVD suspected cases as the sum over the patches of
+`p_p` times the patch's onsets through the onset-to-report delay.
+
+A logit shift `s` moves the log probability by about `(1 - p) s`. At the
+prior centre of 0.75 the default spread of 0.5 is therefore about 0.125
+on the log scale, so a typical province detects within about 13% of the
+national rate. We use this prior.
+
+The contrast is drawn non-centred, since the data inform it weakly: the
+case composition sees it only through its product with the confirmation
+contrast, and the province occupancy splits only through its product with
+the patch incidence.
+
+With one patch the national probability is the patch's and nothing is
+sampled.
+
+Returns `(; ascertainment, relative, log_odds, sd)`: the patch
+probabilities, each over `centre`, the logit contrast and `τ`.
+"""
+@model function province_suspected_ascertainment_model(
+        n_patches::Integer, centre::Real;
+        sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        offset_prior = Normal(0, 1),
+        basis = sum_to_zero_basis(max(n_patches, 1))
+    )
+    if n_patches <= 1
+        return (;
+            ascertainment = fill(centre, max(n_patches, 1)),
+            relative = ones(typeof(float(centre)), max(n_patches, 1)),
+            log_odds = zeros(typeof(float(centre)), max(n_patches, 1)),
+            sd = zero(float(centre)),
+        )
+    end
+    τ_susp ~ sd_prior
+    z_susp ~ product_distribution(fill(offset_prior, n_patches - 1))
+    log_odds = sum_to_zero(sum_to_zero_factor(basis, τ_susp), z_susp)
+    ascertainment = _logit_shift(centre, log_odds)
+    return (;
+        ascertainment, relative = ascertainment ./ centre, log_odds,
+        sd = τ_susp,
+    )
 end

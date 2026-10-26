@@ -67,46 +67,14 @@ end
 
 const PREVALENCE_STATES = (:incubating, :symptomatic, :community)
 
-# Suspected-case ascertainment by patch: the national `p_drc` times the
-# relative ascertainment `rel`, rescaled so that the patches weighted by
-# `w` keep the national rate, as the joint splits the national suspect
-# volume by ascertainment-weighted incidence. The weights are the patches'
-# expected confirmations on the cut-off day
-# ([`_cutoff_confirmations`](@ref)), the incidence the joint splits on that
-# day. Capped at one.
-function _patch_ascertainment(p_drc::Real, rel::AbstractVector, w::AbstractVector)
-    weighted = sum(rel .* w)
-    scale = weighted > 0 ? sum(w) / weighted : 1.0
-    return [min(p_drc * r * scale, 1.0) for r in rel]
-end
-
-# Each area's expected confirmations on the last day: the infections
-# `x[a]` through the infection-to-confirmation PMF `f`
-# (incubation, onset to report and report to receipt), the onset-to-
-# confirmation kernel the joint applies to each patch's onsets.
-_cutoff_confirmations(x, f::AbstractVector) = [point_prevalence(xa, f) for xa in x]
-
-# The infection-to-confirmation PMF of one draw of the joint, discretised as
-# the delays of [`_prevalence_delays`](@ref).
-function _confirmation_pmf(p, receipt_mean::Real, receipt_sd::Real, horizon::Integer)
-    pmf(dist) = discretise_censored(dist, horizon)
-    return convolve_pmf(
-        convolve_pmf(
-            pmf(lognormal_meansd(p.inc_mean, p.inc_sd)),
-            pmf(Distributions.Gamma(p.report_alpha, p.report_theta))
-        ),
-        pmf(lognormal_meansd(receipt_mean, receipt_sd))
-    )
-end
-
 # Per-draw delay parameters and probabilities from a joint chain, one named
-# tuple per draw. The ascertainment is one value per patch, weighted by the
-# patches' expected confirmations on the cut-off day, or the
-# national value alone when the chain has no province ascertainment.
-function _prevalence_parameters(chn, horizon::Integer = 120)
+# tuple per draw. The ascertainment is the patch's suspected-case detection,
+# or the national value alone when the chain has no province detection.
+function _prevalence_parameters(chn)
     d(vn) = Float64.(vec(collect(chn[vn])))
     p_drc = d(:p_drc)
     ## A chain without the province death split holds only the national CFR.
+    ## The joint builds `CFR_patch` on the logit scale, so it lies in (0, 1).
     cfr = _has_key(chn, :CFR_patch) ? _draw_vectors(chn, :CFR_patch) :
         [[c] for c in d(:CFR)]
     cols = (;
@@ -124,25 +92,11 @@ function _prevalence_parameters(chn, horizon::Integer = 120)
         recovery_sd = d(@varname(treatment_state.recovery_los_state.delay_sd)),
     )
     delays = [(; map(c -> c[i], cols)...) for i in eachindex(p_drc)]
-    asc = if _has_key(chn, :province_ascertainment) &&
-            _has_key(chn, :infections_patch)
-        rel = _draw_vectors(chn, :province_ascertainment)
-        inf = _draw_vectors(chn, :infections_patch)
-        receipt_mean = d(_ZONE_PARENT_KEYS.receipt_mean)
-        receipt_sd = d(_ZONE_PARENT_KEYS.receipt_sd)
-        map(eachindex(p_drc)) do i
-            np = length(rel[i])
-            f = _confirmation_pmf(
-                delays[i], receipt_mean[i], receipt_sd[i], horizon
-            )
-            ## `infections_patch` is day-major, so patch `q` is every `np`th
-            ## entry from `q`.
-            w = _cutoff_confirmations([inf[i][q:np:end] for q in 1:np], f)
-            _patch_ascertainment(p_drc[i], rel[i], w)
-        end
-    else
+    ## The joint builds `province_suspected_ascertainment` on the logit
+    ## scale, so it lies in (0, 1).
+    asc = _has_key(chn, :province_suspected_ascertainment) ?
+        _draw_vectors(chn, :province_suspected_ascertainment) :
         [[a] for a in p_drc]
-    end
     return [
         (; delays[i]..., ascertainment = asc[i], cfr = cfr[i])
             for i in eachindex(asc)
@@ -208,35 +162,31 @@ function patch_prevalence(
     daily = _patch_daily(chn, :infections_patch, n_patches, n)
     series = [reduce(vcat, permutedims.(d)) for d in daily]
     return _prevalence_draws(
-        series, _prevalence_parameters(chn, horizon), 1:n_patches, horizon
+        series, _prevalence_parameters(chn), 1:n_patches, horizon
     )
 end
 
 # Per-draw parameters for the zones: zone draw `j` takes the joint's draw
 # `j` (cycling), its own delays from `θ[j]`, and one ascertainment and one
-# case-fatality ratio per zone. The ascertainment is the province's times the
-# zone's relative ascertainment `asc[j]`, rescaled within the province by the
-# weights `w[j]`, the zones' expected confirmations on the cut-off day,
-# as [`_patch_ascertainment`](@ref) rescales the provinces. The case-fatality ratio is the province's times the
-# zone's relative fatality `sev[j]`, as the joint builds its province ratios.
-# Both are capped at one.
-function _zone_prevalence_parameters(joint, θ, asc, sev, w, patch_of)
+# case-fatality ratio per zone. Each is the province's from the joint draw
+# shifted on the logit scale by the zone's contrast: the log of its relative
+# ascertainment `asc[j]` and its fatality contrast `sev[j]`. Both lie in
+# (0, 1).
+function _zone_prevalence_parameters(joint, θ, asc, sev, patch_of)
     at(k) = findfirst(==(k), _ZONE_DELAY_KEYS)
     own = (
         :inc_mean, :inc_sd, :report_alpha, :report_theta, :admission_alpha,
         :admission_theta, :death_alpha, :death_theta,
     )
+    shift(x, s) = logistic(logit(x) + s)
     return map(eachindex(θ)) do j
         p = joint[mod1(j, length(joint))]
-        ascertainment = zeros(length(patch_of))
-        for pr in unique(patch_of)
-            zs = findall(==(pr), patch_of)
-            ascertainment[zs] = _patch_ascertainment(
-                p.ascertainment[min(pr, end)], asc[j][zs], w[j][zs]
-            )
-        end
+        ascertainment = [
+            shift(p.ascertainment[min(patch_of[a], end)], log(asc[j][a]))
+                for a in eachindex(patch_of)
+        ]
         cfr = [
-            min(p.cfr[min(patch_of[a], end)] * sev[j][a], 1.0)
+            shift(p.cfr[min(patch_of[a], end)], sev[j][a])
                 for a in eachindex(patch_of)
         ]
         merge(p, NamedTuple{own}(map(k -> θ[j][at(k)], own)), (; ascertainment, cfr))
@@ -252,15 +202,16 @@ zone stage does not estimate the recovery stay, so zone draw `j` takes it
 from draw `j` of `joint_chn`, the joint the zone stage was fitted from,
 cycling when the zone chain is longer. It estimates ascertainment and
 fatality only relative to the zone's province
-(`zone_ascertainment_relative`, `zone_severity_relative`). A zone's
-case-fatality ratio is its province's from that joint draw times the zone's
-contrast. Its suspected-case ascertainment is the province's times the
-zone's contrast, rescaled so that the province's zones, weighted by their
-expected confirmations on the cut-off day, keep the province's rate. Both are capped at
-one. The ascertainment contrast is fitted to confirmed cases, so this assumes
-suspected-case detection varies between the zones of a province as
-confirmed-case detection does. Returns the states of
-[`patch_prevalence`](@ref).
+(`zone_ascertainment_relative`, `zone_severity_log_odds`). A zone's
+case-fatality ratio is its province's from that joint draw shifted by the
+zone's logit contrast. Its suspected-case detection is the province's from
+that joint draw shifted on the logit scale by the log of the zone's
+relative ascertainment, so both lie in (0, 1). The ascertainment contrast
+is fitted to confirmed cases, so this assumes suspected-case detection
+varies between the zones of a province with their confirmed-case
+ascertainment. The zone stage has no occupancy split to separate the two,
+and holding the province's detection would assume the zones differ only in
+confirmation instead. Returns the states of [`patch_prevalence`](@ref).
 """
 function zone_prevalence(
         zone_chn, inputs, joint_chn;
@@ -268,15 +219,10 @@ function zone_prevalence(
     )
     series = zone_infections(zone_chn, inputs)
     θ = _draw_vectors(zone_chn, :delay_parameters_zone)
-    w = [
-        _cutoff_confirmations(
-            [view(x, j, :) for x in series], zone_delay_pmfs(θ[j]).f
-        ) for j in eachindex(θ)
-    ]
     params = _zone_prevalence_parameters(
-        _prevalence_parameters(joint_chn, horizon), θ,
+        _prevalence_parameters(joint_chn), θ,
         _draw_vectors(zone_chn, :zone_ascertainment_relative),
-        _draw_vectors(zone_chn, :zone_severity_relative), w,
+        _draw_vectors(zone_chn, :zone_severity_log_odds),
         inputs.patch_of_zone
     )
     return _prevalence_draws(

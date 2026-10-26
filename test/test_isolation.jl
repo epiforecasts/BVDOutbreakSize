@@ -419,6 +419,64 @@ end
     @test any(O_susp[i] < st.demand[i] - 1.0e-9 for i in 1:n)
 end
 
+@testitem "treatment flows: scored with the flow dispersion" begin
+    using BVDOutbreakSize: treatment_flow_model
+    using Turing: loglikelihood, @varname
+    using Random: MersenneTwister
+    ## With no occupancy, capacity or census data the likelihood is the four
+    ## flows alone, so it moves with the flow dispersion and not with the
+    ## stock dispersion.
+    n = 40
+    t = 1:n
+    bvd_reports_daily = @. 20.0 * exp(-((t - 18.0)^2) / (2 * 6.0^2))
+    bg_daily = @. 12.0 * exp(-((t - 18.0)^2) / (2 * 6.0^2))
+    empty = (; days = Int[], counts = Int[])
+    days = collect(10:2:38)
+    flow(c) = (; days, counts = fill(c, length(days)))
+    m(k, k_flow) = treatment_flow_model(
+        empty, bvd_reports_daily, bg_daily, 0.6, 0.4;
+        admissions_history = flow(9), deaths_history = flow(2),
+        ruleout_history = flow(4), absconded_history = flow(1),
+        k_external = k, k_flow_external = k_flow
+    )
+    θ = rand(MersenneTwister(1), m(10.0, 10.0))
+    @test loglikelihood(m(5.0, 10.0), θ) ≈ loglikelihood(m(500.0, 10.0), θ)
+    @test !(loglikelihood(m(10.0, 5.0), θ) ≈ loglikelihood(m(10.0, 500.0), θ))
+    ## Standalone, the flow dispersion is sampled apart from the stocks'.
+    θs = rand(MersenneTwister(2), m(nothing, nothing))
+    @test haskey(θs, @varname(log_inv_sqrt_k_flow))
+    @test haskey(θs, @varname(disp_state.inv_sqrt_k))
+end
+
+@testitem "treatment flows: flow dispersion drawn about the stock dispersion" begin
+    using BVDOutbreakSize: treatment_flow_model, treatment_flow_defaults
+    using Turing: logprior, returned, @varname
+    using Distributions: Normal, logpdf
+    using Random: MersenneTwister
+    ## log(1/sqrt(k_flow)) ~ Normal(log(1/sqrt(k)), log(3)/2): centred on
+    ## the stocks' dispersion k, sampled directly. Only that term of the
+    ## prior depends on k, so the change in log prior between two values of
+    ## k is the change in that Normal's log density.
+    σ = treatment_flow_defaults().flow_dispersion_sd
+    @test σ ≈ log(3) / 2
+    n = 40
+    t = 1:n
+    bvd_reports_daily = @. 20.0 * exp(-((t - 18.0)^2) / (2 * 6.0^2))
+    bg_daily = @. 12.0 * exp(-((t - 18.0)^2) / (2 * 6.0^2))
+    empty = (; days = Int[], counts = Int[])
+    m(k) = treatment_flow_model(
+        empty, bvd_reports_daily, bg_daily, 0.6, 0.4; k_external = k
+    )
+    θ = rand(MersenneTwister(4), m(300.0))
+    x = θ[@varname(log_inv_sqrt_k_flow)]
+    lp(k) = logpdf(Normal(-log(k) / 2, σ), x)
+    @test logprior(m(300.0), θ) - logprior(m(30.0), θ) ≈ lp(300.0) - lp(30.0)
+    @test returned(m(300.0), θ).k_flow ≈ exp(-2x)
+    ## The offset is the log ratio of the flows' extra CV to the stocks'.
+    ## A threefold ratio sits at two prior SDs.
+    @test log(3) / σ ≈ 2
+end
+
 @testitem "admission_headroom: bound above obs, never on the boundary" begin
     using BVDOutbreakSize: admission_headroom
     ## Capacity 400 with previous-day occupancy 260 leaves 140 free beds; a
@@ -777,37 +835,16 @@ end
 ] begin
     using Turing: sample, Prior
     import FlexiChains
-    using BVDOutbreakSize: load_observations, bvd_joint, genetic_seeding_model
+    using Random: Xoshiro
+    using BVDOutbreakSize: load_observations, production_joint,
+        default_breakpoint
 
+    ## The headline joint scores the occupancy, bed and in-care streams.
     obs = load_observations()
     @test !isempty(obs.isolation_history.counts)
-    breakpoint = obs.n - obs.who_first_sitrep_days
-    m = bvd_joint(
-        obs.n, obs.exported_cases, obs.total_deaths,
-        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-        obs.tests_analysed;
-        confirmed_deaths = obs.confirmed_deaths,
-        deaths_history = obs.deaths_history,
-        reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        confirmed_deaths_history = obs.confirmed_deaths_history,
-        lab_history = obs.lab_history,
-        lab_daily_history = obs.lab_daily_history,
-        suspected_daily_history = obs.suspected_daily_history,
-        isolation_history = obs.isolation_history,
-        bed_capacity_history = obs.bed_capacity_history,
-        treatment_confirmed_incare_history =
-            obs.treatment_confirmed_incare_history,
-        treatment_suspect_incare_history =
-            obs.treatment_suspect_incare_history,
-        export_case_days = obs.export_case_days,
-        export_death_days = obs.export_death_days,
-        breakpoint = breakpoint,
-        genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days
-    )
+    m = production_joint(obs; breakpoint = default_breakpoint(obs))
     chn = sample(
-        m, Prior(), 30;
+        Xoshiro(1), m, Prior(), 30;
         chain_type = FlexiChains.VNChain, progress = false
     )
     C_T = vec(Array(chn[:C_T]))

@@ -141,7 +141,17 @@ A washed bar on a weekly tick column read to a grey band in its fill: the day re
 The faded bars past the last tick, which carry no dark outline: a day's window takes in the edge of the taller bar before it, so the last bars repeat their neighbour's height (SitReps 139 to 141 read 30 September as 6, 11 and 15 against bars of about 1, 2 and 6). Past the last tick, only dark outlines bound a window, and when no two of its columns agree the column nearest the day's centre is read.
 A washed bar on a tick column that breaks below its outlines: the tick column's run stops at a grey band, the column beside it shows fill but no outline, and the day reads well below the two equal outline columns around it (SitRep 143's 14 September read 24 against 62).
 Faded bars without outlines inside the band before the last tick: a two-column window takes in the edge of the taller bar before it or a one-column smear, so the day repeats its neighbour's height and a later vintage reads it lower (SitRep 143's 30 September read 31 against 23, and 130's 19 September 16 against 2).
+A bar whose interior column lost its top outline: the column shows fill but no dark pixel and its run stops far below the outlines either side, so the day falls by tens of cases at shift 0 while its neighbours hold (SitRep 160's 25 August, 31 against 88 to 89); the reader then reads the window's outlined columns.
+A stub left of the y-axis line: the block's first onset sits on the axis start, weeks before the first case, with a count of 1 (SitRep 160's 23 March).
 Day-grid drift from an integer tick spacing: `best shift` leaves 0 on pairs whose ticks were verified, the preferred shift alternates direction between consecutive pairs, and `drift_days` in `data/onset_curve_figures.csv` is non-zero.
+A washed bar on a tick column that breaks below unequal outlines: as the mode above, but the bars either side differ in height, so the bounding outlines do not pair up and the tick-column re-read does not fire.
+The day's columns sit on the tick, each one's skipped run stops more than two counts short of its unskipped run, and the unskipped run reaches one of the two outlines regardless of how tall the other is (SitRep 150's 14 September read 23 against 69).
+A short bar whose dead segment is dark enough to pass as outline: every column of the window counts as an outline, so the day is dropped or reads the bar before it.
+The day is read as the level run of dark, saturated, undashed columns through its window (SitRep 153's 12 May, 154's 5 June, 151's 17 July).
+An outline drawn across two columns whose second column is not soft: a window takes in the next bar's first column, and an empty day reads the next bar (SitRep 150's 4 May read 8 against 0).
+A column that reads a bounding outline's height, where the first column past that outline reads it too, is dropped when no two columns agree.
+The band's pink darkened beside the last bar's outline: a bar of 2 or 3 at the last tick with no outline pixel and no outline to its right (SitRep 151's 12 October).
+It is read as no bar.
 
 #### Dashboard cross-check
 
@@ -160,6 +170,7 @@ Edge differences measure reporting lag between the two line lists; they are expe
 | Script | What it does |
 | --- | --- |
 | `score_releases.jl` | Scores every past release's saved forecasts against the now-observed data and refreshes the scoring and per-release R_T/C_T/R0 overlay CSVs. The national, province and health-zone forecasts are scored into their own tables, the zone ones under `data/zone/`. |
+| `archive_dashboard.jl` | Downloads the dashboard map's five tables from the newest results release of each data cut-off, for the last 14 cut-offs, into `logs/dashboard_archive/<as_of>/` with an `index.json` listing them newest first. The docs build stages them under `zone_map/archive/` on deploys from `main`. Releases that predate the tables are skipped. Needs the `gh` CLI. |
 
 It also runs under `--project=.`.
 CI uses `--project=docs` because that environment is already instantiated at that point in the build.
