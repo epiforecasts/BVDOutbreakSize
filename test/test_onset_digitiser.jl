@@ -523,6 +523,226 @@ end
     @test (last_tick - Day(7), 12, 5) in rows
 end
 
+@testitem "digitize re-reads a tick-column bar that breaks below unequal outlines" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## The same break as above, but the bar beside the tick is shorter than
+    ## the one on its other side, so the two outline columns bounding the
+    ## window do not pair up and the tick-column re-read above does not fire
+    ## (SitRep 150's 14 September, between a 69 and a 51). The day sits on
+    ## the tick, its skipped run stops well short of its unskipped run, and
+    ## the unskipped run reaches the taller of the two outlines, so it is
+    ## read again regardless of the shorter one.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    x = 663
+    paint!(200:299, (x - 2):(x + 2), (255, 255, 255))
+    paint!(232:251, (x - 1):(x + 1), (200, 60, 60))
+    paint!(252:299, (x - 1):(x + 1), (200, 225, 235))
+    paint!(252:299, x:x, (100, 180, 230))
+    paint!(268:272, x:x, (220, 220, 220))
+    paint!(280:284, (x - 1):(x - 1), (220, 220, 220))
+    paint!(280:284, (x + 1):(x + 1), (220, 220, 220))
+    paint!(232:299, (x - 2):(x - 2), (60, 60, 60))
+    paint!(260:299, (x + 2):(x + 2), (60, 60, 60))
+    last_tick = Date(2026, 8, 24)
+    rows = [r for r in digitize(R, G, B, last_tick, 20) if r[2] + r[3] > 0]
+    @test length(rows) == 10
+    @test (last_tick - Day(7), 12, 5) in rows
+end
+
+@testitem "digitize reads a bar whose dark dead segment passes as outline" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## A short bar that is all dead segment, in a crimson dark enough to
+    ## pass the outline test in each of its columns (SitRep 154's 5 June and
+    ## SitRep 151's 17 July). No outline pair fits the day, so the window
+    ## clipped to the nearest outlines holds outline columns only, and the
+    ## reader used to drop the day. It is read as the level run of dark,
+    ## saturated columns through the window.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    x = 680
+    paint!(200:299, (x - 1):(x + 1), (255, 255, 255))
+    paint!(280:299, (x - 1):(x + 1), (110, 30, 40))
+    last_tick = Date(2026, 8, 24)
+    day = last_tick - Day(3)
+    rows = digitize(R, G, B, last_tick, 20)
+    @test (day, 0, 5) in rows
+end
+
+@testitem "digitize keeps soft columns beside a washed one" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## A bar between two outlines whose two saturated columns carry enough
+    ## dark pixels in the dead segment to count as soft, beside a washed
+    ## column that shows fill but no outline pixel (SitRep 153's 13 May).
+    ## Dropping the soft columns left only the washed one, which reads as
+    ## neither a bar nor empty, and the day was lost.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    x = 680
+    paint!(200:299, (x - 2):(x + 2), (255, 255, 255))
+    paint!(240:299, (x - 1):x, (100, 180, 230))
+    paint!(240:245, (x - 1):x, (110, 30, 40))
+    paint!(240:299, (x + 1):(x + 1), (200, 225, 235))
+    paint!(240:299, (x - 2):(x - 2), (60, 60, 60))
+    paint!(240:299, (x + 2):(x + 2), (60, 60, 60))
+    last_tick = Date(2026, 8, 24)
+    day = last_tick - Day(3)
+    rows = digitize(R, G, B, last_tick, 20)
+    @test (day, 14, 1) in rows
+end
+
+@testitem "digitize leaves an empty day empty beside an outline drawn across two columns" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## An empty day between two outlines, with a gridline stub on one
+    ## column and the next bar's first column inside the window (SitRep
+    ## 150's 4 May, read as 8 against 0 in the dashboard). That column reads
+    ## the next bar's outline, and so does the column past the outline, so
+    ## both belong to the next bar and the day is read without it.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    x = 680
+    paint!(200:299, (x - 1):x, (255, 255, 255))
+    paint!(290:299, x:x, (200, 225, 235))
+    paint!(232:299, (x - 2):(x - 2), (60, 60, 60))
+    paint!(232:299, (x + 1):(x + 5), (100, 180, 230))
+    paint!(232:251, (x + 1):(x + 5), (200, 60, 60))
+    paint!(232:299, (x + 2):(x + 2), (60, 60, 60))
+    paint!(232:299, (x + 6):(x + 6), (60, 60, 60))
+    last_tick = Date(2026, 8, 24)
+    rows = digitize(R, G, B, last_tick, 20)
+    @test all(r -> r[1] != last_tick - Day(3), rows)
+    @test (last_tick - Day(2), 12, 5) in rows
+end
+
+@testitem "digitize reads no bar from the band beside the last bar's outline" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## The last bar ends a column short of the last tick, and the pink band
+    ## beside its outline is darkened enough by JPEG ringing to leave the
+    ## page class (SitRep 151's 12 October, read as a bar of 3 where the
+    ## figure draws none). With no outline pixel in any column, even
+    ## without the gridline skip, and no outline to its right, it is no bar.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    x = 693
+    paint!(200:299, (x - 2):(x + 4), (255, 255, 255))
+    paint!(232:299, (x - 3):(x - 3), (60, 60, 60))
+    paint!(290:299, (x - 2):x, (230, 205, 205))
+    last_tick = Date(2026, 8, 24)
+    rows = digitize(R, G, B, last_tick, 20)
+    @test all(r -> r[1] != last_tick, rows)
+    @test (last_tick - Day(1), 12, 5) in rows
+end
+
+@testitem "digitize reads a dashed bar from its two agreeing soft columns" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## A bar under the dashed line whose middle column has its top outline
+    ## hidden by a dash, so its read to the outline lands on the alive/dead
+    ## junction, while the two soft columns beside it agree on the top
+    ## (SitRep 158's 14 May, read as 4 against 8 in the dashboard).
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    x = 680
+    paint!(16:299, (x - 2):(x + 2), (255, 255, 255))
+    for y in 16:14:254
+        paint!(y:(y + 6), (x - 1):(x + 1), (200, 40, 50))
+    end
+    paint!(268:284, (x - 1):(x + 1), (200, 60, 60))
+    paint!(285:299, (x - 1):(x + 1), (100, 180, 230))
+    paint!(268:270, (x - 1):(x - 1), (60, 60, 60))
+    paint!(268:270, (x + 1):(x + 1), (60, 60, 60))
+    paint!(268:268, x:x, (200, 40, 50))
+    paint!(284:285, (x - 1):(x + 1), (60, 60, 60))
+    paint!(268:299, (x - 2):(x - 2), (60, 60, 60))
+    paint!(268:299, (x + 2):(x + 2), (60, 60, 60))
+    last_tick = Date(2026, 8, 24)
+    rows = digitize(R, G, B, last_tick, 20)
+    @test (last_tick - Day(3), 8, 0) in rows
+end
+
 @testitem "digitize reads faded bars before the last tick from their own columns" begin
     using BVDOutbreakSize: BVDOutbreakSize
     using Dates: Date, Day
@@ -566,6 +786,73 @@ end
         (last_tick - Day(3), 15, 5), (last_tick - Day(2), 8, 2),
         (last_tick - Day(1), 3, 1), (last_tick, 1, 1),
     ]
+end
+
+@testitem "digitize reads a bar from its outlined column when the other lost its top" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## A bar between two outlines of its own height whose soft column
+    ## carries the top outline, beside two columns whose fill breaks well
+    ## below the top and shows no dark pixel at all (SitRep 160's 25
+    ## August, read as 31 against 88 to 89 in every other vintage). The
+    ## broken columns are the window's only non-soft ones, so the reader
+    ## read the bar from them.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    x = 680
+    paint!(200:299, (x - 2):(x + 2), (255, 255, 255))
+    paint!(240:299, (x - 1):(x - 1), (100, 180, 230))
+    paint!(240:245, (x - 1):(x - 1), (110, 30, 40))
+    paint!(270:299, x:(x + 1), (100, 180, 230))
+    paint!(240:299, (x - 2):(x - 2), (60, 60, 60))
+    paint!(240:299, (x + 2):(x + 2), (60, 60, 60))
+    last_tick = Date(2026, 8, 24)
+    rows = digitize(R, G, B, last_tick, 20)
+    @test (last_tick - Day(3), 14, 1) in rows
+end
+
+@testitem "digitize reads nothing left of the y-axis line" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    using Dates: Date, Day
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "digitize_onset_curve.jl"
+        )
+    )
+
+    ## A three-pixel grey stub on the first weekly tick, left of the
+    ## y-axis line, read as a bar of one count (SitRep 160's 23 March,
+    ## four weeks before the first case). The axis line here stands right
+    ## of the first tick, as SitRep 160's does.
+    R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
+    function paint!(rows, cols, c)
+        R[rows, cols] .= c[1]
+        G[rows, cols] .= c[2]
+        B[rows, cols] .= c[3]
+        return nothing
+    end
+    paint!(60:299, 38:38, (255, 255, 255))
+    paint!(60:299, 130:130, (100, 100, 100))
+    paint!(297:299, 122:124, (90, 90, 90))
+    last_tick = Date(2026, 8, 24)
+    rows = digitize(R, G, B, last_tick, 20)
+    @test (last_tick - Day(9), 12, 5) in rows
+    @test all(r -> r[1] > last_tick - Day(19 * 7 - 3), rows)
 end
 
 ## --- End to end against the real figures ----------------------------------

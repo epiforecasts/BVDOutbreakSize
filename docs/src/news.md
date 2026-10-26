@@ -125,6 +125,17 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
+- The onset curve gains SitReps 151, 153 and 158, so its latest vintage is 19 October rather than 10 October (#1138, #1148).
+  The reader now reads a short bar whose dark dead segment passes as outline, drops a column that carries the next bar's outline height, reads no bar from the band's pink beside the last outline, and lets two agreeing soft columns outvote a middle column under the dashed line.
+  The rebuild adds 8 May to SitReps 133 and 134 and 2 May to SitRep 146, removes a 4 May bar from SitReps 112 and 143 to 145, and moves SitRep 120's 7 September from 17 to 24.
+  SitReps 150 and 154 stay out, and #1154 gives the reasons.
+- The model cut-off advances to SitRep 162, 23 October, and the onset curve gains SitRep 160, so its latest vintage is 21 October (#1154).
+  SitRep 160 removes 10 cases and 1 death from Beni's cumulative with no note (#1159), so Nord-Kivu and the national total rise by less than the printed 24h counts.
+  The reader now reads a bar from its outlined columns when every other column of its window has lost its top outline, and reads nothing left of the y-axis line, which also drops a 24 and 28 April bar of 1 from SitReps 106 and 107.
+  SitReps 161 and 162 redraw SitRep 160's extract, so the onset curve does not add them.
+  The care scanner reads Nord-Kivu's `patients sont pris en charge` with its CTE/CT fraction.
+  `data/onset_dashboard_history.csv` adds the dashboard snapshots of 22 and 24 October.
+  Fitted values change with the new data.
 - Nord-Ubangi is the eighth source province (#1147).
   Its 2019 population, 1 425 000, is from the same INS *Annuaire statistique RDC 2020* table as the other seven.
   Its centre, (3.8889, 20.9641), is the WorldPop-weighted mean of its 11 health-zone centroids, printed by `task province-centres` from the same INRB-UMIE build as the other seven.
@@ -159,6 +170,10 @@ A major version: the report gains a health-zone level below the provinces, with 
   Inside the pink incomplete-data band a day whose columns disagree reads the level run of columns centred nearest it, so 30 September and 1 October read 23 and 7 rather than 31 and 15.
   A rebuild changes seven earlier cells in the band, after which none of their dates falls between consecutive vintages: 7 September in SitReps 118 to 120 (17, 26 and 24 to 9, 14 and 17), 129's 18 September (13 to 5) and 19 September in 130 to 132 (16, 16 and 27 to 2, 2 and 10).
   On onset dates more than 56 days before the report, SitRep 143 differs from the dashboard's 2 October snapshot by 0.38 cases a day and at most 5 (`scripts/compare_onset_sources.py`).
+- The tick-column re-read above now also fires when the two bounding outlines differ in height.
+  A day on a tick is read again, without the gridline skip, when every column's skipped run falls more than two counts short of its own unskipped run and that unskipped run reaches either outline (#1138).
+  SitReps 150 and 151 still stay out of the onset curve.
+  SitRep 150's 29 July reads 69 against 51 from day-grid drift rather than a tick-column break, and SitRep 151's larger render reads a phantom bar of 3 on 12 October, a day on which the figure draws no bar.
 - The dashboard onset history reads the daily counts embedded in the page, since the INRB-UMIE dashboard draws its onset charts in the browser from 25 September (#1062).
   It adds the 2 October snapshot, the first since 23 September, and the earlier rows are unchanged.
   On the 23 September data, built both ways, the counts and the old chart reading agree on every row.
