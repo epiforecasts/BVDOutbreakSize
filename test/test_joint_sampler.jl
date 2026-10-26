@@ -61,16 +61,12 @@ end
 @testitem "every fit shares the joint's sampler settings" tags = [
     :quality,
 ] begin
-    ## Every fit draws from the one budget. Each sampler call in the
-    ## registry splats the one helper; a fit that spells its own `samples`,
-    ## `n_adapts` or `target_accept` out would drift from the others.
+    ## Every fit draws from the one budget; a fit that spells its own
+    ## `samples` out would drift from the others.
     root = joinpath(@__DIR__, "..")
     src = read(joinpath(root, "docs", "fits", "registry.jl"), String)
-    ## Every `nuts_sample` call splats the joint's settings. The health-zone
-    ## fitter's settings are checked by behaviour in `test_fit_cache.jl`.
-    n_calls = count(r"nuts_sample\(", src)
-    @test n_calls >= 12
-    @test count("joint_sampler_args()...", src) == n_calls
+    ## The settings each fit samples at are checked by behaviour in
+    ## `test_fit_cache.jl` and the zone target test above.
     @test !occursin("samples = samples", src)
 
     ## The scripts that fit outside the registry take the same helpers.

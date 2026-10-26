@@ -96,9 +96,7 @@ end
 
 """
 Content-addressed cache key for fit `spec`, keyed on the sampler settings
-the fit samples at (`fit_sampler_args(spec)`), so a run with the
-`BVD_JOINT_*` overrides set writes its own cache entry for every fit and one
-with `BVD_ZONE_TARGET_ACCEPT` set does so for the health-zone fits.
+it samples at (`fit_sampler_args(spec)`).
 """
 function fit_key(spec::NamedTuple; chains::Integer = 2)
     sampler = fit_sampler_args(spec)
@@ -746,9 +744,9 @@ function build_fit_specs(
         spec = (; fields..., sampler = zone_sampler_args)
         return merge(spec, (; thunk = () -> run(spec)))
     end
-    ## A dependent key shares the parent's content hash and moves with the
-    ## joint's sampler overrides, but says nothing
-    ## about the parent chain's bytes, so a parent refit under an unchanged
+    ## A dependent key shares the parent's content hash and follows the
+    ## settings `fit_sampler_args(spec)` gives, but says nothing about the
+    ## parent chain's bytes, so a parent refit under an unchanged
     ## key pairs with the zone chain already cached against the old parent.
     push!(
         specs,
