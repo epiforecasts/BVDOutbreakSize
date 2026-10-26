@@ -106,10 +106,15 @@ end
     ## Every keyed feature is one of the metadata rows, once.
     keyed = [m.captures[1] for m in eachmatch(r"\"zone\":\"([a-z_]+)\"", text)]
     @test sort(keyed) == sort([r.zone for r in rows])
-    ## The map covers the seven provinces' zones, keyed or not.
+    ## The map covers the eight provinces' 178 zones, keyed or not.
     @test count("\"zone\":\"\"", text) > 0
     @test count("\"type\":\"Feature\"", text) ==
-        length(keyed) + count("\"zone\":\"\"", text)
+        length(keyed) + count("\"zone\":\"\"", text) == 178
+    ## Nord-Ubangi's 11 zones are all drawn, Wapinda among the keyed ones.
+    @test count("\"province\":\"nord_ubangi\"", text) == 11
+    w = only(r for r in rows if r.zone == "wapinda")
+    @test w.province == "nord_ubangi"
+    @test w.zscode == "CSvyaLZJiEt"
 end
 
 @testitem "zone_increment_matrix totals equal the zone-sum increments" begin
