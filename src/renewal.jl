@@ -265,10 +265,6 @@ A pre-computed `seed` of length `L < n` fills the first `L` days (see
 runs for days `L+1 … n`. Returns the length-`n` infection trajectory. The
 output element type is promoted from `Rt`, `g`, `seed` and `N`.
 
-The recursion is a ComposableRecurrences `Recurrence` over `g` with a
-hazard `Depletion` of `N`, run from day `L + 1` with the seed as its
-history. The package supplies its derivative rules.
-
 !!! note "Multi-patch analogue"
     See [`patch_infections`](@ref) for the meta-population extension
     with between-patch importation.
@@ -379,12 +375,6 @@ remaining days are the renewal recursion with importation. `importation` is
 the matching matrix of infections each patch received from the others,
 the arrivals term alone before depletion rather than the net of arrivals and
 departures. The element type is promoted from all input types.
-
-The recursion is a ComposableRecurrences `Recurrence` over `g` with two
-modifiers: `Redistribute` of the movement matrix of `K` and `epsilon`, then
-a hazard `Depletion` of each patch's pool. It runs from day `L + 1` with
-the seeds as its history, and `importation` is the trace of the
-redistribution. The package supplies the derivative rules.
 """
 function patch_infections(
         Rt_matrix::AbstractMatrix, g::AbstractVector,
@@ -428,9 +418,6 @@ delayed event on the same daily grid: entry `t` sums `x[t−d] · delay[d+1]`
 over lags `d` that stay in range. Maps infections to onsets, onsets to
 deaths, onsets to reports and onsets to detected exports. Type-stable and
 AD-transparent.
-
-It is a ComposableRecurrences `Convolution` of `delay`, which supplies
-its derivative rules.
 """
 convolve_delay(x::AbstractVector, delay::AbstractVector) =
     Convolution(delay)(x)
@@ -442,8 +429,7 @@ result has length `length(a) + length(b) - 1`. Its mass equals
 `sum(a) * sum(b)`, so normalised inputs give a normalised output. Used to
 build the infection→detection delay (incubation ⊕ onset-to-detection) and
 the infection→death delay (incubation ⊕ onset-to-death) for the exports
-streams from their component PMFs. It is a ComposableRecurrences
-`Convolution` of `a` over `b` padded with `length(a) - 1` zeros.
+streams from their component PMFs.
 """
 function convolve_pmf(a::AbstractVector, b::AbstractVector)
     (isempty(a) || isempty(b)) &&

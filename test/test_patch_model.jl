@@ -2281,3 +2281,14 @@ end
     @test destination_weighted_kernel(K, η)[:, 1] ≈
         destination_weighted_kernel(K, [0.0, 0.0, 0.1, -0.1])[:, 1]
 end
+
+@testitem "patch_infections: seeds covering the grid are the trajectory" begin
+    using BVDOutbreakSize: patch_infections
+    seeds = [1.0 2.0 3.0 4.0 5.0; 2.0 1.0 0.5 0.0 1.0]
+    K = [0.0 0.1; 0.2 0.0]
+    out = patch_infections(
+        fill(1.5, 2, 4), [0.5, 0.5], seeds, K, 0.05, [1.0e4, 2.0e4]
+    )
+    @test out.infections == seeds[:, 1:4]
+    @test out.importation == zeros(2, 4)
+end

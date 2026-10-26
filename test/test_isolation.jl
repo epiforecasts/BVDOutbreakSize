@@ -983,3 +983,61 @@ end
     @test floored(0.0) < floored(0.02)
     @test floored(0.02) <= floored(0.1)
 end
+
+@testitem "accumulate_occupancy: the balance's equations, clamps binding" begin
+    using BVDOutbreakSize: accumulate_occupancy
+    ## The balance as its docstring writes it, one day at a time off the
+    ## previous day's stocks.
+    function balance(A, Ab, dth, rec, ro, κ, h)
+        Ob, Og, Oc, Os = 0.0, 0.0, 0.0, 0.0
+        out = (;
+            demand = Float64[], O_bvd = Float64[], O_conf = Float64[],
+            O_susp = Float64[], abscond = Float64[],
+        )
+        for t in eachindex(A)
+            unconf = max(Ob - Oc, 0.0)
+            ab = κ * Os
+            ab_bvd = Os > 0 ? ab * unconf / Os : 0.0
+            ab_bg = Os > 0 ? ab * Og / Os : 0.0
+            out_bvd = dth[t] + rec[t]
+            share = Ob > 0 ? Oc / Ob : 0.0
+            Ob_t = max(Ob + A[t] - out_bvd - ab_bvd, 0.0)
+            Og_t = max(Og + Ab[t] - ro[t] - ab_bg, 0.0)
+            Oc_t = clamp(Oc + h[t] * unconf - out_bvd * share, 0.0, Ob_t)
+            Os_t = max(Ob_t + Og_t - Oc_t, 0.0)
+            push!(out.demand, Ob_t + Og_t)
+            push!(out.O_bvd, Ob_t)
+            push!(out.O_conf, Oc_t)
+            push!(out.O_susp, Os_t)
+            push!(out.abscond, ab)
+            Ob, Og, Oc, Os = Ob_t, Og_t, Oc_t, Os_t
+        end
+        return out
+    end
+    n = 40
+    A = 20 .* exp.(-(((1:n) .- 15) ./ 6) .^ 2) .+ 0.5
+    Ab = fill(3.0, n)
+    lag(x) = vcat(0.0, x[1:(end - 1)])
+    cases = (
+        ## Discharges and rule-outs larger than the stocks they leave.
+        (
+            lag(A) .* 0.7 .+ 2.0, lag(A) .* 0.6, lag(Ab) .* 1.6, 0.3,
+            fill(0.4, n),
+        ),
+        ## A confirmation hazard above one.
+        (
+            lag(A) .* 0.2, lag(A) .* 0.3, lag(Ab) .* 0.8, 0.05,
+            1.2 .+ 0.3 .* sin.(1:n),
+        ),
+    )
+    for (dth, rec, ro, κ, h) in cases
+        got = accumulate_occupancy(A, Ab, dth, rec, ro, κ, h)
+        ref = balance(A, Ab, dth, rec, ro, κ, h)
+        for k in keys(ref)
+            @test isapprox(
+                getproperty(got, k), getproperty(ref, k);
+                rtol = 1.0e-12, atol = 1.0e-12
+            )
+        end
+    end
+end

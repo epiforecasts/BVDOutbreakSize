@@ -1823,11 +1823,6 @@ The two [`abscond_thinned_flow`](@ref) flows that share an abscond rate and
 a confirmation hazard, walked in one pass. The cohort survival `S(t, d)`
 depends on neither the admissions nor the stay schedule, so the two flows
 run off one recurrence. Returns `(out1, out2)`.
-
-The flows are one ComposableRecurrences `Convolution` of the two admission
-series as strata, with a cohort-indexed (`Primary`) time-varying kernel:
-column `u` holds each schedule times the survival of the cohort admitted
-on day `u`. The shorter schedule is padded with zeros.
 """
 function abscond_thinned_flows(
         adm1::AbstractVector, pmf1::AbstractVector,
@@ -1843,6 +1838,8 @@ function abscond_thinned_flows(
     pmfs = zeros(T, 2, D)
     pmfs[1, eachindex(pmf1)] .= pmf1
     pmfs[2, eachindex(pmf2)] .= pmf2
+    ## Column `u` holds each schedule times the survival of the cohort
+    ## admitted on day `u`; the shorter schedule is padded with zeros.
     G = zeros(T, 2, D, n)
     @inbounds for u in 1:n
         surv = one(T)
@@ -1916,18 +1913,6 @@ not-yet-confirmed BVD occupancy plus the non-case rule-out occupancy, so
 `O_conf` is clamped into `[0, O_bvd]`, and the abscond denominator `O_susp(t-1)`
 is floored with `eps` so a zero suspect pool gives a zero split. Returns
 `(; demand, O_bvd, O_conf, O_susp, abscond)`, each a length-`n` vector.
-
-The balance is a ComposableRecurrences `Recurrence` with kernel `[1]`, which
-carries each day's stocks to the next, and a `Depletion` with three pools and
-no draw, which applies the day's flows to them. The pools are the unconfirmed
-true cases `O_bvd − O_conf`, the confirmed true cases `O_conf` and the
-non-case stock `O_bg`, so `O_bvd` and `O_susp` are sums of pools. Confirmation
-and absconding are share flows on the previous day's pools, and admissions,
-rule-outs and the BVD discharges are counts capped by what a pool holds. The
-discharges split between the two true-case pools by the previous day's
-confirmed share, read through `Recent`, and a pool's overshoot below zero is
-charged to the other one, as the clamps above do. A `Clamp` floors the
-unconfirmed pool at zero when its confirmation and abscond shares pass one.
 """
 function accumulate_occupancy(
         A_bvd::AbstractVector, A_bg::AbstractVector,
@@ -1943,6 +1928,12 @@ function accumulate_occupancy(
         e = zeros(T, 0)
         return (; demand = e, O_bvd = e, O_conf = e, O_susp = e, abscond = e)
     end
+    ## The pools are the unconfirmed and confirmed true cases and the
+    ## non-case stock. Confirmation and absconding are shares of the previous
+    ## day's pools; admissions, rule-outs and discharges are counts capped by
+    ## what a pool holds. The discharges split by the previous day's confirmed
+    ## share, and a pool's overshoot below zero is charged to the other one,
+    ## which is where the balance's clamps act.
     bvd_out = TimeVarying(deaths .+ recover)
     adm = TimeVarying(A_bvd)
     hz = TimeVarying(conf_hazard)
@@ -2087,10 +2078,6 @@ proportional split's mean-field approximation: a true case that dies
 before its test returns is never counted as confirmed. Returns the
 length-`n` confirmed-in-care sub-stock. [`incare_census`](@ref) forms the
 suspect sub-stock as the demand remainder `D − O_conf`.
-
-It is a ComposableRecurrences `Convolution` of `A_bvd` with a
-cohort-indexed (`Primary`) time-varying kernel: column `u` holds
-`CDF_conf(u, u + d) S_clin(d)` over cohort age `d`.
 """
 function two_clock_confirmed(
         A_bvd::AbstractVector, conf_hazard::AbstractVector,
@@ -2099,6 +2086,7 @@ function two_clock_confirmed(
     n = length(A_bvd)
     T = promote_type(eltype(A_bvd), eltype(conf_hazard), eltype(S_clin))
     L = length(S_clin)
+    ## Column `u` is the kernel of the cohort admitted on day `u`.
     K = zeros(T, L, n)
     @inbounds for u in 1:n
         unconf = one(T)

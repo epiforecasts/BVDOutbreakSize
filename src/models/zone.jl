@@ -224,8 +224,7 @@ The part of the convolution of each patch's infections `I_bar`
 `t0`: `out[p, t] = Σ_s w_s Ī_p(t − s)` over the lags `s` with
 `1 ≤ t − s < t0`, where `w[i]` is the weight of lag `s = i − 1 +
 first_lag`. `first_lag` is 1 for the generation interval and 0 for a
-delay. It is a ComposableRecurrences `Convolution` of the infections before
-`t0`, the later days set to zero.
+delay.
 """
 function zone_pre_convolution(
         I_bar::AbstractMatrix, w::AbstractVector, t0::Integer,

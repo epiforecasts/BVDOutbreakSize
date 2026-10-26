@@ -251,3 +251,12 @@ end
             by_date rtol = 1.0e-12
     end
 end
+
+@testitem "renewal_infections: a seed covering the grid is the trajectory" begin
+    using BVDOutbreakSize: renewal_infections
+    seed = [1.0, 2.0, 4.0, 3.0, 5.0, 2.0, 1.0, 6.0]
+    I = renewal_infections(fill(1.5, 6), [0.5, 0.5], seed, 1.0e4)
+    @test I == seed[1:6]
+    @test eltype(I) == Float64
+    @test renewal_infections(fill(1.5, 8), [0.5, 0.5], seed, 1.0e4) == seed
+end
