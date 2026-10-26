@@ -340,7 +340,7 @@ end
         @test isempty(calls)
 
         ## A fake headline under the joint's own key reaches the zone fitter
-        ## with the current observations and the joint's sampler settings.
+        ## with the current observations and the zone sampler settings.
         fake_joint = (; payload = "joint chain")
         fit_or_load(fit_key("joint"), () -> fake_joint; cache_dir = dir)
         r = spec("local").thunk()
@@ -350,7 +350,8 @@ end
         @test c.parent == fake_joint
         @test c.o === obs
         @test (; c.samples, c.n_adapts, c.target_accept, c.max_depth) ==
-            joint_sampler_args()
+            zone_sampler_args()
+        @test c.target_accept == zone_target_accept()
         @test c.chains == 2
         @test c.callback === nothing
 
@@ -390,5 +391,7 @@ end
     ## thunk runs.
     lazy = build_fit_specs(obs; run_sensitivity = false, cache_dir = dir)
     @test any(s -> s.id == "local", lazy)
+    ## The zone sampler settings key exactly the dependent fits.
+    @test Set(s.id for s in specs if is_dependent_fit(s)) == Set(ZONE_FIT_IDS)
     @test default_zone_fitter() === BVDOutbreakSize.fit_zone
 end

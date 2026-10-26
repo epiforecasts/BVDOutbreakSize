@@ -5,9 +5,9 @@
 #       --out logs/zone_local [--samples N] [--warmup N] [--chains 2] \
 #       [--depth N] [--target-accept X]
 #
-# The sampler flags default to `joint_sampler_args()` in
-# `docs/fits/registry.jl`, the settings every fit in the report uses, so a
-# run without them matches the docs build's health-zone fit.
+# The sampler flags default to `zone_sampler_args()` in
+# `docs/fits/registry.jl`, the joint's settings with the health-zone target
+# acceptance, so a run without them matches the docs build's health-zone fit.
 #
 # `--parent` is a parent extract (`<key>.parent.jls`, the `fit-extras-joint`
 # artefact of a CI run) or a full `joint__<hash>.jls` chain. The observations
@@ -25,7 +25,7 @@ include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
 include(joinpath(@__DIR__, "..", "docs", "fits", "summary.jl"))
 
 function parse_args(args)
-    s = joint_sampler_args()
+    s = zone_sampler_args()
     opts = Dict{String, String}(
         "out" => "logs/zone_local", "samples" => string(s.samples),
         "warmup" => string(s.n_adapts), "chains" => "2",

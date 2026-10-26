@@ -2492,10 +2492,12 @@ cfr_prior_fig #hide
 # Each chain starts from the first of a batch of prior draws whose log joint density is at or above the batch median.
 
 _sampler = joint_sampler_args(); #hide
-_sampler_same = "Every fit uses the same sampler settings.\n"; #hide
-_sampler_each = "Each runs two chains of $(_sampler.samples) post-warmup draws after $(_sampler.n_adapts) adaptation steps, at a target acceptance probability of $(_sampler.target_accept) and a maximum tree depth of $(_sampler.max_depth).\n"; #hide
-_sampler_both = "Both halves of the spatial comparison therefore differ only in the spatial structure and not in the sampler."; #hide
-Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
+_zone_sampler = zone_sampler_args(); #hide
+_sampler_each = "Each fit runs two chains of $(_sampler.samples) post-warmup draws after $(_sampler.n_adapts) adaptation steps, at a target acceptance probability of $(_sampler.target_accept) and a maximum tree depth of $(_sampler.max_depth).\n"; #hide
+_sampler_zone = _zone_sampler.target_accept == _sampler.target_accept ? #hide
+    "The health-zone fits use the same settings, so both halves of the spatial comparison differ only in the spatial structure and not in the sampler." : #hide
+    "The health-zone fits differ only in targeting an acceptance probability of $(_zone_sampler.target_accept), so the sampler takes larger steps through the zone posterior.\nBoth halves of the spatial comparison therefore also differ in this one sampler setting."; #hide
+Markdown.parse(_sampler_each * _sampler_zone) #hide
 
 # R-hat sets the spread within each chain against the spread across chains, and a value near one says the chains agree.
 # The bulk effective sample size is the number of independent draws the chains are worth, and we report it for the parameter where it is lowest.

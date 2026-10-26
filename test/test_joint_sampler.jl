@@ -24,6 +24,41 @@
     end
 end
 
+@testitem "health-zone fits take a lower target acceptance" tags = [
+    :quality,
+] begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
+
+    unset = (
+        "BVD_JOINT_SAMPLES" => nothing, "BVD_JOINT_WARMUP" => nothing,
+        "BVD_JOINT_TARGET_ACCEPT" => nothing, "BVD_JOINT_MAX_DEPTH" => nothing,
+        "BVD_ZONE_TARGET_ACCEPT" => nothing,
+    )
+    withenv(unset...) do
+        j, z = joint_sampler_args(), zone_sampler_args()
+        @test z.target_accept == 0.75
+        @test j.target_accept == 0.8
+        @test Base.structdiff(z, (; target_accept = 0)) ==
+            Base.structdiff(j, (; target_accept = 0))
+        for id in ("local", "local_frozen_validation")
+            @test fit_sampler_args(id) == z
+        end
+        for id in ("joint", "deaths", "frozen_validation", "sens_no_patches")
+            @test fit_sampler_args(id) == j
+        end
+    end
+    ## The zone override moves only the zone target, and the joint's
+    ## overrides still reach the zone fits.
+    withenv(
+        unset..., "BVD_ZONE_TARGET_ACCEPT" => "0.8",
+        "BVD_JOINT_SAMPLES" => "300"
+    ) do
+        z = zone_sampler_args()
+        @test z == joint_sampler_args()
+        @test z.samples == 300
+    end
+end
+
 @testitem "every fit shares the joint's sampler settings" tags = [
     :quality,
 ] begin
@@ -35,17 +70,22 @@ end
     ## Every `nuts_sample` call, plus the one health-zone fitter call.
     n_calls = count(r"nuts_sample\(", src) + count("return fitter(", src)
     @test n_calls >= 13
-    @test count("joint_sampler_args()...", src) == n_calls
+    ## The health-zone fitter call alone takes the zone settings, which
+    ## differ from the joint's only in the target acceptance.
+    @test count("joint_sampler_args()...", src) == n_calls - 1
+    @test count("zone_sampler_args()...", src) == 1
     @test !occursin("samples = samples", src)
     @test count("n_adapts = joint_warmup(", src) == 1
-    @test count("target_accept = ", src) == 1
-    @test !occursin("zone_sampler_args", src)
+    @test count("target_accept = ", src) == 2
+    @test count("target_accept = zone_target_accept()", src) == 1
 
-    ## The scripts that fit outside the registry take the same helper.
-    for f in ("fit_zone.jl", "zone_fit_report.jl", "recovery.jl")
-        @test occursin(
-            "joint_sampler_args()", read(joinpath(root, "scripts", f), String)
+    ## The scripts that fit outside the registry take the same helpers.
+    for (f, helper) in (
+            "fit_zone.jl" => "zone_sampler_args()",
+            "zone_fit_report.jl" => "zone_sampler_args()",
+            "recovery.jl" => "joint_sampler_args()",
         )
+        @test occursin(helper, read(joinpath(root, "scripts", f), String))
     end
     rec = read(joinpath(root, "scripts", "recovery.jl"), String)
     @test !occursin("BVD_RECOVERY_WARMUP", rec)
@@ -67,7 +107,7 @@ end
 
     vars = (
         "BVD_JOINT_SAMPLES", "BVD_JOINT_WARMUP",
-        "BVD_JOINT_TARGET_ACCEPT", "BVD_JOINT_MAX_DEPTH",
+        "BVD_JOINT_TARGET_ACCEPT", "BVD_JOINT_MAX_DEPTH", "BVD_ZONE_TARGET_ACCEPT",
     )
     unset = Tuple(v => nothing for v in vars)
     ids = (
@@ -103,6 +143,17 @@ end
         withenv(unset..., ov) do
             for id in ids
                 @test fit_key(id) != base[id]
+            end
+        end
+    end
+
+    ## The zone target acceptance moves only the health-zone fits' keys.
+    withenv(unset..., "BVD_ZONE_TARGET_ACCEPT" => "0.70") do
+        for id in ids
+            if id in ZONE_FIT_IDS
+                @test fit_key(id) != base[id]
+            else
+                @test fit_key(id) == base[id]
             end
         end
     end

@@ -14,8 +14,8 @@
 # `--parent` is the joint chain the zone model melds from (required).
 # `--chain` is a fitted zone chain for stages c, d and e; when absent those
 # stages fit one at `--samples`/`--warmup`/`--depth`/`--target-accept` and
-# save it there. These default to `joint_sampler_args()` in
-# `docs/fits/registry.jl`, the settings every fit in the report uses. `--stages`
+# save it there. These default to `zone_sampler_args()` in
+# `docs/fits/registry.jl`, the docs build's health-zone settings. `--stages`
 # selects which of a, b, c, d, e to run (default all). The observations are
 # frozen to the parent's cut-off. Stage a saves its prior draws next to the
 # chain for stage d to reuse. `--recovery-samples`/`--recovery-warmup` set
@@ -42,7 +42,7 @@ include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
 ## --- Arguments ------------------------------------------------------------
 
 function parse_args(args)
-    s = joint_sampler_args()
+    s = zone_sampler_args()
     opts = Dict{String, String}(
         "out" => "logs/zone_report",
         "stages" => "a,b,c,d,e", "samples" => string(s.samples),

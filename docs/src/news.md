@@ -19,6 +19,11 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone relative ascertainment and fatality multipliers take their sum-to-zero basis from the model inputs, built once per fit rather than on every gradient (#1081, resolves #1048).
   This cuts the zone gradient by about 5%, with the timings in #1081.
   The model does not change.
+- The health-zone fits target an acceptance probability of 0.75 rather than the joint's 0.80, so NUTS takes a larger step (#973).
+  On main the `local` fit reaches a tree depth of 9 to 10, about 511 leapfrog steps per draw, where its posterior needs just over 256.
+  `zone_target_accept()` in `docs/fits/registry.jl` sets it, `BVD_ZONE_TARGET_ACCEPT` overrides it, and setting it to 0.80 reverts the change.
+  The joint and every other fit keep their settings.
+  The health-zone fit cache keys change, so both zone fits refit.
 
 ### Model
 

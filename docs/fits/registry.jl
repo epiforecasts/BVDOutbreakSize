@@ -95,12 +95,13 @@ function fit_content_hash(; chains::Integer = 2, sampler::NamedTuple = (;))
 end
 
 """
-Content-addressed cache key for fit `id`. Every fit samples at
-`joint_sampler_args()` and is keyed on it, so a run with the `BVD_JOINT_*`
-overrides set writes its own cache entry for every fit.
+Content-addressed cache key for fit `id`, keyed on the sampler settings the
+fit samples at (`fit_sampler_args(id)`), so a run with the `BVD_JOINT_*`
+overrides set writes its own cache entry for every fit and one with
+`BVD_ZONE_TARGET_ACCEPT` set does so for the health-zone fits.
 """
 function fit_key(id; chains::Integer = 2)
-    sampler = joint_sampler_args()
+    sampler = fit_sampler_args(id)
     return string(id, "__", fit_content_hash(; chains, sampler))
 end
 
@@ -196,7 +197,8 @@ fit_spec(id, model, sample) = (;
 ## fit outside it (`scripts/fit_zone.jl`, `scripts/zone_fit_report.jl`,
 ## `scripts/recovery.jl`). The single-stream, frozen and health-zone fits
 ## splat the joint's settings rather than restating them, so a change here
-## moves every fit.
+## moves every fit. The health-zone fits differ only in their target
+## acceptance (`zone_sampler_args`).
 ##
 ## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP`, `BVD_JOINT_TARGET_ACCEPT` and
 ## `BVD_JOINT_MAX_DEPTH` override all four without editing this file.
@@ -229,6 +231,28 @@ joint_sampler_args() = (;
     samples = joint_samples(1000), n_adapts = joint_warmup(1000),
     target_accept = joint_target_accept(), max_depth = joint_max_depth(),
 )
+
+## The health-zone fits' one departure from the joint's settings: a lower
+## target acceptance, so NUTS takes a larger step (#973). The zone posterior
+## needs just over 256 leapfrog steps at 0.80, so a slightly larger step can
+## halve the tree. `BVD_ZONE_TARGET_ACCEPT` overrides it; setting it to the
+## joint's value reverts the zone fits to the joint's settings.
+zone_target_accept() = parse(
+    Float64,
+    get(ENV, "BVD_ZONE_TARGET_ACCEPT", "0.75")
+)
+
+## The ids of the health-zone fits, which sample at `zone_sampler_args()`.
+const ZONE_FIT_IDS = ("local", "local_frozen_validation")
+
+## The joint's sampler budget with the zone target acceptance.
+zone_sampler_args() = merge(
+    joint_sampler_args(), (; target_accept = zone_target_accept())
+)
+
+## The sampler settings fit `id` samples at.
+fit_sampler_args(id) =
+    id in ZONE_FIT_IDS ? zone_sampler_args() : joint_sampler_args()
 
 """
 Keyword arguments of the headline joint fit for `obs`, with `overrides`
@@ -303,7 +327,8 @@ stage, and carry no `model`. `zone_fitter` fits a zone model from a parent
 chain, `BVDOutbreakSize.fit_zone` when `nothing`, resolved when the thunk
 runs.
 
-Every fit samples at `joint_sampler_args()`.
+Every fit samples at `joint_sampler_args()`, except the health-zone fits,
+which sample at `zone_sampler_args()`.
 """
 function build_fit_specs(
         obs;
@@ -713,7 +738,7 @@ function build_fit_specs(
         fitter = zone_fitter === nothing ? default_zone_fitter() : zone_fitter
         return fitter(
             parent_chn, o;
-            joint_sampler_args()..., chains = chains,
+            zone_sampler_args()..., chains = chains,
             callback = fit_callback(name)
         )
     end
