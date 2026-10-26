@@ -1,7 +1,6 @@
 # # Province forecasts
 #
-# This page gives the one-week-ahead forecast for each province from the joint model.
-# The projection is defined in the [province forecast](@ref "Province forecast") Methods section.
+# This page gives the one-week-ahead forecast for each province from the joint model, as defined in the [province forecast](@ref "Province forecast") Methods section.
 # The national forecast is on the [forecasts](@ref "Forecasts") page.
 # How these forecasts have scored against what each province went on to report is in the [forecast by province](@ref "Forecast by province") evaluation.
 # How well the model reproduces each province's share is on the [in-sample checks](@ref province-compositions) page.
@@ -24,8 +23,7 @@ chn_joint = load_fit("joint");
 
 # ## Summary
 #
-# The table gives each province's forecast for the week to $T + 7$ as a 90% predictive interval, and the bullets under it compare the provinces draw by draw.
-# The provinces add up to the national forecast.
+# The table gives each province's forecast for the week to $T + 7$ as a 90% predictive interval, and the bullets compare the provinces draw by draw.
 
 #md # ```@raw html
 #md # <details><summary>Project each province a week ahead</summary>
@@ -57,13 +55,19 @@ province_forecast_md = province_forecast_headline(
 Markdown.parse(province_forecast_md) #hide
 
 # ## One-week-ahead forecast by province
-#
-# Each panel is one forecast target, the provinces side by side, for the week to $(province_week_end).
+
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
 
 province_forecast_fig #hide
 
-# The maps shade each province by its patch's forecast, so the pooled patch shades all its provinces alike.
-# The reproduction number is centred on one, and a province whose 90% predictive interval spans one is washed out.
+#md # ```@raw html
+#md # <figcaption>
+#md # Each panel is one forecast target for the week after the cut-off, with the provinces side by side.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Build the forecast maps</summary>
@@ -104,18 +108,25 @@ province_forecast_map = plot_province_map(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 province_forecast_map #hide
 
-#-
+#md # ```@raw html
+#md # <figcaption>
+#md # Each province is shaded by its forecast.
+#md # The reproduction number is centred on one, and a province whose 90% predictive interval spans one is washed out.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 MarkdownTable(province_forecast) #hide
 
 # ## Forecast for each province
 #
-# Each province has its own forecast figure, one histogram per target with its 90% predictive interval shaded.
-# The dashed rule on the case and death panels is the count the province reported over its most recent week in the spatial tables.
+# Each province's figure has one histogram per target with its 90% predictive interval shaded.
+# The dashed rule on the case and death panels is the count the province reported over its most recent week.
 
 #md # ```@raw html
 #md # <details><summary>Build the per-province figures</summary>
@@ -143,8 +154,10 @@ forecast_province_fig(p) = plot_province_forecast_detail(
     observed = forecast_province_observed(p)
 )
 ## The province blocks below are written out one per patch.
-@assert N_PATCHES == 4 && PROVINCE_LABELS[1:4] ==
-    ["Ituri", "Nord-Kivu", "Haut-Uele", "Other provinces"]
+@assert N_PATCHES == 8 && PROVINCE_LABELS[1:8] == [
+    "Ituri", "Nord-Kivu", "Haut-Uele",
+    "Sud-Kivu", "Tshopo", "Bas-Uele", "Sud-Ubangi", "Nord-Ubangi",
+]
 ## Cases and deaths come from separate tables, so each stream's observed
 ## week is stated on its own.
 function forecast_province_recent_week(r, stream)
@@ -182,19 +195,27 @@ forecast_province_fig(2) #hide
 
 forecast_province_fig(3) #hide
 
-# ### Other provinces
-#
-# The other provinces are pooled into one patch, so their forecast is for the pool.
+# ### Sud-Kivu
 
 forecast_province_fig(4) #hide
 
+# ### Tshopo
+
+forecast_province_fig(5) #hide
+
+# ### Bas-Uele
+
+forecast_province_fig(6) #hide
+
+# ### Sud-Ubangi
+
+forecast_province_fig(7) #hide
+
+# ### Nord-Ubangi
+
+forecast_province_fig(8) #hide
+
 # ## Past forecasts against what was observed
-#
-# Only [province forecast](@ref "Province forecast") projections are shown, so the figure fills in as releases accumulate.
-# Each panel is one province stream at one horizon.
-# The x-axis is the cut-off each forecast was made from.
-# Each forecast shows its median and 90% predictive interval, beside the persistence baseline and the count the province went on to report.
-# A window holding a harmonisation-break day is left out, because that day's backfill is published for the country and not by province.
 
 #md # ```@raw html
 #md # <details><summary>Load the archived province forecasts and their outcomes</summary>
@@ -220,9 +241,19 @@ province_overlay_fig = plot_forecast_overlay(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 province_overlay_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Past province forecasts by the cut-off each was made from, one panel per stream and horizon, filling in as releases accumulate.
+#md # Each shows its median and 90% predictive interval beside the persistence baseline and the count the province went on to report.
+#md # A window holding a harmonisation-break day is left out, because that day's backfill is published for the country and not by province.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ## Saving province map assets
 #
@@ -384,6 +415,19 @@ CSV.write(
         cols = :union
     )
 );
+## The same three tables into the release outputs, so each results release
+## carries the dashboard map's province and national inputs at its cut-off.
+output_dir = get(
+    ENV, "BVD_OUTPUT_DIR",
+    joinpath(pkgdir(BVDOutbreakSize), "output")
+)
+mkpath(output_dir)
+for f in (
+        "province_estimates.csv", "national_estimates.csv",
+        "province_timeseries.csv",
+    )
+    cp(joinpath(province_map_dir, f), joinpath(output_dir, f); force = true)
+end
 
 #md # ```@raw html
 #md # </details>
@@ -391,6 +435,4 @@ CSV.write(
 
 # ---
 #
-# The full analysis code, data and model definitions are in the
-# [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize)
-# repository.
+# The full analysis code, data and model definitions are in the [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize) repository.

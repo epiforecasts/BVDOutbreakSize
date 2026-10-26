@@ -80,22 +80,22 @@ const OUT_CSV = get(
 ## Provinces in patch order: the first is the primary (origin) patch.
 const PROVINCES = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
-    "bas_uele", "sud_ubangi",
+    "bas_uele", "sud_ubangi", "nord_ubangi",
 ]
 const DISPLAY = Dict(
     "ituri" => "Ituri", "nord_kivu" => "Nord-Kivu", "sud_kivu" => "Sud-Kivu",
     "haut_uele" => "Haut-Uele", "tshopo" => "Tshopo", "bas_uele" => "Bas-Uele",
-    "sud_ubangi" => "Sud Ubangi",
+    "sud_ubangi" => "Sud Ubangi", "nord_ubangi" => "Nord Ubangi",
 )
 ## Folded province-name alternation, shared by every matcher in this file.
 const PROV_ALT =
     "(ituri|nord[ -]?kivu|sud[ -]?kivu|haut[ -]?uele|tshopo|bas[ -]?uele|" *
-    "sud[ -]?ubangi)"
+    "sud[ -]?ubangi|nord[ -]?ubangi)"
 const KEYS = Dict(
     "ituri" => "ituri", "nordkivu" => "nord_kivu",
     "sudkivu" => "sud_kivu", "hautuele" => "haut_uele",
     "tshopo" => "tshopo", "basuele" => "bas_uele",
-    "sudubangi" => "sud_ubangi",
+    "sudubangi" => "sud_ubangi", "nordubangi" => "nord_ubangi",
 )
 ## Folded spellings of each province, to spot a clause that has moved on to
 ## another province mentioned in passing within the same block.
@@ -105,6 +105,7 @@ const NAMES = Dict(
     "haut-uele" => "haut_uele", "haut uele" => "haut_uele",
     "tshopo" => "tshopo", "bas-uele" => "bas_uele", "bas uele" => "bas_uele",
     "sud-ubangi" => "sud_ubangi", "sud ubangi" => "sud_ubangi",
+    "nord-ubangi" => "nord_ubangi", "nord ubangi" => "nord_ubangi",
 )
 ## A bullet in either the colon-style "→ Province : ..." (081-083) or the
 ## prose-style "En/Au/À la Province, ..." (084 onward). The leading prefix
@@ -162,8 +163,15 @@ function care_lines(lines::Vector{String})
         f = fold(l)
         m = match(head, l)
         if m !== nothing && plausible_heading_number(m[1])
-            (startswith(m[1], num) && !occursin("defis", fold(m[2]))) ||
-                break
+            ## From SitRep 146 the section is numbered as a sibling of its
+            ## own subsections ("2.4.3. Prise en charge holistique", then
+            ## "2.4.4. Principales actions"), so that subheading continues
+            ## the section whatever its number.
+            t = fold(m[2])
+            (
+                (startswith(m[1], num) && !occursin("defis", t)) ||
+                    startswith(t, "principales actions")
+            ) || break
         end
         push!(out, String(l))
     end
@@ -189,7 +197,10 @@ function province_entries(lines::Vector{String})
                 got[name] = f[(m.offset + ncodeunits(m.match)):end]
                 push!(order, name)
             end
-        elseif occursin(r"^\s*[^0-9a-z\s]", f)
+        elseif occursin(r"^\s*[^0-9a-z\s(]", f)
+            ## A bullet ends the entry. A wrapped line can open on a bracket,
+            ## as SitRep 153's Haut-Uele paragraph does with "(Isiro, Boma
+            ## Mangbetu et Rungu). Ainsi, 43 patients", so a bracket does not.
             current = nothing
         elseif current !== nothing
             got[current] = got[current] * " " * f
@@ -276,19 +287,37 @@ function parse_prose_entry(entry::AbstractString, name::AbstractString)
     end
 
     ## --- patients isolated / normed structures / beds --------------------
+    ## From SitRep 151 the count is followed by its split before the verb,
+    ## "382 patients (127 confirmés et 255 suspects) sont hospitalisés", and
+    ## SitRep 150 prints the same with an unopened bracket, "471 patients
+    ## dont 67 enfants de moins de 5 ans) sont hospitalisés". `P` takes
+    ## either aside between the noun and the verb.
+    P = "patients?(?: \\([^)]*\\)| dont [^;)]*\\))?"
     PAIR = Regex.(
         [
-            "(\\d+)\\)? ?patients? (?:sont )?(?:hospitalis[ei]s?|" *
+            "(\\d+)\\)? ?$P (?:sont )?(?:hospitalis[ei]s?|" *
                 "pris en charge en hospitalisation)[^;]*?" *
                 "dont (\\d+) dans les structures normees[^;]*?" *
                 "capacite d.accueil\\s*\\d{0,2}\\s*de (\\d+) lits",
-            "(\\d+)\\)? ?patients? (?:sont )?(?:hospitalis[ei]s?|" *
+            ## SitRep 150: "471 patients ... sont hospitalisés : 330 dans
+            ## les CTE/CT pour 374 lits, soit un taux d'occupation de 88,2 %".
+            "(\\d+)\\)? ?$P (?:sont )?hospitalis[ei]s? : " *
+                "(\\d+) dans les cte/ct pour (\\d+) lits",
+            ## SitRep 156: the CTE/CT count and beds as the rate's fraction,
+            ## "471 patients sont hospitalisés, ... pour un taux d'occupation
+            ## des CTE/CTde 85,1 % : (349/410)". From SitRep 160 Nord-Kivu
+            ## writes "468 patients sont pris en charge (161 confirmés et 307
+            ## suspects) ... de 80,7 % (331/410)".
+            "(\\d+)\\)? ?$P (?:sont )?(?:hospitalis[ei]s?|pris en charge)[^;]*?" *
+                "taux d.occupation (?:global )?des cte/ct ?de " *
+                "\\d+(?:,\\d+)? %\\s*:?\\s*\\((\\d+)/(\\d+)\\)",
+            "(\\d+)\\)? ?$P (?:sont )?(?:hospitalis[ei]s?|" *
                 "pris en charge en hospitalisation)[^;]*?pour (\\d+) lits",
             "atteint (\\d+) patients pour (\\d+) lits",
             "atteint (\\d+) lits sur (\\d+)",
             "(\\d+)\\)? ?malades? (?:sont |restent |demeurent )?" *
                 "(?:hospitalis[ei]s?|en isolement)[^;]*?(?:sur|pour) (\\d+) lits",
-            "(\\d+)\\)? ?patients? (?:sont )?en isolement[^;]*?" *
+            "(\\d+)\\)? ?$P (?:sont )?en isolement[^;]*?" *
                 "(?:sur|pour) (\\d+) lits",
             "(\\d+)\\)? ?cas suspects? (?:restent |sont |demeurent )?en isolement" *
                 "[^;]*?(?:sur|pour) (\\d+) lits",
@@ -310,11 +339,17 @@ function parse_prose_entry(entry::AbstractString, name::AbstractString)
     if !haskey(fields, :patients_isolated)
         SOLO = Regex.(
             [
-                "(\\d+)\\)? ?patients? (?:sont )?" *
+                "(\\d+)\\)? ?$P (?:sont )?" *
                     "(?:hospitalis[ei]s?|pris en charge en hospitalisation)",
                 "(\\d+)\\)? ?malades? (?:sont |restent |demeurent )?" *
                     "(?:hospitalis[ei]s?|en isolement|en hospitalisation)",
-                "(\\d+)\\)? ?patients? (?:sont |restent |demeurent )?en isolement",
+                "(\\d+)\\)? ?$P (?:sont |restent |demeurent )?en isolement",
+                ## SitRep 159: "portant à 60 le nombre de patients en
+                ## isolement".
+                "portant a (\\d+) le nombre de patients en isolement",
+                ## SitRep 150 drops the verb: "Ainsi, 337 patients, soit un
+                ## taux d'occupation de 33,2 %".
+                "ainsi, (\\d+) patients?, soit un taux d.occupation",
                 "(\\d+)\\)? ?cas (?:suspects?|confirmes?) (?:restent |sont |demeurent |" *
                     "est )?(?:en isolement|hospitalis[ei]s?|suivis)",
                 "(\\d+)\\)? ?patient (?:confirme )?est en (?:cours de soins|" *
@@ -698,7 +733,9 @@ end
 
 function trimmed_quote(s::AbstractString, n::Int = 300)
     q = replace(strip(s), r"\s+" => " ")
-    return length(q) > n ? q[1:n] : q
+    ## Cut at byte n, widened to the end of the character it falls in:
+    ## SitRep 153 puts a curly apostrophe across byte 300.
+    return length(q) > n ? q[1:thisind(q, n)] : q
 end
 
 """

@@ -42,9 +42,10 @@
         prev_report_days = [0, 0, 0, 0, 25, 25, 25, 25, 0],
         increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
     )
-    ## Four patches, the shape of the headline fit. The province tables are
+    ## Four patches, the first four of the headline fit's, enough to exercise
+    ## the coupling at a fraction of the cost. The province tables are
     ## partitions of the national confirmed and confirmed-death increments.
-    const NP = length(PROVINCE_NAMES)
+    const NP = 4
     const PROV = [4 5 3; 2 1 3; 1 0 1; 1 0 0]
     const PROV_DAYS = [28, 35, 40]
     const PROVD = [1 1; 1 1; 0 0; 0 1]
@@ -254,7 +255,12 @@ end
     @test fm.confirmed_deaths ==
         rh.confirmed_deaths_state.confirmed_death_daily[fd]
     @test fm.recovered == rh.recovered_state.recovered_daily[fd]
-    @test fm.isolation == rh.treatment_state.occupancy_mean[fd]
+    ## The occupancy, admissions and beds are the fitted model's series run
+    ## forward, with nothing capped.
+    st = rh.treatment_state
+    @test fm.isolation ≈ max.(st.occupancy_mean[fd], 0.0)
+    @test fm.admissions ≈ st.admit_daily[fd]
+    @test fm.beds == st.capacity_patch[:, fd]
 end
 
 @testitem "forecast counts carry the fitted delays past the cut-off" setup = [

@@ -5,7 +5,7 @@
 ## holding a harmonisation-break day is not scored, and a release without the
 ## per-province archive is a quiet skip.
 
-## The four source provinces the `other` patch pools, on shared vintage days,
+## The four source provinces the retired `other` patch pooled, on shared days,
 ## alongside a single-province patch. `sud_kivu` falls between the second and
 ## third vintage, so pooling before differencing is visible in the totals. A
 ## `@testsnippet`, not a top-level function: each `@testitem` below sees only

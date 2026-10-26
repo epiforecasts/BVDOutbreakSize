@@ -330,7 +330,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
         obs.province_death_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES)
     )
-    ## Draws from the four-patch prior for the province pages. The
+    ## Draws from the province model's prior for the province pages. The
     ## `joint_prior_draws` are single-population and carry no province
     ## quantities. Every observation is withheld as there, but the province
     ## compositions are passed their observed counts: `Prior()` leaves them out
@@ -454,6 +454,9 @@ if !@isdefined(_BVD_SETUP_LOADED)
     )
     province_capacity = province_care_observations(
         obs.province_bed_capacity_history, PROVINCE_NAMES; changes_only = true
+    )
+    province_admissions = province_care_observations(
+        obs.province_admissions_history, PROVINCE_NAMES
     )
     ## The parameter-recovery results the `recovery` CI job writes
     ## (`scripts/recovery.jl`), over every seed found: the recovery table and

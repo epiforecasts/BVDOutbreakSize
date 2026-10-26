@@ -103,6 +103,46 @@
             "tshopo", (4, 3),
         ),
 
+        ## Misspelt sample nouns, SitReps 146 (Haut-Uele) and 149
+        ## (Bas-Uele).
+        (
+            "4 nouveaux resultats positifs (3 vivants et 1 deces) sur 24 " *
+                "echentillons recus et analyses.",
+            "haut_uele", (24, 4),
+        ),
+        (
+            "7 nouveaux echantiollos recus (tous vivant ) tous sont reveles " *
+                "negatifs",
+            "bas_uele", (7, 0),
+        ),
+
+        ## The count run into its noun, SitRep 150 (Nord-Kivu).
+        (
+            "28 nouveaux resultats positifs (13 vivants et 15 deces) sur " *
+                "132echantillons recus et analyses (positivite : 21,2%).",
+            "nord_kivu", (132, 28),
+        ),
+
+        ## No sample noun at all, SitRep 147 (Bas-Uele).
+        (
+            "1 resultat positif (1sangs) sur 33 recus et analyses " *
+                "(positivite : 3,0%).",
+            "bas_uele", (33, 1),
+        ),
+
+        ## The positives counted as new confirmed cases, SitReps 153 and
+        ## 154 (Tshopo).
+        (
+            "1 nouveau cas confirme (vivant) sur 8 echantillons recus et " *
+                "analyses (positivite : 12,5%).",
+            "tshopo", (8, 1),
+        ),
+        (
+            "7 nouveau cas confirme (6 vivants et 1 deces) sur 16 " *
+                "echantillons recus et analyses (positivite : 43,8%).",
+            "tshopo", (16, 7),
+        ),
+
         ## No completed analysis: no denominator, so no numerator either.
         (
             "3 echantillons collectes dont 2 sont expedies a kinshasa (inrb).",
@@ -156,10 +196,12 @@ end
     lab = obs["province_lab_daily_history"]
     nat = obs["tests_analysed_daily_history"]
     national = Dict(zip(nat["dates"], nat["values"]))
-    provinces = (
-        "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
-        "bas_uele", "sud_ubangi",
-    )
+    ## Every province the block carries, so a new province is checked too.
+    provinces = [
+        chop(k; tail = length("_analysed"))
+            for k in keys(lab) if endswith(k, "_analysed")
+    ]
+    @test "nord_ubangi" in provinces
 
     ## The per-province analysed counts are an exact partition of the
     ## national series, which is what admits a vintage into this block.

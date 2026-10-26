@@ -2,7 +2,7 @@
 
 ## Overall
 
-- The model is fitted to aggregate counts, with the DRC data national and per-province situation-report totals read from the published PDFs, and the Uganda data three export cases with one death from WHO reports.
+- The model is fitted to aggregate counts: the DRC situation-report totals read from the published PDFs, and three Uganda export cases with one death from WHO reports.
   We do not have a line list, information on case definitions or reporting completeness, or access to the response's internal data, so every estimate is a model-based extrapolation under strong assumptions, not a measurement.
 - The work is done outside the outbreak response, so changes in reporting practice are inferred from the reports rather than known.
 - The code and analysis were drafted by a language model and reviewed by people and by language models ([authors](@ref "Authors, funding and acknowledgements")).
@@ -21,8 +21,7 @@
   The laboratory analysed-specimen series covers only part of the window ([laboratory pipeline](@ref "Laboratory pipeline")).
 - Later situation reports can revise earlier totals up or down as suspects are reclassified and newly-reporting health zones are added, and we do not model this revision process.
 - The onset curve is digitised from a figure that each report redraws, so the counts carry scan error that the model treats as noise at a fixed scale.
-- The reports also print surveillance-effort indicators, such as contact-tracing follow-up and alert investigation.
-  They also print community suspect-death alerts that continue after 11 July.
+- The reports also print surveillance-effort indicators, such as contact-tracing follow-up and alert investigation, and community suspect-death alerts that continue after 11 July.
   We record these signals but do not fit them.
 
 ### Model
@@ -57,7 +56,7 @@
 
 ### Model
 
-- Ituri, Nord-Kivu and Haut-Uele are modelled individually and every other affected province is pooled into a fourth patch, each well mixed, so spread inside a province is not represented.
+- Each affected province is one well-mixed patch, so spread inside a province is not represented. Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi hold few confirmed cases, so their estimates are informed mostly by the priors their parameters share with the other patches.
 - There is no mobility or origin-destination data for this outbreak, so the [gravity kernel](@ref "Mixing and importation") coupling the provinces is assumed, not measured.
 - Provincial testing enters the prior, not the likelihood, so the deaths do most of the work in separating a province's incidence from its case-finding and the prior strongly influences the rest ([province parameters](@ref "Province parameters against their priors")).
 - The treatment-centre model carries one national bed capacity and demand, so it cannot represent local saturation.
@@ -72,7 +71,6 @@
 
 ### Model
 
-- A zone below the walking threshold has no transmission walk of its own, so its reproduction number is from its province, not modelled separately ([health-zone model](@ref "Health-zone model")).
-- The zone stage is melded one way onto the joint fit, so the zone data do not update the national and province estimates ([health-zone model](@ref "Health-zone model")).
-  A patch estimate that the zone data contradict is not corrected by them.
+- A zone below the walking threshold has no transmission walk of its own, so its reproduction number is from its province ([health-zone model](@ref "Health-zone model")).
+- The zone stage is melded one way onto the joint fit, so the zone data do not update or correct the national and province estimates.
 - The zone forecast splits each patch's forecast across its zones, so it inherits the patch forecast's level and adds only the split.

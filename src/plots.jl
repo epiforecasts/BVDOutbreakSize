@@ -2201,12 +2201,12 @@ Reconstruct each posterior draw's daily reproduction-number trajectory
 `ndraws × n` matrix masked to each draw's established window (`missing`
 before `rt_start`). The saved chain stores only the cut-off `R_T`, so each
 draw's daily `Rt` is rebuilt by mirroring [`rt_walk_model`](@ref): weekly
-knots ([`knot_days`](@ref)) from `rt_walk_start` follow a non-centred
-Gaussian walk (`rt_state.log_R0` plus the cumulative sum of
-`rt_state.sigma_rw .* rt_state.z`), linearly interpolated to the day grid
-([`interpolate_knots`](@ref)) and shifted by the sampled
-`rt_state.intervention_effect` along a logistic ramp
-([`sigmoid_ramp`](@ref)) centred at the outbreak-response `breakpoint`.
+knots ([`knot_days`](@ref)) from `rt_walk_start` at `rt_state.log_R0` and
+then the sampled total levels `rt_state.log_Rt_knots` net of the ramp,
+linearly interpolated to the day grid ([`interpolate_knots`](@ref)) and
+shifted by the sampled `rt_state.intervention_effect` along a logistic
+ramp ([`sigmoid_ramp`](@ref)) centred at the outbreak-response
+`breakpoint`.
 Each day is then scaled by the draw's susceptible fraction at the end of
 the day before, the chain's `susceptible_fraction`, so the trajectory is
 net of depletion ([`adjusted_rt`](@ref)). A chain without that series is
@@ -2246,38 +2246,38 @@ function _reconstruct_rt_walk(
         week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP
     )
     log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
-    sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
     effect = _draws(chn, Symbol("rt_state.intervention_effect"))
-    ## `rt_state.z` is vector-valued: one standard-normal innovation vector
-    ## per draw. Pull each draw's full vector from the chain slice.
-    zmat = chn[Symbol("rt_state.z")]
-    zrows = [collect(z) for z in vec(collect(zmat))]
+    ## `rt_state.log_Rt_knots` is vector-valued: one vector of knot levels
+    ## after the first per draw. Pull each draw's full vector from the chain
+    ## slice.
+    kmat = chn[Symbol("rt_state.log_Rt_knots")]
+    krows = [collect(k) for k in vec(collect(kmat))]
 
     ## The knot grid is built from the model's walk start `rt_walk_start`
     ## (the breakpoint grid day), which is decoupled from `rt_start` (the
-    ## established-window start used for the mask below). The innovation
-    ## vector length is fixed by that walk start, so a mismatching one fails
-    ## here rather than as a downstream bounds error.
+    ## established-window start used for the mask below). The knot vector
+    ## length is fixed by that walk start, so a mismatching one fails here
+    ## rather than as a downstream bounds error.
     days = knot_days(n; week, start = rt_walk_start)
     nb = length(days)
-    if !isempty(zrows) && length(zrows[1]) != nb - 1
+    if !isempty(krows) && length(krows[1]) != nb - 1
         error(
             "reconstruct_rt: rt_walk_start = $rt_walk_start gives " *
                 "$(nb - 1) random-walk steps but the chain has " *
-                "$(length(zrows[1])); pass the same walk start the model used " *
+                "$(length(krows[1])); pass the same walk start the model used " *
                 "(the breakpoint grid day, n - who_first_sitrep_days)."
         )
     end
     ramp_shape = sigmoid_ramp(n, breakpoint; ramp)
+    ramp_knots = ramp_shape[days[2:end]]
     ndraws = length(log_R0)
 
     ## Per-draw daily Rt, masked to the draw's own established window
     ## (cumulative infections ≥ 1, i.e. grid day ≥ n - round(T)).
     rt = Matrix{Union{Missing, Float64}}(missing, ndraws, n)
     for i in 1:ndraws
-        z = zrows[i]
-        steps = sigma[i] .* z[1:(nb - 1)]
-        log_R = log_R0[i] .+ vcat(0.0, cumsum(steps))
+        net = krows[i][1:(nb - 1)] .- effect[i] .* ramp_knots
+        log_R = vcat(log_R0[i], net)
         walk = interpolate_knots(log_R, days, n)
         ## Days before the renewal start clamp to the established R0, the
         ## walk base. The model fills them with the analytic cryptic
@@ -2870,7 +2870,7 @@ function plot_rt_patches(
         display_start::Integer = rt_start,
         week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP,
         ncols::Integer = 3,
-        colours = [:firebrick, :steelblue, :seagreen],
+        colours = _ZONE_PATCH_COLOURS,
         national_colour = :grey25
     )
     np = min(n_patches, length(patch_labels))
@@ -3008,7 +3008,7 @@ function plot_infections_patches(
         chn; n::Integer, seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen]
+        colours = _ZONE_PATCH_COLOURS
     )
     np = min(n_patches, length(patch_labels))
     epoch = date2epochdays(seeding)
@@ -3071,7 +3071,7 @@ function plot_imports_patches(
         chn; n::Integer, seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen]
+        colours = _ZONE_PATCH_COLOURS
     )
     np = min(n_patches, length(patch_labels))
     epoch = date2epochdays(seeding)
@@ -3152,7 +3152,7 @@ between them.
 function plot_patch_summary(
         chn, n_patches::Integer = length(PROVINCE_NAMES);
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen],
+        colours = _ZONE_PATCH_COLOURS,
         ncols::Integer = 4,
         title::AbstractString = "Per-province posterior summary"
     )
@@ -3269,6 +3269,10 @@ function _composition_rho_keys(share_key::Symbol)
         :province_occupancy_split_rho,
         Symbol("treatment_state.occupancy_split_rho"),
     ]
+    share_key === :province_admissions_share && return [
+        :province_admissions_split_rho,
+        Symbol("treatment_state.admissions_split_rho"),
+    ]
     share_key === :province_capacity_share && return [
         :province_capacity_split_rho,
         Symbol("treatment_state.capacity_split_rho"),
@@ -3375,7 +3379,7 @@ function plot_province_composition_ppc(
         seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen],
+        colours = _ZONE_PATCH_COLOURS,
         rho_key::Union{Nothing, Symbol} = nothing,
         title::AbstractString = "Province share, modelled against observed"
     )
@@ -3487,12 +3491,14 @@ end
 """
 Posterior predictive check on a province split scored on the provinces
 present each day ([`province_split_logpdf`](@ref)): the isolation
-occupancy (`share_key = :province_occupancy_share`, a daily share matrix)
-and the beds (`share_key = :province_capacity_share`, also a daily share
-matrix; a static share vector per patch is also read). Each panel shows the modelled share of that province among the
-provinces printed that day, with the observed share as black points, over
-the days the split is scored (`rows`, the long format from
-`province_care_observations` the fit was given). The grey band is the
+occupancy (`share_key = :province_occupancy_share`, a daily share matrix),
+the beds (`share_key = :province_capacity_share`, also a daily share
+matrix; a static share vector per patch is also read) and the 24h
+admissions (`share_key = :province_admissions_share`). Each panel shows the
+modelled share of that province among the provinces printed that day, with
+the observed share as black points, over the days the split is scored
+(`rows`, the long format from `province_care_observations` the fit was
+given). The grey band is the
 posterior predictive interval on the observed share, the stick-breaking
 allocation at the day's printed total under the split's overdispersion, and
 the coloured ribbon the expected share alone. A day on which a province is
@@ -3502,7 +3508,7 @@ function plot_province_split_ppc(
         chn; share_key::Symbol, rows, seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen, :darkorange],
+        colours = _ZONE_PATCH_COLOURS,
         rho_key::Union{Nothing, Symbol} = nothing,
         title::AbstractString = "Province share, modelled against observed"
     )
@@ -3788,7 +3794,7 @@ function plot_province_forecast(
         pp, fc::DataFrame;
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        colours = [:firebrick, :steelblue, :seagreen, :darkorange3],
+        colours = _ZONE_PATCH_COLOURS,
         observed::NamedTuple = (;),
         title::AbstractString = "One-week-ahead forecast by province"
     )
@@ -3889,6 +3895,213 @@ function plot_province_forecast_detail(
         vlines!(ax, [o]; color = :black, linestyle = :dash, linewidth = 2)
         CairoMakie.xlims!(ax, 0, max(1.0, quantile(v, 0.98), 1.05 * o))
     end
+    return fig
+end
+
+## Label heights for points at `x` (on the axis scale) and `y`, nudged
+## upwards so that no two labels within `xgap` of each other horizontally sit
+## closer than `ygap` vertically. Labels keep their order in `y`, and an
+## isolated label stays at its point.
+function _spread_labels(
+        x::AbstractVector{<:Real}, y::AbstractVector{<:Real};
+        xgap::Real, ygap::Real
+    )
+    out = float.(collect(y))
+    placed = Int[]
+    for i in sortperm(out)
+        ## Placed labels in rising height, so a label bumped past one
+        ## neighbour is still checked against the next one up.
+        for j in sort(placed; by = j -> out[j])
+            abs(x[i] - x[j]) < xgap && abs(out[i] - out[j]) < ygap &&
+                (out[i] = out[j] + ygap)
+        end
+        push!(placed, i)
+    end
+    return out
+end
+
+## The 90% credible interval of row `i` of a `cases_rt_table` frame as
+## crossed bars: one spanning the reproduction number and, where the weekly
+## cases are uncertain, one spanning the cases. A wide interval draws a long,
+## faint bar rather than a precise dot.
+function _cases_rt_interval!(ax, tbl, i, colour; linewidth)
+    CairoMakie.rangebars!(
+        ax, [tbl.cases[i]], [tbl.rt_lower[i]], [tbl.rt_upper[i]];
+        color = colour, linewidth, whiskerwidth = 0
+    )
+    tbl.cases_upper[i] > tbl.cases_lower[i] && CairoMakie.rangebars!(
+        ax, [tbl.rt_median[i]], [tbl.cases_lower[i]], [tbl.cases_upper[i]];
+        direction = :x, color = colour, linewidth, whiskerwidth = 0
+    )
+    return nothing
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Confirmed cases in the most recent week against the reproduction number at
+its end, one point per area, from a [`cases_rt_table`](@ref) frame. Each
+point sits at the week's count and the median reproduction number, with a
+faint bar spanning the 90% credible interval of the reproduction number and,
+for a forecast, a second bar spanning the 90% interval of its cases. An
+observed count carries no interval. The week before is a faded triangle
+joined to the point, and a `forecast` row is a hollow point one week ahead
+joined by a dashed line. Colours follow `patch`, named by `patch_labels`.
+
+`top`, when given, keeps the `top` areas with the most confirmed cases over
+the two weeks. Dashed lines mark a reproduction number of one and the
+median of the shown areas' most recent weekly counts. Labels of nearby
+points are nudged apart, with a thin leader back to a moved label's point,
+and a label near the right edge sits to the left of its point.
+`size` and `fontsize` set the figure size and the label size.
+"""
+function plot_cases_rt(
+        tbl::DataFrame;
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        patch_colours = _ZONE_PATCH_COLOURS,
+        top::Union{Nothing, Integer} = nothing,
+        unit::AbstractString = "province",
+        title::AbstractString = "Confirmed cases and reproduction number by " *
+            unit,
+        size = (760, 620), fontsize::Real = 11
+    )
+    fig = Figure(; size)
+    CairoMakie.Label(
+        fig[0, 1], title; fontsize = 16, font = :bold, tellwidth = false
+    )
+    observed = findall(==("observed"), tbl.kind)
+    if isempty(observed)
+        CairoMakie.Label(
+            fig[1, 1], "No $(unit) reports a week of confirmed cases.";
+            tellwidth = false, tellheight = false, color = (:black, 0.55)
+        )
+        return fig
+    end
+    rows_of(a, kind) = let idx = findall(
+            i -> tbl.area[i] == a && tbl.kind[i] == kind, 1:nrow(tbl)
+        )
+        idx[sortperm(tbl.date[idx])]
+    end
+    areas = unique(tbl.area[observed])
+    if top !== nothing && length(areas) > top
+        total = [sum(tbl.cases[rows_of(a, "observed")]) for a in areas]
+        areas = areas[sort(partialsortperm(total, 1:top; rev = true))]
+    end
+    latest = [last(rows_of(a, "observed")) for a in areas]
+    ref = median(tbl.cases[latest])
+    shown = reduce(
+        vcat, [rows_of(a, k) for a in areas, k in ("observed", "forecast")]
+    )
+    xhi = max(2.0, 1.5 * maximum(tbl.cases_upper[shown]), 1.2 * ref)
+    scale = CairoMakie.Makie.pseudolog10
+    ax = Axis(
+        fig[1, 1]; xscale = scale, xticks = _zone_cbar_ticks((0, xhi), scale),
+        xlabel = "Confirmed cases in the week",
+        ylabel = "Reproduction number at the end of the week",
+        xgridcolor = (:black, 0.06), ygridcolor = (:black, 0.06)
+    )
+    hlines!(ax, [1.0]; color = :grey40, linestyle = :dash, linewidth = 1)
+    vlines!(ax, [ref]; color = :grey60, linestyle = :dash, linewidth = 1)
+    colour(p) = patch_colours[mod1(p, length(patch_colours))]
+    ## Room below zero cases and around the intervals, with R = 1 always in
+    ## view.
+    ylo = min(0.9 * minimum(tbl.rt_lower[shown]), 0.9)
+    yhi = max(1.05 * maximum(tbl.rt_upper[shown]), 1.1)
+    ## Labels of nearby points are nudged apart so they do not overprint.
+    latest_x = scale.(tbl.cases[latest])
+    label_y = _spread_labels(
+        latest_x, tbl.rt_median[latest];
+        xgap = 0.25 * (scale(xhi) - scale(-0.5)), ygap = 0.05 * (yhi - ylo)
+    )
+    for (ia, a) in enumerate(areas)
+        idx = rows_of(a, "observed")
+        k = last(idx)
+        c = colour(tbl.patch[k])
+        if length(idx) > 1
+            j = idx[end - 1]
+            lines!(
+                ax, tbl.cases[[j, k]], tbl.rt_median[[j, k]];
+                color = (c, 0.3), linewidth = 1.2
+            )
+            _cases_rt_interval!(ax, tbl, j, (c, 0.15); linewidth = 2)
+            scatter!(
+                ax, [tbl.cases[j]], [tbl.rt_median[j]];
+                marker = :utriangle, color = (c, 0.35), markersize = 9
+            )
+        end
+        f = rows_of(a, "forecast")
+        if !isempty(f)
+            f = only(f)
+            lines!(
+                ax, tbl.cases[[k, f]], tbl.rt_median[[k, f]];
+                color = (c, 0.6), linestyle = :dash, linewidth = 1.5
+            )
+            _cases_rt_interval!(ax, tbl, f, (c, 0.25); linewidth = 4)
+            scatter!(
+                ax, [tbl.cases[f]], [tbl.rt_median[f]];
+                color = :white, strokecolor = c, strokewidth = 1.5,
+                markersize = 8
+            )
+        end
+        _cases_rt_interval!(ax, tbl, k, (c, 0.3); linewidth = 8)
+        scatter!(
+            ax, [tbl.cases[k]], [tbl.rt_median[k]];
+            color = c, strokecolor = :white, strokewidth = 1, markersize = 8
+        )
+        ly = label_y[ia]
+        ly == tbl.rt_median[k] || lines!(
+            ax, [tbl.cases[k], tbl.cases[k]], [tbl.rt_median[k], ly];
+            color = (:grey40, 0.5), linewidth = 0.8
+        )
+        ## A label near the right edge sits to the left of its point, so
+        ## the axis does not clip it.
+        left = latest_x[ia] > scale(-0.5) + 0.75 * (scale(xhi) - scale(-0.5))
+        CairoMakie.text!(
+            ax, tbl.cases[k], ly;
+            text = a, color = :grey15, fontsize,
+            offset = (left ? -7 : 7, 0),
+            align = (left ? :right : :left, :center)
+        )
+    end
+    CairoMakie.xlims!(ax, -0.5, xhi)
+    CairoMakie.ylims!(ax, ylo, yhi)
+    has_forecast = any(a -> !isempty(rows_of(a, "forecast")), areas)
+    key = Any[
+        (
+            CairoMakie.LineElement(;
+                color = (:grey30, 0.3), linewidth = 8
+            ),
+            "90% credible interval",
+        ),
+        (
+            CairoMakie.MarkerElement(;
+                marker = :utriangle, color = (:grey30, 0.35),
+                markersize = 9
+            ),
+            "Week before",
+        ),
+    ]
+    has_forecast && push!(
+        key, (
+            CairoMakie.MarkerElement(;
+                marker = :circle, color = :white,
+                strokecolor = :grey30, strokewidth = 1.5, markersize = 8
+            ),
+            "Week ahead (forecast)",
+        )
+    )
+    _patch_legend!(
+        fig, (2, 1), tbl.patch[latest], patch_labels, patch_colours;
+        extra = key
+    )
+    CairoMakie.Label(
+        fig[3, 1], "Points show the most recent week's confirmed cases " *
+            "and median R. Bars span the 90% credible interval, and an " *
+            "observed count has none. Dashed lines mark R = 1 and the " *
+            "median weekly count across the $(unit)s shown.";
+        fontsize = 12, word_wrap = true, tellwidth = false,
+        padding = (0, 0, 0, 6)
+    )
     return fig
 end
 

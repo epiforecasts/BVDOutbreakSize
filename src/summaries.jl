@@ -868,6 +868,40 @@ function patch_headline(
 end
 
 """
+Compact markdown table of the headline quantities by province, one row per
+province: the infections to date and the reproduction number at the
+cut-off, each as an equal-tailed 90% credible interval, and, when
+`recent_cases` is given, the confirmed cases over the most recent week of
+reports. `recent_cases` holds one observed count per province in
+`patch_labels` order. [`patch_headline`](@ref) gives the fuller comparison.
+"""
+function province_summary_table(
+        chn, n_patches::Integer = length(PROVINCE_NAMES);
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        recent_cases::Union{Nothing, AbstractVector{<:Real}} = nothing
+    )
+    np = min(n_patches, length(patch_labels))
+    d = _headline_draws(chn, np)
+    df = DataFrame(
+        "Province" => patch_labels[1:np],
+        "Infections to date" =>
+            [_interval90_text(d.C_T[p]; digits = 0) for p in 1:np],
+        "R at the cut-off" => [_interval90_text(d.R_T[p]) for p in 1:np]
+    )
+    if recent_cases !== nothing
+        length(recent_cases) >= np || throw(
+            ArgumentError(
+                "province_summary_table: $(length(recent_cases)) recent " *
+                    "counts for $np provinces."
+            )
+        )
+        df[!, "Confirmed cases, latest week"] =
+            [string(round(Int, recent_cases[p])) for p in 1:np]
+    end
+    return markdown_table(df)
+end
+
+"""
 Markdown table comparing the provinces' one-week-ahead forecast, one row per
 province and each target as an equal-tailed 90% predictive interval, followed
 by bullets that compare the provinces. Every comparison is computed draw by
@@ -877,8 +911,9 @@ forecast.
 
 The columns are the new confirmed cases and confirmed deaths over the week,
 the patients in isolation and the isolation beds at the end of the week, the
-new infections over the week, the reproduction number at the end of the week
-and the probability that it is above one, each when `fc` carries it.
+new admissions and new infections over the week, the reproduction number at
+the end of the week and the probability that it is above one, each when `fc`
+carries it.
 """
 function province_forecast_headline(
         fc::DataFrame;
@@ -895,6 +930,7 @@ function province_forecast_headline(
             (:confirmed_deaths_new, "New confirmed deaths", 0),
             (:isolation_level, "Patients in isolation", 0),
             (:bed_capacity, "Isolation beds", 0),
+            (:admissions_new, "New admissions", 0),
             (:infections_new, "New infections", 0),
             (:rt_forecast, "R at T+7", 2),
         )
@@ -951,8 +987,9 @@ end
 """
 Per-province isolation beds at the cut-off, from the province occupancy and
 bed splits in [`treatment_flow_model`](@ref): one row per province with
-the modelled bed count, the latent bed demand, the occupied beds (demand
-capped at the beds), the utilisation and the shortfall, each a median with
+the beds, the latent bed demand, the occupied beds (the national
+occupancy split on the demand shares), the utilisation and the patients
+above the beds, each a median with
 a 90% credible interval. Draws that are not finite are left out of each
 cell. Expects a chain from [`bvd_joint`](@ref) with
 more than one patch, which stores these as the vector deterministics
@@ -987,7 +1024,7 @@ function province_bed_table(
         "Bed demand" => String[],
         "Occupied beds" => String[],
         "Utilisation (%)" => String[],
-        "Shortfall" => String[]
+        "Patients above beds" => String[]
     )
     for p in 1:np
         push!(
@@ -1247,6 +1284,7 @@ const _PROVINCE_FORECAST_PANELS = (
     (:confirmed_deaths_new, "New confirmed deaths by T+7"),
     (:isolation_level, "Patients in isolation at T+7"),
     (:bed_capacity, "Isolation beds at T+7"),
+    (:admissions_new, "New admissions by T+7"),
     (:infections_new, "New infections by T+7"),
     (:rt_forecast, "Reproduction number at T+7"),
 )
@@ -1345,6 +1383,7 @@ function province_forecast_table(
     for p in 1:np, (col, quantity, dg) in (
                 (:isolation_level, "Patients in isolation at T+$(horizon)", digits),
                 (:bed_capacity, "Isolation beds at T+$(horizon)", digits),
+                (:admissions_new, "New admissions by T+$(horizon)", digits),
                 (:infections_new, "New infections by T+$(horizon)", digits),
                 (:rt_forecast, "Reproduction number at T+$(horizon)", 2),
             )

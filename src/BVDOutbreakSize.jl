@@ -12,8 +12,8 @@ using Dates: Date, Day, date2epochdays, epochdays2date, now
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using Preferences: @load_preference
-using Turing: @model, @addlogprob!, MCMCThreads, NUTS, Prior, sample,
-    to_submodel, predict, returned
+using Turing: @model, @addlogprob!, @varname, MCMCThreads, NUTS, Prior,
+    sample, to_submodel, predict, returned
 using Turing.DynamicPPL.Bijectors: VectorBijectors
 using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
     Model, VarInfo, contextualize, filldist, getlogjoint, init!!,
@@ -56,11 +56,11 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     summary_table, posterior_summary, median_interval_text,
     markdown_table, MarkdownTable,
     patch_summary_table, patch_overview_table, province_bed_table,
-    patch_headline, province_forecast_headline,
+    patch_headline, province_summary_table, province_forecast_headline,
     province_cfr_table, province_forecast_table,
     province_forecast_vs_truth, plot_province_forecast,
     forecast_provinces, province_share_draws, PROVINCE_FORECAST_METHOD,
-    plot_province_forecast_detail,
+    plot_province_forecast_detail, plot_cases_rt,
     fit_diagnostics, diagnostics_table,
     parameter_diagnostics, worst_parameters_table,
     family_diagnostics_table, diagnostic_spread_table,
@@ -117,6 +117,9 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     plot_forecast_vs_truth, plot_forecast_vs_truth_latent,
     plot_forecast_beds_vs_truth,
     delay_corrected_cfr, delay_corrected_confirmed_cfr,
+    infection_state_weights, point_prevalence, patch_prevalence,
+    zone_prevalence, prevalence_overview, prevalence_table,
+    plot_prevalence_ranking,
     confirmed_cfr_table, plot_confirmed_cfr,
     # renewal helpers
     renewal_infections, convolve_delay, convolve_pmf,
@@ -128,7 +131,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     with_horizon, forecast_days, generator_joint, recovery_observed_varnames,
     simulate_recovery, recovery_data, recovery_density_check, recovery_fit,
     recovery_table, recovery_verdict, recovery_seed_verdicts,
-    recovery_overall, recovery_summary,
+    recovery_overall, recovery_summary, recovery_chain_diagnostics,
     forecast_recovery_table,
     interpolate_knots, deviation_knots, deviation_knot_dims,
     relative_multiplier,
@@ -190,11 +193,11 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     default_breakpoint,
     province_lab_increment_matrix, background_split_model,
     province_care_observations, incomplete_capacity_days,
-    patch_capacity_share_model,
+    patch_capacity_share_model, background_admission_share_model,
     patch_infections,
     implied_national_Rt, implied_national_Rt_at,
     patch_rt_model, patch_infection_model,
-    province_export_pressure_model,
+    province_export_pressure_model, province_suspected_ascertainment_model,
     province_composition_model, composition_shares, composition_split_model,
     # health-zone model
     bvd_zone, fit_zone, zone_fit_inputs, zone_parent_inputs,
@@ -216,15 +219,15 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     zone_composition_calibration, plot_zone_composition_ppc,
     zone_diagnostics_table, zone_sampler_diagnostics
 
-## Observation distributions a submodel writes on the right of `~`.
-## Public, not exported. `public` is Julia 1.11 syntax, so it is parsed only
-## there and Julia 1.10 still loads the package.
+## Distributions a submodel writes on the right of `~`. Public, not
+## exported. `public` is Julia 1.11 syntax, so it is parsed only there and
+## Julia 1.10 still loads the package.
 @static if VERSION >= v"1.11.0-DEV.469"
     eval(
         Meta.parse(
             "public NegBinomialVector, CensoredNegBinomialVector, " *
                 "StudentTVector, BetaBinomialVector, SplitCountVector, " *
-                "SafePoisson, SafeNegBinomial"
+                "SafePoisson, SafeNegBinomial, RandomWalkVector"
         )
     )
 end
@@ -252,6 +255,7 @@ include("models/fit_args.jl")
 include("recovery.jl")
 include("models/zone.jl")
 include("zone.jl")
+include("prevalence.jl")
 
 ## Off leaves Mooncake to derive the kernels itself, which is what an A/B
 ## of the speedup compares against:

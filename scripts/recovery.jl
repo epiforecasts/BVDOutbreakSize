@@ -9,11 +9,13 @@
 # Usage:
 #   julia --project=docs scripts/recovery.jl <seed> [out_dir]
 #
+# The fit takes `joint_sampler_args()` from `docs/fits/registry.jl`, the
+# settings every fit in the report uses, so the `BVD_JOINT_*` overrides
+# apply here too. A shorter run does not converge on this model and would
+# test the sampler rather than the model.
+#
 # Settings, from the environment:
-#   BVD_RECOVERY_SAMPLES (1000), BVD_RECOVERY_WARMUP (1000),
-#   BVD_RECOVERY_MAX_DEPTH (10), BVD_RECOVERY_CHAINS (2): the headline
-#   joint's own settings, since a shorter run does not converge on this model
-#   and would test the sampler rather than the model,
+#   BVD_RECOVERY_CHAINS (2),
 #   BVD_RECOVERY_HORIZON (14)
 #   BVD_RECOVERY_DRY_RUN (false): simulate and check the density, but do not
 #   fit
@@ -21,14 +23,12 @@
 using BVDOutbreakSize, CSV, DataFrames, Turing
 using Random: Xoshiro
 using BVDOutbreakSize: _draws, _draw_vectors
+include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
 
 seed = parse(Int, get(ARGS, 1, "1"))
 out_dir = get(ARGS, 2, joinpath("output", "recovery"))
 env_int(k, d) = parse(Int, get(ENV, k, string(d)))
-samples = env_int("BVD_RECOVERY_SAMPLES", 1000)
-warmup = env_int("BVD_RECOVERY_WARMUP", 1000)
 chains = env_int("BVD_RECOVERY_CHAINS", 2)
-max_depth = env_int("BVD_RECOVERY_MAX_DEPTH", 10)
 horizon = env_int("BVD_RECOVERY_HORIZON", 14)
 mkpath(out_dir)
 
@@ -40,6 +40,7 @@ const SCALARS = [
 ]
 const PER_PROVINCE = [
     "C_T_patch", "R_T_patch", "CFR_patch", "province_ascertainment",
+    "province_suspected_ascertainment",
     "region_drift_sd",
 ]
 
@@ -100,7 +101,7 @@ println(
 flush(stdout)
 get(ENV, "BVD_RECOVERY_DRY_RUN", "false") == "true" && exit(0)
 fit = recovery_fit(
-    model; samples, n_adapts = warmup, chains, max_depth, seed = seed + 1
+    model; joint_sampler_args()..., chains, seed = seed + 1
 )
 fit_minutes = round((time() - t0) / 60; digits = 1)
 
@@ -128,6 +129,20 @@ params.max_rhat .= diagnostics.max_rhat
 params.min_ess_bulk .= diagnostics.min_ess_bulk
 params.divergences .= diagnostics.n_divergent
 CSV.write(joinpath(out_dir, "recovery_$(seed).csv"), params)
+## Which parameters carry the R-hat, worst first, and each chain's sampler
+## behaviour, so a seed that fails to converge can be traced to a
+## parameter and to a stuck chain from the artifact alone.
+chain_diagnostics = recovery_chain_diagnostics(
+    fit.chain; max_depth = joint_max_depth()
+)
+CSV.write(
+    joinpath(out_dir, "recovery_parameters_$(seed).csv"),
+    chain_diagnostics.parameters
+)
+CSV.write(
+    joinpath(out_dir, "recovery_sampler_$(seed).csv"),
+    chain_diagnostics.sampler
+)
 ## Every fifth posterior draw and a prior sample of the fitted model, one
 ## column per quantity, for the report's figures. The prior is the same for
 ## every seed, so each seed's sample adds to one pooled prior.

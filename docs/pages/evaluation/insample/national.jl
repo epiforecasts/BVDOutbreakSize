@@ -1,8 +1,7 @@
 # # In-sample checks
 #
-# Whether the fitted joint model reproduces the national data it was fitted to.
-# It also sets the single-stream fits against the joint, breaks the sampler diagnostics down by parameter and re-fits the joint under alternative assumptions.
-# It also sets the current estimates against those published at past releases.
+# This page checks whether the joint model reproduces the national data it was fitted to.
+# It also compares the single-stream fits with the joint, breaks the sampler diagnostics down by parameter, refits the joint under alternative assumptions and sets the current estimates against past releases.
 # The same checks by province are on the [province in-sample checks](@ref "Province in-sample checks") page and by health zone on the [health-zone in-sample checks](@ref "Health-zone in-sample checks") page.
 # How the model predicts data it has not seen is on the [forecast evaluation](@ref "Forecast evaluation") page.
 
@@ -54,7 +53,7 @@ posterior_C_onsets = vec(Array(chn_onsets[:C_T]));
 
 # ## Summary
 #
-# Whether each stream is reproduced, from the checks further down this page.
+# Whether each stream is reproduced, from the checks below.
 # Bias runs from −1 to 1 and is negative when the model under-predicts, and coverage is the fraction of vintages inside the predictive interval.
 
 #md # ```@eval
@@ -334,7 +333,7 @@ admissions_panel = (;
     title = "Admissions/day",
     dates = _vintage_dates(obs.treatment_admissions_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(admissions.obs)
+        pp_joint, @varname(admissions.increments)
     ),
     observed = obs.treatment_admissions_history.counts,
     colour = :teal, cumulative = false,
@@ -635,9 +634,6 @@ onset_fit_fig = plot_onset_nowcast_grid(_onset_panels);
 onset_fit_fig #hide
 
 # ### Onsets by date of onset
-#
-# The figure below compares the latest digitised bar for each onset date against the model's posterior predictive for that bar, and against the modelled onsets themselves.
-# The gap between the two bands is the part of the epidemic the latest figure does not carry, whether because it is never ascertained or because it has not been reported yet.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct symptom onsets by date of onset</summary>
@@ -738,9 +734,18 @@ end;
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 onset_ppc_by_date_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # The latest digitised bar for each onset date against the posterior predictive for that bar and against the modelled onsets.
+#md # The gap between the two bands is the part of the epidemic the latest figure does not carry, because it is either never ascertained or not yet reported.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ## Posterior correlations and stream totals
 #
@@ -753,12 +758,14 @@ onset_ppc_by_date_fig #hide
 correlation_fig = plot_correlation_heatmap(
     chn_joint,
     [
-        :C_T, :R_T, :T, :CFR, :p_drc, :p_uganda, :lambda_bg, :tau_test,
+        :C_T, :R_T, :T, :CFR, :p_drc_national, :p_uganda, :lambda_bg,
+        :tau_test,
         :expected_reports_T, :expected_deaths_T, :expected_confirmed_T,
     ];
     labels = Dict(
         :C_T => raw"C_T", :R_T => raw"R_T", :T => raw"T",
-        :CFR => raw"\mathrm{CFR}", :p_drc => raw"p_\mathrm{drc}",
+        :CFR => raw"\mathrm{CFR}",
+        :p_drc_national => raw"p_\mathrm{drc,\ national}",
         :p_uganda => raw"p_\mathrm{ug}", :lambda_bg => raw"\lambda_\mathrm{bg}",
         :tau_test => raw"\tau_\mathrm{test}",
         :expected_reports_T => raw"\mathrm{susp.\ cases}",
@@ -806,8 +813,6 @@ stream_pairs_fig = plot_stream_pairs(stream_totals, stream_observed);
 stream_pairs_fig #hide
 
 # ## Outbreak size estimated by each data stream
-#
-# The table below puts the posteriors over the infection count side by side, the single-stream fits and the joint, to show what each stream implies alone and what the joint adds.
 
 #md # ```@raw html
 #md # <details><summary>Per-stream infection-count table</summary>
@@ -825,12 +830,17 @@ streams_C_table = streams_table(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 MarkdownTable(streams_C_table) #hide
 
-# The first figure shows each single-stream fit's cumulative-infection trajectory projected to the cut-off, with a dotted rule in each stream's colour marking where its data stops and the ribbon beyond it becomes a forward projection.
-# The count axis is cropped to twice the joint fit's 90% upper bound, as the density figure below is, and a stream whose band runs past the crop is marked with an open triangle where it leaves the axis.
+#md # ```@raw html
+#md # <figcaption>
+#md # The posterior infection count from each single-stream fit and the joint, showing what each stream implies alone and what the joint adds.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Per-stream projected-trajectory plot</summary>
@@ -895,12 +905,18 @@ stream_traj_fig = plot_stream_trajectories(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 stream_traj_fig #hide
 
-# The second figure is the posterior density of each fit's cumulative infection count at the cut-off.
-# The x-axis is scaled to a multiple of the joint-fit 90% upper bound so the bulk of the streams stays visible rather than being flattened by the wide, ill-defined confirmed-only tail.
+#md # ```@raw html
+#md # <figcaption>
+#md # Each single-stream fit's cumulative infections projected to the cut-off, with a dotted rule where its data stop and the projection begins.
+#md # The count axis is cropped at twice the joint fit's 90% upper bound, and an open triangle marks a band that runs past it.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Cut-off infection-count density plot</summary>
@@ -924,13 +940,20 @@ cumulative_density_fig = plot_cumulative_cases(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 cumulative_density_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The posterior density of each fit's cumulative infection count at the cut-off.
+#md # The x-axis is scaled to a multiple of the joint fit's 90% upper bound, so the wide confirmed-only tail does not flatten the other streams.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ## Reproduction number estimated by each data stream
-#
-# The reproduction number each stream implies on its own, one panel per stream with the joint fit overlaid in grey as the reference.
 
 #md # ```@raw html
 #md # <details><summary>Per-stream implied-Rt plot</summary>
@@ -979,18 +1002,21 @@ stream_rt_fig = plot_rt_streams(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 stream_rt_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The reproduction number each stream implies on its own, one panel per stream, with the joint fit in grey as the reference.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ## Estimate evolution across releases
 #
-# How the outbreak-size estimate has moved as situation reports accrued, three series on one calendar axis.
-# The estimate published at each release is in blue, drawn as a median with nested 30/60/90% interval bars because each release is its own fit rather than one continuous model.
-# The current model frozen at earlier cut-offs is in red.
-# The current model on current data is the green band, drawn day by day so the latest estimate reads against the earlier points.
-# Dotted vertical rules mark the release dates.
-# The published series switches from a closed-form integral model to a renewal model on 7 June, so a step there can reflect the change of method rather than of data.
+# How the outbreak-size estimate has moved as situation reports accrued.
 
 #md # ```@raw html
 #md # <details><summary>Released estimates and the current-model frozen re-fits</summary>
@@ -1062,16 +1088,21 @@ evolution_fig = plot_estimate_evolution(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 evolution_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The outbreak size published at each release (blue), from the current model frozen at earlier cut-offs (red) and from the current model on current data (green band), with dotted rules at the release dates.
+#md # Each release is its own fit, so it is drawn as a median with 30%, 60% and 90% interval bars.
+#md # The published series switches from a closed-form integral model to a renewal model on 7 June, so a step there can reflect the change of method rather than of data.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ### Reproduction number by release
-#
-# The reproduction number estimated at each release, the same kind of release-by-release picture as the outbreak-size evolution above.
-# Each release's cut-off reproduction number $R_T$ is drawn as a discrete estimate, a median with nested 30/60/90% interval bars.
-# The current fit's daily $R_t$ over its established window is drawn as the continuous band, and $R_t = 1$ is marked.
-# The reproduction-number axis is fixed at three across this figure and the by-dataset one below, with an interval running past it clamped and marked with an open triangle.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction number per release with the current-fit band</summary>
@@ -1140,18 +1171,20 @@ rt_evolution_fig = plot_estimate_evolution(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 rt_evolution_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The reproduction number at the cut-off of each release, as a median with 30%, 60% and 90% interval bars, against the current fit's daily reproduction number as a band.
+#md # The axis is fixed at three here and in the by-dataset figure below, and an interval past it is clamped and marked with an open triangle.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ### Reproduction number by release and dataset
-#
-# The same release-by-release reproduction number split into one panel per dataset, so each dataset's history reads against the others and against the joint.
-# Panels share a calendar axis and the fixed reproduction-number range, and $R_t = 1$ is marked.
-# Each release's cut-off value is a median with nested 30/60/90% interval bars.
-# A dataset the report also fits on its own carries that fit's current-model band behind its points, built as in the overview above.
-# Confirmed deaths carries no band, so its panel shows release points alone.
-# Only the most recent releases published these per-dataset estimates, so every panel spans a much shorter window than the overview above rather than a different history.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction number per release by fit</summary>
@@ -1272,16 +1305,21 @@ rt_stream_fig = plot_evolution_by_group(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 rt_stream_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The reproduction number at each release with one panel per dataset, on a shared calendar axis and the fixed range of the figure above.
+#md # A dataset the report also fits alone carries that fit's current-model band, and confirmed deaths carries none.
+#md # Only the most recent releases published these estimates, so the panels span a shorter window than the overview.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ### Basic reproduction number by release
-#
-# The basic reproduction number $R_0$ estimated at each release, the initial-transmission counterpart of the reproduction number above, before the time-varying decline.
-# Released estimates are blue and the current model frozen at earlier cut-offs is red, each a median with nested 30/60/90% interval bars.
-# The current fit sits behind both as a flat band, and $R_0 = 1$ is marked.
-# Releases only began publishing this quantity recently, so the short blue history reflects that rather than any failed release.
 
 #md # ```@raw html
 #md # <details><summary>Basic reproduction number per release with frozen re-fits and the current-fit band</summary>
@@ -1348,16 +1386,20 @@ r0_evolution_fig = plot_estimate_evolution(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 r0_evolution_fig #hide
 
+#md # ```@raw html
+#md # <figcaption>
+#md # The basic reproduction number published at each release (blue) and from the current model frozen at earlier cut-offs (red), as medians with 30%, 60% and 90% interval bars, with the current fit as a flat band.
+#md # Releases began publishing this quantity recently, so the blue history is short.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ### Basic reproduction number by release and dataset
-#
-# The basic reproduction number estimated at each release, one panel per fit, the by-dataset counterpart of the figure above.
-# Panels share a calendar axis and a y range, and $R_0 = 1$ is marked.
-# Each release is a median with nested 30/60/90% interval bars.
-# Every fit the report runs on its own also carries a current-model reference band.
 
 #md # ```@raw html
 #md # <details><summary>Basic reproduction number per release by fit</summary>
@@ -1412,9 +1454,18 @@ r0_stream_fig = plot_evolution_by_group(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 r0_stream_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # The basic reproduction number at each release with one panel per fit, on a shared calendar axis and range.
+#md # Every fit the report runs on its own carries a current-model reference band.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ## Sensitivity to assumptions
 #
@@ -1424,13 +1475,8 @@ r0_stream_fig #hide
 #
 # The death stream dates the outbreak from how far deaths lag symptom onset, so the assumed onset-to-death delay sets the implied infection count.
 # The baseline uses the hospital-pathway delay from the Isiro 2012 line-list reanalysis (onset to admission then admission to death, implied mean about 12 d).
-# We re-fit the joint model under the community-pathway delay from the same reanalysis: the delay for deaths that occur in the community without a recorded admission.
-# This delay is shorter (implied mean about 8 d).
-# Both pathways come from the line list, so this varies the actual delay assumption rather than an arbitrary scenario.
-# The re-fit is the headline model, with its provinces and in-care split, and changes only the delay.
-# It uses the headline's sampler settings.
-#
-# The infection count to date shifts with the assumed delay, and the table and overlaid densities below show how far.
+# We refit the joint model under the community-pathway delay from the same reanalysis, for deaths in the community without a recorded admission (implied mean about 8 d).
+# The refit is the headline model with the headline's sampler settings and changes only the delay.
 
 #md # ```@raw html
 #md # <details><summary>Re-fit the joint under the community-pathway onset-to-death delay</summary>
@@ -1459,11 +1505,16 @@ delay_sensitivity_table = RUN_SENSITIVITY ?
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 MarkdownTable(delay_sensitivity_table) #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # The infection count to date under the hospital-pathway and community-pathway onset-to-death delays.
+#md # </figcaption>
+#md # </figure>
 #md # <details><summary>Delay-sensitivity infection-count density plot</summary>
 #md # ```
 
@@ -1476,9 +1527,17 @@ delay_sensitivity_fig = RUN_SENSITIVITY ?
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 delay_sensitivity_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Posterior densities of the infection count to date under the two onset-to-death delays.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ### Tree-prior sensitivity
 #
@@ -1486,8 +1545,7 @@ delay_sensitivity_fig #hide
 # The baseline uses the more flexible Skygrid non-parametric model, which dates the common ancestor to 15 March 2026 ($95\%$ HPD 09 Feb -- 12 Apr).
 # The report also fits an Exponential growth tree prior, which dates the common ancestor about a week earlier to 08 March 2026 ($95\%$ HPD 01 Feb -- 05 Apr) [mbalaplacide2026](@cite).
 # Both priors give similar evolutionary rates ($\sim 1.1\times10^{-3}$ subs/site/year).
-# We re-fit the joint model under the Exponential growth TMRCA and compare the infection count to date and the outbreak age.
-# As for the delay, the re-fit is the headline model with only the common-ancestor date changed.
+# We refit the headline model with only the common-ancestor date changed to the Exponential growth estimate.
 
 #md # ```@raw html
 #md # <details><summary>Re-fit the joint under the Exponential growth tree prior</summary>
@@ -1505,7 +1563,6 @@ T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : no
 #md # </details>
 #md # ```
 
-# The infection count to date under the two tree priors, side by side.
 # A slightly earlier common ancestor (Exponential growth) permits a marginally older outbreak, though the difference is small because the evolutionary rates are nearly identical.
 
 #md # ```@raw html
@@ -1521,11 +1578,16 @@ clock_sensitivity_C_table = RUN_SENSITIVITY ?
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 MarkdownTable(clock_sensitivity_C_table) #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # The infection count to date under the two tree priors.
+#md # </figcaption>
+#md # </figure>
 #md # <details><summary>Tree-prior infection-count density plot</summary>
 #md # ```
 
@@ -1538,11 +1600,17 @@ clock_sensitivity_C_fig = RUN_SENSITIVITY ?
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 clock_sensitivity_C_fig #hide
 
-# The outbreak age, the number of days from seeding to the cut-off, under the two tree priors.
+#md # ```@raw html
+#md # <figcaption>
+#md # Posterior densities of the infection count to date under the two tree priors.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Tree-prior outbreak-age table</summary>
@@ -1557,11 +1625,16 @@ clock_sensitivity_T_table = RUN_SENSITIVITY ?
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 MarkdownTable(clock_sensitivity_T_table) #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # The outbreak age, the number of days from seeding to the cut-off, under the two tree priors.
+#md # </figcaption>
+#md # </figure>
 #md # <details><summary>Tree-prior outbreak-age density plot</summary>
 #md # ```
 
@@ -1576,9 +1649,17 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 clock_sensitivity_T_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Posterior densities of the outbreak age under the two tree priors.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ## Fit diagnostics by parameter
 #
@@ -1666,8 +1747,6 @@ joint_worst_parameters = MarkdownTable(
 
 joint_worst_parameters #hide
 
-# The same diagnostics grouped by parameter rather than by element.
-
 #md # ```@raw html
 #md # <details><summary>Worst-mixing parameters, grouped</summary>
 #md # ```
@@ -1681,12 +1760,17 @@ joint_worst_groups = MarkdownTable(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 joint_worst_groups #hide
 
 #md # ```@raw html
-#md # <details><summary>Mixing over time varying paramters</summary>
+#md # <figcaption>
+#md # The same diagnostics grouped by parameter rather than by element.
+#md # </figcaption>
+#md # </figure>
+#md # <details><summary>Mixing over time-varying parameters</summary>
 #md # ```
 
 joint_index_fig = plot_parameter_index_diagnostics(
@@ -1702,8 +1786,6 @@ joint_index_fig #hide
 
 # ### Where the divergent transitions sit
 #
-# Per chain, the first table gives the divergent transitions, the adapted step size, the share of draws whose trajectory reached the tree-depth cap, the mean acceptance and the energy fraction of missing information.
-#
 #md # ```@raw html
 #md # <details><summary>Sampler behaviour by chain</summary>
 #md # ```
@@ -1712,11 +1794,16 @@ joint_chain_table = MarkdownTable(sampler_by_chain_table(chn_joint));
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 joint_chain_table #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # For each chain, the divergent transitions, the adapted step size, the share of draws at the tree-depth cap, the mean acceptance and the energy fraction of missing information.
+#md # </figcaption>
+#md # </figure>
 #md # <details><summary>Divergence location table</summary>
 #md # ```
 
@@ -1843,12 +1930,6 @@ frozen_contrast_fig #hide
 #
 # Whether the model recovers known values when fitted to data it simulated itself.
 # Each seed is one prior draw of the model run past the cut-off, kept when its outbreak size is within a factor of five of the one observed, and fitted with the headline joint's sampler settings.
-# The top panel shows each seed's posterior median with its 50% and 90% intervals divided by that seed's true value, so a recovered quantity straddles the line at one.
-# The growth rate is shown as the ratio of daily growth factors, $\exp(r - r_{\text{true}})$.
-# The intervention effect, a change in $\log R_t$, is shown the same way, as the ratio of the $R_t$ multipliers it implies.
-# Below, each quantity is on its own scale: the prior in grey, each seed's posterior in its colour and its true value as a dashed line in the same colour.
-# The prior is the fitted model's, before the factor-of-five selection of the truths.
-# The forecasts are scored against the simulated future and a persistence baseline, where a relative CRPS below one beats the baseline.
 
 #md # ```@raw html
 #md # <details><summary>Recovery figure</summary>
@@ -1882,11 +1963,19 @@ recovery_fig = isempty(recovery.params) ? nothing : plot_recovery(
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
 isempty(recovery.params) ? Markdown.parse("No parameter-recovery run is available for this build.") : recovery_fig #hide
 
-# The error of each seed's posterior median relative to the truth, and the z-score of the truth, summarised across seeds.
+#md # ```@raw html
+#md # <figcaption>
+#md # Each seed's posterior median with its 50% and 90% intervals divided by its true value (top), so a recovered quantity straddles one.
+#md # The growth rate is shown as the ratio of daily growth factors and the intervention effect as the ratio of the reproduction-number multipliers it implies.
+#md # Below, each quantity is on its own scale, with the prior before the factor-of-five selection in grey, each seed's posterior in its colour and its true value dashed.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Summary table across seeds</summary>
@@ -1899,9 +1988,17 @@ recovery_summary_national_display = isempty(recovery_summary_national) ?
     Markdown.parse("No parameter-recovery run is available for this build.") :
     MarkdownTable(recovery_summary_national);
 
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
 recovery_summary_national_display #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # The error of each seed's posterior median relative to the truth, and the z-score of the truth, summarised across seeds.
+#md # </figcaption>
+#md # </figure>
 #md # </details>
 #md # ```
 
@@ -1949,9 +2046,17 @@ recovery_forecasts_display = isempty(recovery_forecasts) ?
     Markdown.parse("No recovery forecast is available for this build.") :
     MarkdownTable(recovery_forecasts);
 
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
 recovery_forecasts_display #hide
 
 #md # ```@raw html
+#md # <figcaption>
+#md # Forecasts from the recovery fits scored against the simulated future and a persistence baseline, where a relative CRPS below one beats the baseline.
+#md # </figcaption>
+#md # </figure>
 #md # </details>
 #md # ```
 

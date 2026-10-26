@@ -11,7 +11,7 @@ counts attached per zone) and the zone keys in the
 - ``data/health_zones.csv``: one row per zone key that appears in the
   block (the unallocated rows excluded) with its display label, province
   key, WorldPop population, polygon centroid and the shapefile's zscode.
-- ``src/assets/health_zones.geojson``: the map features of the seven affected
+- ``src/assets/health_zones.geojson``: the map features of the eight affected
   provinces, geometry rounded to four decimals and simplified with
   Douglas-Peucker at 0.005 degrees (less for a small ring, so a city zone
   keeps its shape), properties reduced to ``zone`` (our key, empty for a
@@ -52,6 +52,7 @@ PROVINCES = {
     "Tshopo": "tshopo",
     "Bas-Uele": "bas_uele",
     "Sud-Ubangi": "sud_ubangi",
+    "Nord-Ubangi": "nord_ubangi",
 }
 
 ## Zone key -> folded shapefile name, where the two differ.
