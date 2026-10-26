@@ -304,8 +304,8 @@ function load_observations(
 
     ## Sparse per-zone history, one `province.zone` sub-table per zone.
     function zone_sparse_history(key)
-        ZoneHistory = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
-        result = Dict{String, Dict{String, ZoneHistory}}()
+        ZonePrinted = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
+        result = Dict{String, Dict{String, ZonePrinted}}()
         haskey(raw, key) || return result
         for (prov, zones) in raw[key]
             prov == "source" && continue
@@ -325,7 +325,7 @@ function load_observations(
                 idx = Int[_index(d) for d in sub["dates"][keep]]
                 ord = sortperm(idx)
                 vals = Int.(sub["values"][keep])
-                block = get!(result, String(prov), Dict{String, ZoneHistory}())
+                block = get!(result, String(prov), Dict{String, ZonePrinted}())
                 block[String(zone)] = (; days = idx[ord], counts = vals[ord])
             end
         end
@@ -642,6 +642,9 @@ end
 ## A zone's cumulative must fall by more than this to count as a revision.
 const ZONE_MIN_FALL = 1
 
+## Whether a zone's cumulative count falls by more than `min_fall` from `prev`.
+_is_zone_fall(prev, cur, min_fall = ZONE_MIN_FALL) = prev - cur > min_fall
+
 """
     zone_cumulative_falls(zone_history; min_fall = ZONE_MIN_FALL)
 
@@ -663,7 +666,7 @@ function zone_cumulative_falls(zone_history; min_fall::Integer = ZONE_MIN_FALL)
 
         zone == "unallocated" && continue
         for i in 2:length(h.days)
-            h.counts[i - 1] - h.counts[i] > min_fall || continue
+            _is_zone_fall(h.counts[i - 1], h.counts[i], min_fall) || continue
             push!(
                 out,
                 (;
@@ -690,7 +693,7 @@ function zone_increments(
     inc = max.(diff(vcat(0, Int.(counts))), 0)
     printed === nothing && return inc
     for i in 2:length(counts)
-        counts[i - 1] - counts[i] > ZONE_MIN_FALL || continue
+        _is_zone_fall(counts[i - 1], counts[i]) || continue
         j = findfirst(==(days[i]), printed.days)
         j === nothing && continue
         inc[i] = max(Int(printed.counts[j]), 0)

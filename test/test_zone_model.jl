@@ -1943,6 +1943,34 @@ end
     @test_throws ArgumentError zone_subset(syn.obs; top_zones = 0, zones = meta)
 end
 
+@testitem "_pool_printed sums the pooled zones' increments" begin
+    using BVDOutbreakSize: _pool_printed
+
+    days = [1, 4, 7]
+    history = Dict(
+        "a" => Dict{String, NamedTuple}(
+            "k" => (; days, counts = [5, 9, 12]),
+            "p" => (; days, counts = [4, 8, 2]),
+            "q" => (; days, counts = [1, 3, 6]),
+            "unallocated" => (; days, counts = [0, 0, 0]),
+        )
+    )
+    printed = Dict(
+        "a" => Dict{String, NamedTuple}(
+            "k" => (; days = [7], counts = [9]),
+            "p" => (; days = [7], counts = [2]),
+        ),
+        "b" => Dict{String, NamedTuple}("x" => (; days = [4], counts = [1])),
+    )
+    out = _pool_printed(history, printed, Dict("a" => ["k"]), "rest")
+    ## The kept zone and a province with no pooling pass through.
+    @test out["a"]["k"] == printed["a"]["k"]
+    @test out["b"] == printed["b"]
+    @test !haskey(out["a"], "p")
+    ## `p` falls 8 to 2 and prints 2; `q` rises by 3 the same day.
+    @test out["a"]["rest"] == (; days = [7], counts = [5])
+end
+
 @testitem "zone_subset pools the printed 24h figures into the rest" setup = [
     ZoneSynthetic,
 ] begin

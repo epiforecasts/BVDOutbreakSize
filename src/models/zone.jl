@@ -2344,11 +2344,10 @@ The observations and health-zone metadata reduced to the `top_zones` zones
 of each province with most confirmed cases at the cut-off, the rest of the
 province's zones pooled into one `pool_name` zone so every patch total is
 still allocated. The pooled zone's cumulative case and death series are
-the sums of the pooled zones', its printed 24h figure on a day the sum of
-the pooled zones' increments ([`zone_increments`](@ref)), its population
-their sum and its centroid
+the sums of the pooled zones', its population their sum and its centroid
 their population-weighted mean, so mixing and the distance correlation
-stay on. A province with `top_zones` zones or fewer is unchanged, and the
+stay on. Printed 24h figures for pooled zones are summed the same way.
+A province with `top_zones` zones or fewer is unchanged, and the
 `unallocated` rows pass through. For fast iteration on real data rather
 than for reporting: [`fit_zone`](@ref) takes `top_zones` and applies this.
 Returns `(; obs, zones, kept)`, with `kept` the retained zone keys per
@@ -2405,53 +2404,23 @@ function zone_subset(
         end
         out
     end
-    ## A pooled zone's printed figure becomes the pooled zone's figure for
-    ## that day: the sum over the pooled zones of their increments, each
-    ## taking its own printed figure where it has one.
-    pool_printed(history, printed) = begin
-        out = Dict{String, Dict{String, NamedTuple}}()
-        for (prov, block) in printed
-            keep = get(kept, prov, nothing)
-            if keep === nothing || !haskey(history, prov)
-                out[prov] = block
-                continue
-            end
-            pooled = [z for z in keys(history[prov]) if z != "unallocated" && !(z in keep)]
-            newblock = Dict{String, NamedTuple}()
-            rest_days = Int[]
-            for (z, p) in block
-                z in pooled ? append!(rest_days, p.days) : (newblock[z] = p)
-            end
-            if !isempty(rest_days)
-                rest_days = sort!(unique!(rest_days))
-                total = zeros(Int, length(rest_days))
-                for z in pooled
-                    h = history[prov][z]
-                    inc = zone_increments(h.counts, h.days, get(block, z, nothing))
-                    for (k, d) in enumerate(rest_days)
-                        i = findfirst(==(d), h.days)
-                        i === nothing || (total[k] += inc[i])
-                    end
-                end
-                newblock[pool_name] = (; days = rest_days, counts = total)
-            end
-            out[prov] = newblock
-        end
-        out
-    end
+    ## `pool` adds a lone pooled zone to `kept`, so the cases pool first.
+    pooled_conf = pool(conf)
     obs2 = merge(
         obs, (;
-            zone_confirmed_history = pool(conf),
-            zone_confirmed_revision_24h =
-                pool_printed(conf, obs.zone_confirmed_revision_24h),
+            zone_confirmed_history = pooled_conf,
+            zone_confirmed_revision_24h = _pool_printed(
+                conf, obs.zone_confirmed_revision_24h, kept, pool_name
+            ),
         )
     )
     if hasproperty(obs, :zone_death_history)
         obs2 = merge(
             obs2, (;
                 zone_death_history = pool(obs.zone_death_history),
-                zone_death_revision_24h = pool_printed(
-                    obs.zone_death_history, obs.zone_death_revision_24h
+                zone_death_revision_24h = _pool_printed(
+                    obs.zone_death_history, obs.zone_death_revision_24h,
+                    kept, pool_name
                 ),
             )
         )
@@ -2460,6 +2429,47 @@ function zone_subset(
             zones, kept, obs2.zone_confirmed_history, pool_name
         )
     return (; obs = obs2, zones = zones2, kept)
+end
+
+## The printed 24h figures of `printed` with each province's pooled zones
+## (those of `history` not in `kept`) folded into one `pool_name` series.
+## Its figure on a day any pooled zone prints one is the sum of the pooled
+## zones' increments ([`zone_increments`](@ref)), each taking its own
+## printed figure.
+function _pool_printed(history, printed, kept, pool_name)
+    out = Dict{String, Dict{String, NamedTuple}}()
+    for (prov, block) in printed
+        keep = get(kept, prov, nothing)
+        if keep === nothing || !haskey(history, prov)
+            out[prov] = block
+            continue
+        end
+        pooled = [
+            z for z in keys(history[prov])
+                if z != "unallocated" && !(z in keep)
+        ]
+        newblock = Dict{String, NamedTuple}()
+        rest_days = Int[]
+        for (z, p) in block
+            z in pooled ? append!(rest_days, p.days) : (newblock[z] = p)
+        end
+        if !isempty(rest_days)
+            rest_days = sort!(unique!(rest_days))
+            total = zeros(Int, length(rest_days))
+            for z in pooled
+                h = history[prov][z]
+                inc = zone_increments(h.counts, h.days, get(block, z, nothing))
+                at = Dict(d => i for (i, d) in enumerate(h.days))
+                for (k, d) in enumerate(rest_days)
+                    i = get(at, d, nothing)
+                    i === nothing || (total[k] += inc[i])
+                end
+            end
+            newblock[pool_name] = (; days = rest_days, counts = total)
+        end
+        out[prov] = newblock
+    end
+    return out
 end
 
 ## Metadata rows for the kept zones plus one pooled row per province that
