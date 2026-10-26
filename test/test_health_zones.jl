@@ -269,7 +269,6 @@ end
     @test m.zones == [("ituri", "a"), ("ituri", "b")]
     @test m.increments == [10 10 3 0; 1 1 6 1]
     @test m.totals == [11, 11, 9, 1]
-    ## Without the figures the matrix is as before.
     plain = only(
         zone_increment_matrix(
             hist, ["ituri"], Dict("ituri" => ["ituri"]);
@@ -287,20 +286,24 @@ end
 
     obs = load_observations()
     day(s) = (Date(s) - obs.seeding).value + 1
+    ## Every figure sits on a flagged fall, and every flagged fall from
+    ## SitRep 060 (13 July), the first table with 24h columns, has one.
+    first_24h = day("2026-07-13")
     for (hist, printed) in (
             (obs.zone_confirmed_history, obs.zone_confirmed_revision_24h),
             (obs.zone_death_history, obs.zone_death_revision_24h),
         )
-        @test !isempty(printed)
         flagged = Set(
             (f.province, f.zone, f.day) for f in zone_cumulative_falls(hist)
         )
-        for (prov, zones) in printed, (zone, p) in zones, d in p.days
-            @test (prov, zone, d) in flagged
-        end
+        recorded = Set(
+            (prov, zone, d)
+                for (prov, zones) in printed for (zone, p) in zones
+                for d in p.days
+        )
+        @test recorded ⊆ flagged
+        @test Set(f for f in flagged if f[3] >= first_24h) == recorded
     end
-    @test sum(length, values(obs.zone_confirmed_revision_24h)) == 6
-    @test sum(length, values(obs.zone_death_revision_24h)) == 8
     ## Bunia's deaths fall from 228 to 175 on 22 July; the printed 24h
     ## total of 7 replaces the clamped zero, and every other vintage keeps
     ## its cumulative difference.

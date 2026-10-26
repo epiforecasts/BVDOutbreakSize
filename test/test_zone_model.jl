@@ -1943,6 +1943,50 @@ end
     @test_throws ArgumentError zone_subset(syn.obs; top_zones = 0, zones = meta)
 end
 
+@testitem "zone_subset pools the printed 24h figures into the rest" setup = [
+    ZoneSynthetic,
+] begin
+    using BVDOutbreakSize: zone_increments
+
+    syn = zone_synthetic()
+    meta = zone_metadata(syn)
+    kept = zone_subset(syn.obs; top_zones = 2, zones = meta).kept["a"]
+    hist = deepcopy(syn.obs.zone_confirmed_history)
+    pooled = sort!([z for z in keys(hist["a"]) if !(z in kept)])
+    ## One pooled zone loses three cases at the third vintage and prints 5
+    ## new that day; one kept zone carries a figure of its own.
+    z1 = first(pooled)
+    h = hist["a"][z1]
+    c = h.counts .+ 3
+    c[3] = c[2] - 3
+    hist["a"][z1] = (; days = h.days, counts = c)
+    d = h.days[3]
+    printed = Dict(
+        "a" => Dict{String, NamedTuple}(
+            z1 => (; days = [d], counts = [5]),
+            kept[1] => (; days = [d], counts = [7]),
+        )
+    )
+    obs = merge(
+        syn.obs, (;
+            zone_confirmed_history = hist, zone_confirmed_revision_24h = printed,
+        )
+    )
+    sub = zone_subset(obs; top_zones = 2, zones = meta)
+    got = sub.obs.zone_confirmed_revision_24h["a"]
+    @test got[kept[1]] == printed["a"][kept[1]]
+    @test !haskey(got, z1)
+    ## The rest's figure is the sum of the pooled zones' increments that day,
+    ## the falling zone taking its printed 5.
+    @test got["rest"].days == [d]
+    want = 5 + sum(
+        max(hist["a"][z].counts[3] - hist["a"][z].counts[2], 0)
+            for z in pooled[2:end]
+    )
+    @test got["rest"].counts == [want]
+    @test zone_increments(c, h.days, printed["a"][z1])[3] == 5
+end
+
 @testitem "zone diagnostics leave out a reproduction number undefined in some draw" setup = [
     ZoneSynthetic,
 ] begin

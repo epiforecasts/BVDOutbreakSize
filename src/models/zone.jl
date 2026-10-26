@@ -2344,7 +2344,9 @@ The observations and health-zone metadata reduced to the `top_zones` zones
 of each province with most confirmed cases at the cut-off, the rest of the
 province's zones pooled into one `pool_name` zone so every patch total is
 still allocated. The pooled zone's cumulative case and death series are
-the sums of the pooled zones', its population their sum and its centroid
+the sums of the pooled zones', its printed 24h figure on a day the sum of
+the pooled zones' increments ([`zone_increments`](@ref)), its population
+their sum and its centroid
 their population-weighted mean, so mixing and the distance correlation
 stay on. A province with `top_zones` zones or fewer is unchanged, and the
 `unallocated` rows pass through. For fast iteration on real data rather
@@ -2403,9 +2405,56 @@ function zone_subset(
         end
         out
     end
-    obs2 = merge(obs, (; zone_confirmed_history = pool(conf)))
+    ## A pooled zone's printed figure becomes the pooled zone's figure for
+    ## that day: the sum over the pooled zones of their increments, each
+    ## taking its own printed figure where it has one.
+    pool_printed(history, printed) = begin
+        out = Dict{String, Dict{String, NamedTuple}}()
+        for (prov, block) in printed
+            keep = get(kept, prov, nothing)
+            if keep === nothing || !haskey(history, prov)
+                out[prov] = block
+                continue
+            end
+            pooled = [z for z in keys(history[prov]) if z != "unallocated" && !(z in keep)]
+            newblock = Dict{String, NamedTuple}()
+            rest_days = Int[]
+            for (z, p) in block
+                z in pooled ? append!(rest_days, p.days) : (newblock[z] = p)
+            end
+            if !isempty(rest_days)
+                rest_days = sort!(unique!(rest_days))
+                total = zeros(Int, length(rest_days))
+                for z in pooled
+                    h = history[prov][z]
+                    inc = zone_increments(h.counts, h.days, get(block, z, nothing))
+                    for (k, d) in enumerate(rest_days)
+                        i = findfirst(==(d), h.days)
+                        i === nothing || (total[k] += inc[i])
+                    end
+                end
+                newblock[pool_name] = (; days = rest_days, counts = total)
+            end
+            out[prov] = newblock
+        end
+        out
+    end
+    obs2 = merge(
+        obs, (;
+            zone_confirmed_history = pool(conf),
+            zone_confirmed_revision_24h =
+                pool_printed(conf, obs.zone_confirmed_revision_24h),
+        )
+    )
     if hasproperty(obs, :zone_death_history)
-        obs2 = merge(obs2, (; zone_death_history = pool(obs.zone_death_history)))
+        obs2 = merge(
+            obs2, (;
+                zone_death_history = pool(obs.zone_death_history),
+                zone_death_revision_24h = pool_printed(
+                    obs.zone_death_history, obs.zone_death_revision_24h
+                ),
+            )
+        )
     end
     zones2 = zones === nothing ? nothing : _zone_subset_metadata(
             zones, kept, obs2.zone_confirmed_history, pool_name
@@ -2533,15 +2582,9 @@ function zone_fit_inputs(
         zone_reattribution_days(obs.zone_confirmed_history),
         zone_reattribution_days(death_history)
     )
-    ## The printed 24h figures that replace a clamped zero where a zone's
-    ## cumulative falls ([`zone_increments`](@ref)).
-    printed_cases = hasproperty(obs, :zone_confirmed_revision_24h) ?
-        obs.zone_confirmed_revision_24h : Dict{String, Any}()
-    printed_deaths = hasproperty(obs, :zone_death_revision_24h) ?
-        obs.zone_death_revision_24h : Dict{String, Any}()
     per_patch = zone_increment_matrix(
         obs.zone_confirmed_history, patch_names;
-        reattribution, printed = printed_cases
+        reattribution, printed = obs.zone_confirmed_revision_24h
     )
     excluded = [
         (;
@@ -2651,7 +2694,9 @@ function zone_fit_inputs(
         )
         death_counts[z, :] = zone_increments(
             h.counts, days,
-            _zone_printed(printed_deaths, zone_province[z], zone_names[z])
+            _zone_printed(
+                obs.zone_death_revision_24h, zone_province[z], zone_names[z]
+            )
         )
     end
     for (p, zs) in enumerate(patch_ranges)

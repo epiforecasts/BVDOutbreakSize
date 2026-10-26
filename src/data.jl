@@ -302,19 +302,25 @@ function load_observations(
         return result
     end
 
-    ## Sparse per-zone figures from a TOML block with one `province.zone`
-    ## sub-table per zone, each with its own `dates` and `values`
-    ## (`zone_confirmed_revision_24h` and `zone_death_revision_24h`, the
-    ## printed 24h counts on the zone-vintages whose cumulative falls).
-    ## Same province → zone shape as zone_history(); empty when absent.
+    ## Sparse per-zone history, one `province.zone` sub-table per zone.
     function zone_sparse_history(key)
         ZoneHistory = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
         result = Dict{String, Dict{String, ZoneHistory}}()
         haskey(raw, key) || return result
         for (prov, zones) in raw[key]
-            zones isa AbstractDict || continue
+            prov == "source" && continue
+            zones isa AbstractDict || error("$key: $prov is not a table")
             for (zone, sub) in zones
-                (sub isa AbstractDict && haskey(sub, "dates")) || continue
+                (
+                    sub isa AbstractDict && haskey(sub, "dates") &&
+                        haskey(sub, "values")
+                ) || error(
+                    "$key: $prov.$zone needs `dates` and `values`"
+                )
+                length(sub["values"]) == length(sub["dates"]) || error(
+                    "$key: $prov.$zone has $(length(sub["values"])) " *
+                        "values for $(length(sub["dates"])) dates"
+                )
                 keep = [Date(String(d)) <= cutoff for d in sub["dates"]]
                 idx = Int[_index(d) for d in sub["dates"][keep]]
                 ord = sortperm(idx)
@@ -633,8 +639,11 @@ function province_increment_matrix(
     return (; days, increments)
 end
 
+## A zone's cumulative must fall by more than this to count as a revision.
+const ZONE_MIN_FALL = 1
+
 """
-    zone_cumulative_falls(zone_history; min_fall = 1)
+    zone_cumulative_falls(zone_history; min_fall = ZONE_MIN_FALL)
 
 Every place a named zone's cumulative count falls between consecutive
 vintages by more than `min_fall`, as a vector of named tuples
@@ -645,7 +654,7 @@ against a single-unit correction being read as a revision.
 [`zone_increment_matrix`](@ref) clamps these falls to zero, or takes the
 report's 24h figure where one is recorded ([`zone_increments`](@ref)).
 """
-function zone_cumulative_falls(zone_history; min_fall::Integer = 1)
+function zone_cumulative_falls(zone_history; min_fall::Integer = ZONE_MIN_FALL)
     out = @NamedTuple{
         province::String, zone::String, day::Int,
         from::Int, to::Int,
@@ -668,30 +677,20 @@ function zone_cumulative_falls(zone_history; min_fall::Integer = 1)
 end
 
 """
-    zone_increments(counts, days, printed = nothing; min_fall = 1)
+    zone_increments(counts, days, printed = nothing)
 
-One zone's per-vintage increments from its cumulative `counts` on the
-vintage `days`: the differences of consecutive counts, the first from
-zero, clamped at zero.
-
-A fall of more than `min_fall` is a revision, the case
-[`zone_cumulative_falls`](@ref) flags, and the clamp reads it as no new
-count. `printed` holds the zone's printed 24h figures as `(; days, counts)`
-(an entry of the `zone_confirmed_revision_24h` or `zone_death_revision_24h`
-block of [`load_observations`](@ref)). On a flagged fall with a printed
-figure for that day, the figure replaces the clamped zero, itself clamped
-at zero because a printed negative is the revision rather than a new
-count. Every other vintage, and every fall with no printed figure, keeps
-the clamped difference.
+One zone's increments of its cumulative `counts` on the vintage `days`,
+clamped at zero, except that a fall [`zone_cumulative_falls`](@ref) flags
+takes the `printed` figure for that day, floored at zero. `printed` is
+`(; days, counts)` or `nothing`.
 """
 function zone_increments(
-        counts::AbstractVector, days::AbstractVector,
-        printed = nothing; min_fall::Integer = 1
+        counts::AbstractVector, days::AbstractVector, printed = nothing
     )
     inc = max.(diff(vcat(0, Int.(counts))), 0)
     printed === nothing && return inc
     for i in 2:length(counts)
-        counts[i - 1] - counts[i] > min_fall || continue
+        counts[i - 1] - counts[i] > ZONE_MIN_FALL || continue
         j = findfirst(==(days[i]), printed.days)
         j === nothing && continue
         inc[i] = max(Int(printed.counts[j]), 0)
@@ -707,7 +706,7 @@ end
 
 """
     zone_reattribution_days(zone_history; include_zone_falls = false,
-        min_fall = 1)
+        min_fall = ZONE_MIN_FALL)
 
 The vintage days on which a province's `unallocated` cumulative count
 falls, keyed by province, from the per-health-zone histories loaded by
@@ -727,7 +726,7 @@ is left out too. It is off by default.
 """
 function zone_reattribution_days(
         zone_history;
-        include_zone_falls::Bool = false, min_fall::Integer = 1
+        include_zone_falls::Bool = false, min_fall::Integer = ZONE_MIN_FALL
     )
     out = Dict{String, Vector{Int}}()
     for (prov, zones) in zone_history
