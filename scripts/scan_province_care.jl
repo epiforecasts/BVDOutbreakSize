@@ -305,8 +305,10 @@ function parse_prose_entry(entry::AbstractString, name::AbstractString)
                 "(\\d+) dans les cte/ct pour (\\d+) lits",
             ## SitRep 156: the CTE/CT count and beds as the rate's fraction,
             ## "471 patients sont hospitalisés, ... pour un taux d'occupation
-            ## des CTE/CTde 85,1 % : (349/410)".
-            "(\\d+)\\)? ?$P (?:sont )?hospitalis[ei]s?[^;]*?" *
+            ## des CTE/CTde 85,1 % : (349/410)". From SitRep 160 Nord-Kivu
+            ## writes "468 patients sont pris en charge (161 confirmés et 307
+            ## suspects) ... de 80,7 % (331/410)".
+            "(\\d+)\\)? ?$P (?:sont )?(?:hospitalis[ei]s?|pris en charge)[^;]*?" *
                 "taux d.occupation (?:global )?des cte/ct ?de " *
                 "\\d+(?:,\\d+)? %\\s*:?\\s*\\((\\d+)/(\\d+)\\)",
             "(\\d+)\\)? ?$P (?:sont )?(?:hospitalis[ei]s?|" *

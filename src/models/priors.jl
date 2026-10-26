@@ -1274,9 +1274,14 @@ following the Stan prior-choice recommendations. Returns
 end
 
 """
-Partially-pooled negative-binomial dispersions for the `n_streams`
-passive-surveillance count streams in the joint model (suspected cases,
-suspected deaths, confirmed cases and confirmed deaths). Each stream draws
+Partially-pooled negative-binomial dispersions for the `n_streams` count
+streams in the joint model (suspected cases, suspected deaths, confirmed
+cases, confirmed deaths, the treatment-centre stocks and the recovered).
+The treatment-centre daily flows take a dispersion drawn about the stocks'
+dispersion, `log(1/sqrt(k_flow)) ~ Normal(log(1/sqrt(k_iso)), log(3)/2)`,
+a prior on the log ratio of the two overdispersion CVs set a priori (a
+threefold ratio at two SDs) and reasoned in [`treatment_flow_model`](@ref).
+Each stream draws
 its own dispersion from a shared population, so heterogeneous streams (a
 handful of deaths against hundreds of suspects against a daily laboratory
 volume) do not share one global `k` that the dominant stream pulls around,
@@ -2117,4 +2122,60 @@ Returns `(; w, pooling_sd)`.
     w = exp.(log_w .- peak)
     w ./= sum(w)
     return (; w, pooling_sd = τ_bg)
+end
+
+"""
+Per-patch probability that a BVD onset is detected as a suspected case,
+partially pooled about the DRC ascertainment `centre` on the logit scale,
+
+```math
+\\mathrm{logit}\\, p_p = \\mathrm{logit}\\, p_{\\text{DRC}}
+    + \\tau (Q \\mathbf{z})_p,
+\\qquad \\mathbf{z} \\sim \\mathrm{N}(\\mathbf{0}, I_{n-1}),
+```
+
+with `Q` the sum-to-zero basis ([`sum_to_zero_basis`](@ref)), so the
+contrast has no reference patch and each `p_p` lies in (0, 1) for any draw.
+`τ = 0` gives every patch the national probability. [`bvd_joint`](@ref)
+builds the national BVD suspected cases as the sum over the patches of
+`p_p` times the patch's onsets through the onset-to-report delay.
+
+A logit shift `s` moves the log probability by about `(1 - p) s`. At the
+prior centre of 0.75 the default spread of 0.5 is therefore about 0.125
+on the log scale, so a typical province detects within about 13% of the
+national rate. We use this prior.
+
+The contrast is drawn non-centred, since the data inform it weakly: the
+case composition sees it only through its product with the confirmation
+contrast, and the province occupancy splits only through its product with
+the patch incidence.
+
+With one patch the national probability is the patch's and nothing is
+sampled.
+
+Returns `(; ascertainment, relative, log_odds, sd)`: the patch
+probabilities, each over `centre`, the logit contrast and `τ`.
+"""
+@model function province_suspected_ascertainment_model(
+        n_patches::Integer, centre::Real;
+        sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        offset_prior = Normal(0, 1),
+        basis = sum_to_zero_basis(max(n_patches, 1))
+    )
+    if n_patches <= 1
+        return (;
+            ascertainment = fill(centre, max(n_patches, 1)),
+            relative = ones(typeof(float(centre)), max(n_patches, 1)),
+            log_odds = zeros(typeof(float(centre)), max(n_patches, 1)),
+            sd = zero(float(centre)),
+        )
+    end
+    τ_susp ~ sd_prior
+    z_susp ~ product_distribution(fill(offset_prior, n_patches - 1))
+    log_odds = sum_to_zero(sum_to_zero_factor(basis, τ_susp), z_susp)
+    ascertainment = _logit_shift(centre, log_odds)
+    return (;
+        ascertainment, relative = ascertainment ./ centre, log_odds,
+        sd = τ_susp,
+    )
 end
