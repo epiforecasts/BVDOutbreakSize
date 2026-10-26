@@ -40,6 +40,16 @@ A major version: the report gains a health-zone level below the provinces, with 
 - The health-zone importation kernel samples its distance decay and a log weight per destination zone, holding each origin's total into every province (#1030).
   The decay's `LogNormal(0, 1)` prior has its median at the fixed inverse-distance decay it replaces.
   Fitted values change.
+- The four daily treatment-centre flows (admissions, in-care deaths, rule-outs and absconds) take a negative-binomial dispersion of their own, rather than the dispersion of the occupancy, beds and in-care census (#1103).
+  At 100 draws of the joint posterior from the docs CI run 37423718825, the shared dispersion sat at 546 (322 to 1472), set by the stocks, and the flows scattered 2.1 to 5.0 times the variance it allowed (Pearson dispersion index by stream).
+  A dispersion fitted to the flows alone at those draws is about 14 and raises their log-likelihood by about 94.
+  As a seventh pooled stream it shared the wide pooling spread the stocks need, and the joint fit did not converge (R-hat 1.14, bulk ESS 21, worst in the province capacity shares).
+  The flow dispersion is centred on the stock dispersion, with log(1/√k_flow) Normal about log(1/√k_iso) with SD log(3)/2 and drawn directly.
+  The offset is the log ratio of the flows' extra coefficient of variation to the stocks'.
+  Its prior is set a priori, not from a fit: zero nests the shared dispersion, a threefold ratio either way sits at two SDs.
+  Those fits show the problem and were not used to set the prior.
+  Fitted values change.
+  The flows carry less weight, so the in-care fatality, stays and admission rates they inform can widen.
 - The background split and the bed capacity shares draw their sum-to-zero deviations in centred form, on the scales $\tau_{\text{bg}}$ and $\tau_{\text{cap}}$, so `z_bg` becomes `y_bg` and `z_cap` becomes `y_cap` (#1123).
   The data pin each deviation rather than its scale, so the non-centred form tied the standard-normal draws to the scale along a funnel.
   On the joint posterior of the #1101 fit, whose model is the one before this change, the log scale correlates with the log mean square of its standard-normal draws at −0.93 for the background split and −0.96 for the capacity shares.
@@ -95,6 +105,17 @@ A major version: the report gains a health-zone level below the provinces, with 
   The health-zone fatality is built the same way, as a logit shift of its province's ratio at the joint posterior mean, with the same change of scale prior.
   The zone point prevalence shifts each joint draw's province ratio by the zone's contrast, so it no longer caps the zone ratio at one.
   Fitted values change and the joint and zone fits need refitting.
+- Each province detects a BVD onset as a suspected case with its own probability, the DRC ascertainment shifted by a sum-to-zero contrast on the logit scale, so it lies between zero and one by construction (#1153).
+  The national BVD suspected cases are each province's onsets through the onset-to-report delay times its probability, summed, and the suspected-case, laboratory, isolation and onset-curve streams read that sum.
+  The DRC ascertainment is now the logit centre of the province probabilities, so the report gives the national suspected-case ascertainment as those probabilities weighted by the province onsets to the cut-off, recorded as `p_drc_national` and published alongside `p_drc`.
+  The case composition's sum-to-zero log contrast becomes the confirmation contrast, which carries the provincial differences in testing, and the relative case ascertainment is the detection times that contrast.
+  The detection spread takes a half-normal scale of 0.5 on the logit scale, about 0.125 on the log scale at the prior centre of 0.75, and the confirmation contrast keeps its scale of 0.3 on the log scale.
+  The province occupancy splits carry the detection but no longer the confirmation contrast, since a suspect is admitted before testing.
+  A zero detection spread gives the previous model, except that the occupancy splits then use incidence alone.
+  The province point prevalence reads each province's detection directly, so it no longer rescales the relative ascertainment or caps it at one.
+  The zone point prevalence shifts that probability on the logit scale by the log of the zone's relative ascertainment.
+  The zone stage centres its ascertainment spread on the province spread of detection times confirmation, recorded as `province_ascertainment_log_sd`, rather than on the confirmation spread alone.
+  Fitted values change and the joint fit, and everything fitted from it, needs refitting.
 
 ### Data
 
@@ -236,6 +257,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Infrastructure
 
+- The docs fits save their chain to the cache as soon as sampling ends, so a fit that finishes near the job's time limit is kept if the job is then cancelled, and the re-run loads it rather than refitting.
+- The docs build keeps its resolved manifest for ten days rather than three, so a re-run of failed jobs after a long fit can still pin it.
 - The benchmark driver turns off Pkg's automatic precompilation, which under Julia 1.13.2 fails with "Unknown package" on indirect dependencies after AirspeedVelocity adds its own packages.
 - The docs commit their own `docs/package.json`, which pins `@nolebase/vitepress-plugin-enhanced-readabilities` and `@nolebase/ui` to 2.18.2.
   Their 2.21 releases on 13 and 14 October 2026 require vitepress 2, so `npm install` failed on the DocumenterVitepress 0.3.6 template, which asks for `^2.18.2` alongside vitepress 1 (#1134).

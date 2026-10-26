@@ -169,12 +169,15 @@ jobs:
       # the 90-day default these built up to 6800 artifacts and 36 GB, which
       # exhausted the storage quota and failed uploads with a 403 on
       # finalisation. Three days keeps a window for debugging a failed run.
+      # The manifest is the exception at ten days: it is tiny, and a re-run
+      # of failed jobs reuses this job's upload rather than making a new one,
+      # so at three days a re-run after a long fit found it gone.
       - uses: actions/upload-artifact@v7
         with:
           name: manifest
           path: Manifest.toml
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 10
 
   # One fit per matrix job. Each fit is content-addressed and cached, so a
   # re-run with unchanged model source and data refits nothing; the frozen
@@ -216,9 +219,14 @@ jobs:
       # the one `list` took from `fit_content_hash`, so this key and the
       # `.jls` file name inside the cache are derived from the same list of
       # inputs rather than from two lists that can drift.
+      #
+      # Restore and save are separate steps so the chain is saved as soon as
+      # the fit ends. A fit that finishes near the job's time limit is then
+      # kept even if the job is cancelled while uploading it, and the re-run
+      # loads it rather than refitting.
       - name: Restore fit cache
         id: cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: logs/fit_cache
           key: fit-${{ matrix.id }}-${{ needs.list.outputs.fit_hash }}
@@ -301,6 +309,12 @@ jobs:
           heartbeat=$!
           trap 'kill "$heartbeat" 2>/dev/null || true' EXIT
           julia --project=docs docs/fits/one.jl
+      - name: Save fit cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: logs/fit_cache
+          key: ${{ steps.cache.outputs.cache-primary-key }}
       # `one.jl` writes the fit's diagnostics to the job summary itself. A
       # cache hit skips it, so say so rather than leaving the job blank.
       - name: Note the cached fit
