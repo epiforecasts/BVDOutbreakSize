@@ -3605,32 +3605,23 @@ end
     onset_vintage_indices(report_idx, prev_report_idx)
 
 Map each increment cell onto the figures its two reads come from. The
-vintages are the sorted distinct report days of the scored cells, so
-vintage `s` is the `s`-th figure [`load_onset_curve`](@ref) kept. Returns
+figures are the sorted distinct report days either read is taken on, so
+every read, current or previous, takes its own figure's index. Returns
 `(; vintage_idx, prev_vintage_idx, n_vintages)`, the first two
 length-matched to `report_idx`. The sentinel `prev_report_idx = 0` (the
 empty predecessor of an onset date's first print) maps to
 `prev_vintage_idx = 0`, which [`onset_scan_adjust`](@ref) reads as no
-figure. A previous report day no scored cell reports on also maps to `0`.
-
-Integer work on the observation grid with no sampled quantity in it, so it
-passes no derivative.
+figure.
 """
 function onset_vintage_indices(
         report_idx::AbstractVector{<:Integer},
         prev_report_idx::AbstractVector{<:Integer}
     )
-    days = sort(unique(report_idx))
-    m = length(report_idx)
-    vintage_idx = Vector{Int}(undef, m)
-    prev_vintage_idx = Vector{Int}(undef, m)
-    @inbounds for i in 1:m
-        vintage_idx[i] = searchsortedfirst(days, report_idx[i])
-        p = prev_report_idx[i]
-        j = p > 0 ? searchsortedfirst(days, p) : 0
-        prev_vintage_idx[i] =
-            (j >= 1 && j <= length(days) && days[j] == p) ? j : 0
-    end
+    days = sort(unique(vcat(report_idx, filter(>(0), prev_report_idx))))
+    vintage_idx = [searchsortedfirst(days, r) for r in report_idx]
+    prev_vintage_idx = [
+        p > 0 ? searchsortedfirst(days, p) : 0 for p in prev_report_idx
+    ]
     return (; vintage_idx, prev_vintage_idx, n_vintages = length(days))
 end
 
@@ -3648,11 +3639,9 @@ increment cells difference. Cell `i` reads its current level off figure
 ```
 
 with `c = scan_level` one multiplier per figure
-([`onset_reporting_model`](@ref) draws `c_s = exp(σ_scan z_s)`). An index
-outside `1:length(scan_level)`, such as the sentinel `0`, takes a
-multiplier of exactly one. Returns the `(; means, level_cur, level_prev)`
-shape [`onset_report_moments`](@ref) does, with the levels scaled. Pure,
-top-level, single indexed loop.
+([`onset_reporting_model`](@ref) draws `c_s = exp(σ_scan z_s)`). The
+sentinel index `0` takes a multiplier of exactly one. Returns the
+per-cell means.
 """
 function onset_scan_adjust(
         level_cur::AbstractVector, level_prev::AbstractVector,
@@ -3660,27 +3649,10 @@ function onset_scan_adjust(
         vintage_idx::AbstractVector{<:Integer},
         prev_vintage_idx::AbstractVector{<:Integer}
     )
-    m = length(level_cur)
-    T = promote_type(
-        eltype(level_cur), eltype(level_prev), eltype(scan_level)
-    )
-    means = Vector{T}(undef, m)
-    lc = Vector{T}(undef, m)
-    lp = Vector{T}(undef, m)
-    @inbounds for i in 1:m
-        lc[i] = level_cur[i] * _scan_multiplier(scan_level, vintage_idx[i])
-        lp[i] = level_prev[i] *
-            _scan_multiplier(scan_level, prev_vintage_idx[i])
-        means[i] = lc[i] - lp[i]
-    end
-    return (; means, level_cur = lc, level_prev = lp)
+    c = vcat(one(eltype(scan_level)), scan_level)
+    return level_cur .* c[vintage_idx .+ 1] .-
+        level_prev .* c[prev_vintage_idx .+ 1]
 end
-
-## The multiplier a read off figure `s` takes: that figure's level, or
-## exactly one for an index naming no figure.
-@inline _scan_multiplier(scan_level, s) =
-    (s >= 1 && s <= length(scan_level)) ? scan_level[s] :
-    one(eltype(scan_level))
 
 """
     onset_report_scales(means, τ, reads)
@@ -4150,22 +4122,11 @@ digitised figures (`pixels_per_count` in `data/onset_curve_figures.csv`,
 2.6 to 8.7), so one pixel is about 0.3 counts. The prior is centred on that
 scale and the data set the value.
 
-Each figure is also read at its own level. A bar's height is converted to
-counts with the axis scale read off that figure, so an error in the scale
-moves every bar of the figure together and does not average out over a
-figure's total. The modelled cumulative levels read off figure `s` are
+Each figure is also read at its own level, since its axis scale converts
+every bar on it. The modelled cumulative levels read off figure `s` are
 multiplied by `exp(σ_scan z_s)` ([`onset_scan_adjust`](@ref)), with one
-non-centred `z_s ~ Normal(0, 1)` per figure and `σ_scan ~ scan_sd_prior`.
-The counting term of the scale uses the scaled increment. The default
-prior is a half-normal with scale 0.5%, so `σ_scan = 0` (no level error)
-sits at its mode and the model nests the one without it. The scale comes
-from the digitised totals read back against the totals the figures print
-(`gap_pct` in `data/onset_curve_figures.csv`). Over the 60 distinct
-figures that print one, the median absolute gap is 0.13% and no figure
-reads more than 0.16% above its printed total. A gap below the printed
-total also carries cases plotted past the last tick or lost bars, so the
-upper side is the cleaner bound on the level error. A scale of 0.5% puts
-the prior median at 0.34% and 95% of its mass below 1%.
+non-centred `z_s ~ Normal(0, 1)` per figure. `scan_sd_prior` defaults to a
+half-normal with scale 0.5%, so `σ_scan = 0` (no level error) is its mode.
 
 The likelihood is Student-t with fixed degrees of freedom `ν` (default 4).
 With only a few hundred cells `ν` is weakly identified, so it is not
@@ -4173,11 +4134,10 @@ sampled, as in `lab_delay_model`. The heavy tail lets the frequently
 negative measured increments score as large-but-plausible residuals rather
 than breaking a count likelihood.
 
-Returns `(; increments, modelled, unscanned, scan_level, scales, logit_h0,
-γ, grid_start, grid_end, alpha, τ, σ_scan, η0, σ_h0, σ_γ, β, σ_a, ρ, ν)`
-with `modelled` the per-cell increment means the likelihood scores (each
-figure's scan level applied), `unscanned` the same means before it,
-`scan_level` the per-figure multipliers, `scales` the per-cell observation
+Returns `(; increments, modelled, scan_level, scales, logit_h0, γ,
+grid_start, grid_end, alpha, τ, σ_scan, η0, σ_h0, σ_γ, β, σ_a, ρ, ν)` with
+`modelled` the per-cell increment means the likelihood scores (each
+figure's scan level applied), `scan_level` the per-figure multipliers, `scales` the per-cell observation
 scales it scores them with, `grid_end` the report-date grid day the
 calendar walk was built up to
 (`max(report_days)`, or `grid_start` when the history is empty), and the
@@ -4260,11 +4220,11 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         hazard_state.grid_start, alpha, onset_days, report_days,
         prev_report_days
     )
-    scanned = onset_scan_adjust(
+    modelled = onset_scan_adjust(
         moments.level_cur, moments.level_prev, scan_level,
         vintages.vintage_idx, vintages.prev_vintage_idx
     )
-    scales = onset_report_scales(scanned.means, τ, reads)
+    scales = onset_report_scales(modelled, τ, reads)
 
     ## Scored in a dedicated submodel so `increments` is a model argument on
     ## the left of `~`. Pulling the observations out of `onset_curve_history`
@@ -4273,15 +4233,14 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## cells keep the flat `increments` name the predictive path reads.
     increments_state ~ to_submodel(
         onset_increments_model(
-            scanned.means, scales,
+            modelled, scales,
             onset_curve_history.increments, ν
         ), false
     )
     increments = increments_state.increments
 
     return (;
-        increments, modelled = scanned.means, unscanned = moments.means,
-        scan_level, scales,
+        increments, modelled, scan_level, scales,
         logit_h0 = hazard_state.logit_h0, γ = hazard_state.γ,
         grid_start = hazard_state.grid_start, grid_end, alpha, τ, σ_scan,
         η0 = hazard_state.η0, σ_h0 = hazard_state.σ_h0,

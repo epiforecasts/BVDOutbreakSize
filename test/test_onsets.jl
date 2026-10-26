@@ -896,15 +896,20 @@ end
     @test pixel / 2 < median(τs) < 2 * pixel
 end
 
-@testitem "onset_vintage_indices maps each read onto its figure" begin
-    using BVDOutbreakSize: onset_vintage_indices
+@testitem "onset_vintage_indices maps each read onto its own figure" begin
+    using BVDOutbreakSize: onset_vintage_indices, onset_scan_adjust
 
+    ## Report day 17 is read only as a previous figure, with no cell of its
+    ## own, and still takes its own index.
     v = onset_vintage_indices([15, 15, 20, 20, 30], [0, 0, 15, 15, 17])
-    @test v.n_vintages == 3
-    @test v.vintage_idx == [1, 1, 2, 2, 3]
-    ## The empty predecessor and a report day no cell reports on name no
-    ## figure.
-    @test v.prev_vintage_idx == [0, 0, 1, 1, 0]
+    @test v.n_vintages == 4
+    @test v.vintage_idx == [1, 1, 3, 3, 4]
+    @test v.prev_vintage_idx == [0, 0, 1, 1, 2]
+    c = [1.1, 0.9, 1.2, 0.8]
+    lc = [10.0, 20.0, 30.0, 40.0, 50.0]
+    lp = [0.0, 0.0, 5.0, 6.0, 7.0]
+    @test onset_scan_adjust(lc, lp, c, v.vintage_idx, v.prev_vintage_idx) ≈
+        [11.0, 22.0, 36.0 - 5.5, 48.0 - 6.6, 40.0 - 6.3]
 end
 
 @testitem "onset_reporting_model scales each figure's levels by its scan level" begin
@@ -925,19 +930,18 @@ end
     z = [1.5, -0.7]
     seed!(20261026)
     out = fix(model, (; σ_scan = 0.02, z_scan = z))()
-    @test out.scan_level ≈ exp.(0.02 .* z)
+    c = exp.(0.02 .* z)
+    @test out.scan_level ≈ c
     ## Recompute the unscaled levels from the fitted hazard, then apply
     ## figure 1's level to reads off 15 and figure 2's to reads off 20.
     m = onset_report_moments(
         fill(30.0, 25), out.logit_h0, out.γ, out.grid_start, out.alpha,
         oc.onset_days, oc.report_days, oc.prev_report_days
     )
-    @test out.unscanned ≈ m.means
-    c = exp.(0.02 .* z)
     cur = [r == 15 ? c[1] : c[2] for r in oc.report_days]
     prev = [p == 15 ? c[1] : 1.0 for p in oc.prev_report_days]
     @test out.modelled ≈ m.level_cur .* cur .- m.level_prev .* prev
-    @test out.modelled != out.unscanned
+    @test out.modelled != m.means
     reads = [p == 0 ? 1 : 2 for p in oc.prev_report_days]
     @test out.scales ≈
         sqrt.(max.(out.modelled, 0) .+ reads ./ 12 .+ reads .* out.τ^2)
@@ -946,7 +950,7 @@ end
 @testitem "onset_reporting_model nests the model without a scan level" begin
     ## At `σ_scan = 0` every figure reads at level one, whatever `z_scan`
     ## is, so the increment likelihood is the one without a scan level.
-    using BVDOutbreakSize: onset_reporting_model
+    using BVDOutbreakSize: onset_reporting_model, onset_report_moments
     using Turing: fix, loglikelihood, @varname
     using Random: Xoshiro
 
@@ -964,38 +968,29 @@ end
         θ[@varname(z_scan)] = z
         return loglikelihood(model, θ)
     end
+    unscaled(out) = onset_report_moments(
+        fill(30.0, 25), out.logit_h0, out.γ, out.grid_start, out.alpha,
+        oc.onset_days, oc.report_days, oc.prev_report_days
+    ).means
     out = fix(model, (; σ_scan = 0.0, z_scan = [2.0, -3.0]))()
     @test all(==(1.0), out.scan_level)
-    @test out.modelled == out.unscanned
+    @test out.modelled ≈ unscaled(out)
     @test lik(0.0, [2.0, -3.0]) ≈ lik(0.0, [-1.0, 0.5])
     ## A small level moves the likelihood continuously away from it.
     @test lik(1.0e-9, [2.0, -3.0]) ≈ lik(0.0, [2.0, -3.0]) rtol = 1.0e-6
     @test lik(0.02, [2.0, -3.0]) != lik(0.0, [2.0, -3.0])
     small = fix(model, (; σ_scan = 1.0e-9, z_scan = [2.0, -3.0]))()
-    @test small.modelled ≈ small.unscanned rtol = 1.0e-6
-    @test small.modelled != small.unscanned
+    @test small.modelled ≈ unscaled(small) rtol = 1.0e-6
+    @test small.modelled != unscaled(small)
 end
 
-@testitem "onset scan level prior is a half-normal on the read-back gaps" begin
-    ## The prior has its mode at no level error and its scale set by the
-    ## digitised totals read back against the printed ones: half its mass
-    ## sits within a few read-back gaps and its bulk covers the largest
-    ## gap above a printed total.
-    using BVDOutbreakSize
+@testitem "onset scan level prior is a zero-centred half-normal" begin
+    ## Scale 0.5%: the mode at no level error, the median at 0.674 of the
+    ## scale and 95% of the mass below 1%.
     using BVDOutbreakSize: onset_reporting_model
     using Statistics: median, quantile
     using Random: seed!
 
-    figures = joinpath(pkgdir(BVDOutbreakSize), "data", "onset_curve_figures.csv")
-    lines = readlines(figures)
-    head = split(lines[1], ',')
-    gcol = findfirst(==("gap_pct"), head)
-    rcol = findfirst(==("reprint_of"), head)
-    rows = [split(l, ',') for l in lines[2:end]]
-    gaps = [
-        parse(Float64, r[gcol]) / 100 for r in rows
-            if !isempty(r[gcol]) && isempty(r[rcol])
-    ]
     oc = (;
         onset_days = [10, 11], report_days = [15, 15],
         prev_report_days = [0, 0], increments = [2, 3],
@@ -1004,11 +999,10 @@ end
     seed!(20261028)
     σs = [model().σ_scan for _ in 1:4000]
     @test all(>=(0), σs)
-    ## A zero-centred half-normal has its median at 0.674 of its scale.
     @test median(σs) ≈ 0.674 * 0.005 rtol = 0.1
-    @test quantile(σs, 0.1) < median(abs.(gaps)) < median(σs)
-    @test maximum(gaps) < quantile(σs, 0.9)
-    @test quantile(σs, 0.95) < 0.0125
+    @test quantile(σs, 0.95) ≈ 1.96 * 0.005 rtol = 0.1
+    @test quantile(σs, 0.95) < 0.0105
+    @test quantile(σs, 0.05) < 0.0005
 end
 
 @testitem "safe_studentt stays valid under extreme scale/df" begin

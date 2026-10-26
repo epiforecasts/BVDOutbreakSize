@@ -380,14 +380,16 @@ end
     fm = onset_forecast_model(rh.onsets, st, N, vintages)
     names = string.(collect(keys(DynamicPPL.VarInfo(fm))))
     @test all(n -> startswith(n, "forecast_onset_reports"), names)
-    @test fm().sds ≈ sds(st.σ_scan)
+    expected(σ) = sqrt.(
+        onset_report_scale.(then .- now, st.τ, 2) .^ 2 .+
+            σ^2 .* (then .^ 2 .+ now^2)
+    )
+    @test fm().sds ≈ expected(st.σ_scan)
+    @test fm().sds != expected(0.0)
     ## A whole figure's total carries both figures' scan level error on
     ## top of the two bar reads.
     for σ in (0.0, 0.004, 0.02)
-        @test sds(σ) ≈ sqrt.(
-            onset_report_scale.(then .- now, st.τ, 2) .^ 2 .+
-                σ^2 .* (then .^ 2 .+ now^2)
-        )
+        @test sds(σ) ≈ expected(σ)
     end
     @test all(sds(0.02) .> sds(0.004) .> sds(0.0))
 end

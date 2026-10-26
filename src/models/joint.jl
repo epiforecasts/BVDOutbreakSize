@@ -255,7 +255,8 @@ drawn with the Student-t the scored cells take. Its variance is the one
 fitted read SD `τ`, plus each figure's scan level error on its total,
 `σ_scan² (then² + now²)`, with `then` and `now` the two figures' totals.
 `σ_scan` is the one [`onset_reporting_model`](@ref) fits to the scored
-figures, and both figures' levels are drawn afresh at that SD. The
+figures. The fitted `z_scan` of the last scored figure is not reused for
+the total at the cut-off. The
 increment is drawn on the whole figure, not per onset date, since the
 figure's total is the quantity the forecast is scored on. The split of each
 increment into reports of onsets up to the cut-off (`backfill`) and after it
