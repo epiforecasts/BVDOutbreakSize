@@ -83,6 +83,9 @@ end
     d0 = RandomWalkVector(0.1, 0.0, 2)
     @test isfinite(logpdf(d0, [0.1, 0.1]))
     @test logpdf(d0, [0.1, 0.1]) > logpdf(d0, [0.1 + 1.0e-6, 0.1])
+
+    ## A walk needs at least one level.
+    @test_throws ArgumentError RandomWalkVector(0.0, 0.1, 0)
 end
 
 @testitem "rt_walk_model: the knots are the log Rt on knot days" setup = [
@@ -102,6 +105,34 @@ end
         @test s.log_R[1] == log(1.4)
         ## Flat at R0 up to the first knot.
         @test all(s.Rt[1:WS] .≈ 1.4)
+    end
+end
+
+@testitem "reconstruct_rt: rebuilds the walk's Rt from the chain" setup = [
+    RtWalkFixtures,
+] begin
+    import FlexiChains
+    using BVDOutbreakSize: reconstruct_rt
+
+    ## Draws of the walk, written to a chain under the names the joint
+    ## carries. With no susceptible fraction on the chain nothing is
+    ## depleted, so the rebuilt Rt must be the model's own on every day.
+    m = rt_walk_model(N, log(1.4); rt_start = WS)
+    nd = 8
+    θs = [rand(Xoshiro(seed), m) for seed in 1:nd]
+    P = FlexiChains.Parameter
+    col(v) = reshape(v, nd, 1)
+    chn = FlexiChains.FlexiChain{Symbol}(
+        nd, 1,
+        Dict(
+            P(Symbol("rt_state.log_R0")) => col(fill(log(1.4), nd)),
+            P(Symbol("rt_state.log_Rt_knots")) =>
+                col([θ[@varname(log_Rt_knots)] for θ in θs]),
+        )
+    )
+    rt = reconstruct_rt(chn; n = N, rt_start = 1, rt_walk_start = WS)
+    for (i, θ) in enumerate(θs)
+        @test collect(rt[i, :]) ≈ returned(m, θ).Rt rtol = 1.0e-12
     end
 end
 

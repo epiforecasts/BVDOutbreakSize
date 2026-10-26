@@ -997,7 +997,7 @@ stream_rt_fig = plot_rt_streams(
     ),
     n = obs.n, breakpoint = _BREAKPOINT,
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    display_start = _rt_start_plot, ramp = RT_INTERVENTION_RAMP
+    display_start = _rt_start_plot, ramp = RESPONSE_RAMP
 );
 
 #md # ```@raw html

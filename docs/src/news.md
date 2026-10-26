@@ -24,10 +24,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - The national reproduction-number walk has no separate response term, so `rt_state.intervention_effect` and the logistic ramp on log $R_t$ are gone and the walk alone carries the change in transmission after the first situation report (#1164).
   The ramp made most of its rise over the walk's first twelve weekly knots, where the walk can draw the same path, so the data saw the effect only through its trade against the walk's steps and their scale.
-  On the joint published as `results-3151`, the response multiplier $e^{\beta_R}$ has a 90% interval of 0.45 to 0.96 against a prior interval of 0.46 to 0.98, and the fit's worst-mixing parameters are the walk's step size (R-hat 1.03, bulk ESS 60) and the first ten knots of the walk (its in-sample evaluation page).
   The walk keeps its half-normal step prior, which nests a constant $R_t$, and its centred knots, which `RandomWalkVector` now draws with no offset.
-  The prior no longer expects transmission to fall after the response, so the prior median change in log $R_t$ over 26 weekly steps moves from −0.23 to 0 (Monte Carlo of the two priors in the pull request).
+  The prior no longer expects transmission to fall after the response, so the prior median change in log $R_t$ over 26 weekly steps moves from −0.23 to 0.
   The single-population composers lose their `breakpoint` keyword, which only set the ramp; the joint keeps it for the walk start and the importation ramp, and `reconstruct_rt` and `reconstruct_patch_rt` lose `breakpoint` and `ramp`.
+  `RT_INTERVENTION_RAMP` becomes `RESPONSE_RAMP`, since it now times only the importation ramp and the figure markers.
   Fitted values change and every fit needs rerunning.
 - Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
   SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.

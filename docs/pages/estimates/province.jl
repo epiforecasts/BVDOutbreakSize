@@ -343,7 +343,7 @@ province_rt_fig = plot_rt_patches(
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
     display_start = _rt_start_plot,
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    ramp = RT_INTERVENTION_RAMP
+    ramp = RESPONSE_RAMP
 );
 
 #md # ```@raw html

@@ -202,11 +202,8 @@ The knots after the first are sampled as `log_Rt_knots`, the log-`R_t` on
 each knot day, in centred form ([`RandomWalkVector`](@ref)). The data pin
 the level on each knot day, which is the sampled coordinate.
 
-The walk carries every change in transmission, the outbreak response
-included. It has no separate response term. A step change in `R_t` over
-the response scale-up is a path the walk already contains, so a sampled
-effect on a fixed ramp would trade against the walk's steps and its step
-size rather than add information.
+The walk carries every change in transmission, the response included;
+there is no separate response term.
 
 The walk base `log_R0` is not sampled here. It is passed in, derived
 forward from the sampled growth rate `r` and the generation interval
@@ -1659,8 +1656,8 @@ and `Rt_matrix` covers the horizon.
     ## convention in [`infection_model`](@ref). Attached prefixed (no
     ## `false`), so the walk's parameters reach the chain as
     ## `rt_state.sigma_rw`, `rt_state.log_R0` and `rt_state.log_Rt_knots`,
-    ## the names the analysis and sensitivity pages read. Attaching it unprefixed surfaces them bare and fails at
-    ## render time on a KeyError.
+    ## the names the analysis and sensitivity pages read. Attaching it
+    ## unprefixed surfaces them bare and fails at render time on a KeyError.
     fkw = forecast === nothing ? (;) : (; forecast)
     rt_state ~ to_submodel(
         rt(n, log_R0_base; rt_start = rt_walk_start, fkw...)

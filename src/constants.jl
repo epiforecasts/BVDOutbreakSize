@@ -174,15 +174,14 @@ trajectory.
 const RT_WALK_LEAD = 28
 
 """
-    RT_INTERVENTION_RAMP
+    RESPONSE_RAMP
 
 Time scale in days of the logistic ramp of the outbreak-response
 scale-up, centred on the `breakpoint` ([`sigmoid_ramp`](@ref)). The
 importation intensities change along it, and the reproduction-number
-figures mark the day it completes. `R_t` itself has no response term: its
-weekly walk carries the change.
+figures mark the day it completes.
 """
-const RT_INTERVENTION_RAMP = 21.0
+const RESPONSE_RAMP = 21.0
 
 """
     ITURI_POPULATION

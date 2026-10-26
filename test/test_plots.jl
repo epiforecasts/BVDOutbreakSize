@@ -731,7 +731,7 @@ end
     using Random: MersenneTwister
     using Dates: Date
     import FlexiChains
-    using BVDOutbreakSize: plot_rt, knot_days, RT_INTERVENTION_RAMP
+    using BVDOutbreakSize: plot_rt, knot_days, RESPONSE_RAMP
     rng = MersenneTwister(17)
     ndraws = 120
     n = 95
@@ -757,7 +757,7 @@ end
     fig = plot_rt(
         chn; n = n, breakpoint = n - 11,
         as_of_date = "2026-05-28", seeding = Date("2026-02-23"),
-        ramp = RT_INTERVENTION_RAMP
+        ramp = RESPONSE_RAMP
     )
     @test fig isa CairoMakie.Makie.Figure
 end
@@ -768,7 +768,7 @@ end
     using Random: MersenneTwister
     using Dates: Date
     import FlexiChains
-    using BVDOutbreakSize: plot_rt_streams, knot_days, RT_INTERVENTION_RAMP
+    using BVDOutbreakSize: plot_rt_streams, knot_days, RESPONSE_RAMP
     rng = MersenneTwister(31)
     ndraws = 80
     n = 95
@@ -812,7 +812,7 @@ end
         streams; joint = joint, n = n,
         breakpoint = breakpoint, as_of_date = "2026-05-28",
         seeding = Date("2026-02-23"), display_start = joint_walk,
-        ramp = RT_INTERVENTION_RAMP
+        ramp = RESPONSE_RAMP
     )
     @test fig isa CairoMakie.Makie.Figure
 end
@@ -1754,7 +1754,7 @@ end
     using Dates: Date
     import FlexiChains
     using BVDOutbreakSize: plot_rt_patches, knot_days, PROVINCE_LABELS,
-        RT_INTERVENTION_RAMP
+        RESPONSE_RAMP
 
     rng = MersenneTwister(23)
     nd, n, np = 40, 60, 3
@@ -1780,7 +1780,7 @@ end
         chn; n, breakpoint = n - 11,
         as_of_date = "2026-05-28", seeding = Date("2026-02-23"),
         n_patches = np, rt_start = walk_start, rt_walk_start = walk_start,
-        ramp = RT_INTERVENTION_RAMP
+        ramp = RESPONSE_RAMP
     )
     @test fig isa CairoMakie.Makie.Figure
     axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
@@ -1814,7 +1814,7 @@ end
         chn; n, breakpoint = n - 11,
         as_of_date = "2026-05-28", seeding = Date("2026-02-23"),
         n_patches = np, rt_start = walk_start, rt_walk_start = walk_start,
-        ramp = RT_INTERVENTION_RAMP, ncols = 2
+        ramp = RESPONSE_RAMP, ncols = 2
     )
     @test count(x -> x isa CairoMakie.Makie.Axis, wide.content) == np
 end

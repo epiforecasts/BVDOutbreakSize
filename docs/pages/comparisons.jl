@@ -315,7 +315,7 @@ chamla_rt_fig = plot_rt(
         chamla_rt_start, chamla_rt_obs.n
     ),
     as_of_date = string(chamla_rt_obs.cutoff),
-    seeding = chamla_rt_obs.seeding, ramp = RT_INTERVENTION_RAMP
+    seeding = chamla_rt_obs.seeding, ramp = RESPONSE_RAMP
 );
 
 #md # ```@raw html

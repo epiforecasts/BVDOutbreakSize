@@ -628,13 +628,12 @@ upto(x::AbstractVector, n::Integer) = length(x) <= n ? x : x[1:n]
 Smooth intervention ramp over an `n`-day grid: the logistic curve
 `1 / (1 + e^{−(t − day) / ramp})` for each day `t`, rising from ≈0 well
 before `day` to ≈1 well after, with `ramp` setting the transition width
-in days. Multiplied by a sampled effect size, this gives the response to
-an intervention (e.g. the first WHO situation report) a gradual ramped
-effect rather than an instantaneous step, as on the importation
-intensities in [`patch_infection_model`](@ref). Returns
-a length-`n` `Float64` vector. `day = missing` gives an all-zero ramp (no
-intervention). Type-stable and AD-transparent in the effect size it
-multiplies.
+in days. [`patch_infection_model`](@ref) scales the importation
+intensities along it, so the change at detection (the first WHO situation
+report) is gradual rather than an instantaneous step. Returns a
+length-`n` `Float64` vector. `day = missing` gives an all-zero ramp (no
+intervention). Type-stable and AD-transparent in the effect that scales
+it.
 
 Split into two dispatches on `day`'s concrete type rather than one method
 with a runtime `ismissing(day)` branch. Mooncake cannot build a reverse rule
@@ -642,11 +641,11 @@ for the branching form (`TypeError: non-boolean (Missing) used in boolean
 context`). Dispatch resolves `day`'s type at the call site, so each method
 body is differentiated on its own concretely-typed slot.
 """
-function sigmoid_ramp(n::Integer, day::Missing; ramp::Real = RT_INTERVENTION_RAMP)
+function sigmoid_ramp(n::Integer, day::Missing; ramp::Real = RESPONSE_RAMP)
     return zeros(Float64, n)
 end
 
-function sigmoid_ramp(n::Integer, day::Real; ramp::Real = RT_INTERVENTION_RAMP)
+function sigmoid_ramp(n::Integer, day::Real; ramp::Real = RESPONSE_RAMP)
     return Float64[logistic((t - day) / ramp) for t in 1:n]
 end
 
@@ -665,6 +664,12 @@ struct RandomWalkVector{S <: Real, T <: Real} <:
     σ::T
     "Number of levels."
     n::Int
+    function RandomWalkVector(start::S, σ::T, n::Integer) where {S, T}
+        n >= 1 || throw(
+            ArgumentError("RandomWalkVector: n = $n levels, need at least 1")
+        )
+        return new{S, T}(start, σ, Int(n))
+    end
 end
 
 Base.length(d::RandomWalkVector) = d.n

@@ -2499,7 +2499,7 @@ function plot_rt(
         chn; n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
-        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP,
+        week::Integer = 7, ramp::Real = RESPONSE_RAMP,
         n_traj::Integer = 100
     )
     rt = reconstruct_rt(chn; n, rt_start, rt_walk_start, week)
@@ -2660,7 +2660,7 @@ function plot_rt_streams(
         joint, n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         display_start::Integer = 1, week::Integer = 7,
-        ramp::Real = RT_INTERVENTION_RAMP,
+        ramp::Real = RESPONSE_RAMP,
         ncols::Integer = 2, joint_colour = :grey25,
         title::AbstractString =
             "Implied Rt by data stream, with the joint fit overlaid",
@@ -2852,7 +2852,7 @@ function plot_rt_patches(
         patch_labels::AbstractVector = PROVINCE_LABELS,
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
         display_start::Integer = rt_start,
-        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP,
+        week::Integer = 7, ramp::Real = RESPONSE_RAMP,
         ncols::Integer = 3,
         colours = _ZONE_PATCH_COLOURS,
         national_colour = :grey25

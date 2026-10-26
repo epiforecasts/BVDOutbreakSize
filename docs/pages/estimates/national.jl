@@ -468,7 +468,7 @@ rt_fig = plot_rt(
     rt_start = _rt_start_plot,
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    ramp = RT_INTERVENTION_RAMP
+    ramp = RESPONSE_RAMP
 );
 
 #md # ```@raw html
