@@ -183,6 +183,8 @@ uncensored negative binomial around the modelled admissions, split on the
 patch admissions with the fitted admission split overdispersion. Each
 patch's beds are its share of the capacity walk, which runs past the
 cut-off. The in-care deaths and rule-outs are the national modelled flows.
+The occupancy takes the stock dispersion `k` and the three flows the
+state's flow dispersion `k_flow`, as on the fitted days.
 The latent stock is the fitted one run forward. With no recorded capacity
 nothing is censored.
 
@@ -210,13 +212,13 @@ free.
     admit = state.admit_patch[:, fd]
     admissions = state.admit_daily[fd]
     forecast_admissions ~ to_submodel(
-        province_counts_model(admissions, admit, k, state.admissions_split_rho)
+        province_counts_model(admissions, admit, state.k_flow, state.admissions_split_rho)
     )
     forecast_incare_deaths ~ to_submodel(
-        _forecast_counts(state.deaths_daily, fd, k)
+        _forecast_counts(state.deaths_daily, fd, state.k_flow)
     )
     forecast_ruleouts ~ to_submodel(
-        _forecast_counts(state.ruleout_daily, fd, k)
+        _forecast_counts(state.ruleout_daily, fd, state.k_flow)
     )
     demand = state.demand[fd]
     above = max.(held .- beds, zero(eltype(held)))
@@ -1809,6 +1811,7 @@ cut-off, and the density there, is the fitted model's.
     isolation_ruleout_los_mean := treatment_state.ruleout_los_mean
     isolation_admission_delay_mean := treatment_state.admission_delay_mean
     isolation_dispersion := treatment_state.k_isolation
+    treatment_flow_dispersion := treatment_state.k_flow
     ## In-care fatality CFR_iso, a modifier on the infection CFR, and the
     ## abscond fraction.
     incare_cfr := treatment_state.CFR_iso

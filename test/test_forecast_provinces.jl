@@ -246,7 +246,7 @@ end
         capacity_patch, deaths_daily = flow, recover_daily = flow,
         ruleout_daily = flow, abscond_daily = flow, demand = fill(100.0, n),
         admit_daily = vec(sum(admit_patch; dims = 1)),
-        occupancy_split_rho = 0.05, admissions_split_rho = 0.05,
+        occupancy_split_rho = 0.05, admissions_split_rho = 0.05, k_flow = 10.0,
     )
     cap = (; days = [5, 10], counts = [100, 100])
     m = treatment_forecast_model(state, fd, cap, 10.0)
@@ -321,10 +321,13 @@ end
     ## The fit scores the national occupancy and admissions as one negative
     ## binomial each and the provinces as a split of them, so the forecast's
     ## national counts carry the national NB variance μ + μ²/k, not the
-    ## smaller variance of a sum of independent province draws.
+    ## smaller variance of a sum of independent province draws. The
+    ## occupancy takes the stock dispersion `k` and the admissions the flow
+    ## dispersion `k_flow`, as on the fitted days.
     n = 3
     fd = 3:3
     k = 20.0
+    k_flow = 8.0
     μ = 700.0
     level = [0.6, 0.2, 0.2]
     patch = reshape(μ .* level, 3, 1) .* ones(1, n)
@@ -334,14 +337,14 @@ end
         demand_patch = patch, capacity_patch = fill(1.0e5, 3, n),
         deaths_daily = flow, recover_daily = flow, ruleout_daily = flow,
         abscond_daily = flow, demand = fill(μ, n), admit_daily = fill(μ, n),
-        occupancy_split_rho = 0.05, admissions_split_rho = 0.05,
+        occupancy_split_rho = 0.05, admissions_split_rho = 0.05, k_flow,
     )
     m = treatment_forecast_model(state, fd, (; days = Int[], counts = Int[]), k)
     rng = Xoshiro(20261022)
     draws = [returned(m, rand(rng, m)) for _ in 1:4000]
-    nb_var = μ + μ^2 / k
-    indep_var = μ + sum((μ .* level) .^ 2) / k
-    for field in (:occupancy_draws, :admission_draws)
+    for (field, kd) in ((:occupancy_draws, k), (:admission_draws, k_flow))
+        nb_var = μ + μ^2 / kd
+        indep_var = μ + sum((μ .* level) .^ 2) / kd
         nat = [only(getfield(d, field).obs) for d in draws]
         @test mean(nat) ≈ μ rtol = 0.02
         @test var(nat) ≈ nb_var rtol = 0.1
