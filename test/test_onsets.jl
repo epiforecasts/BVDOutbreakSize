@@ -985,24 +985,20 @@ end
 end
 
 @testitem "onset scan level prior is a zero-centred half-normal" begin
-    ## Scale 0.5%: the mode at no level error, the median at 0.674 of the
-    ## scale and 95% of the mass below 1%.
+    ## Mode at no level error, scale 0.5%, 95% of the mass below 1%.
     using BVDOutbreakSize: onset_reporting_model
-    using Statistics: median, quantile
-    using Random: seed!
+    using Distributions: Normal, Truncated, quantile
 
     oc = (;
         onset_days = [10, 11], report_days = [15, 15],
         prev_report_days = [0, 0], increments = [2, 3],
     )
-    model = onset_reporting_model(oc, fill(30.0, 25))
-    seed!(20261028)
-    σs = [model().σ_scan for _ in 1:4000]
-    @test all(>=(0), σs)
-    @test median(σs) ≈ 0.674 * 0.005 rtol = 0.1
-    @test quantile(σs, 0.95) ≈ 1.96 * 0.005 rtol = 0.1
-    @test quantile(σs, 0.95) < 0.0105
-    @test quantile(σs, 0.05) < 0.0005
+    p = onset_reporting_model(oc, fill(30.0, 25)).defaults.scan_sd_prior
+    @test p isa Truncated
+    @test p.untruncated == Normal(0.0, 0.005)
+    @test minimum(p) == 0
+    @test maximum(p) == Inf
+    @test quantile(p, 0.95) < 0.01
 end
 
 @testitem "safe_studentt stays valid under extreme scale/df" begin
@@ -1266,7 +1262,7 @@ end
     ## reaches `σ_scan` and every figure's `z_scan` through the scan level.
     ## It stays finite as `σ_scan` goes to zero.
     using Turing: DynamicPPL, fix
-    using LogDensityProblems: logdensity_and_gradient
+    using LogDensityProblems: logdensity, logdensity_and_gradient
     using Random: Xoshiro
     using BVDOutbreakSize: onset_reporting_model, default_adtype
 
@@ -1288,12 +1284,19 @@ end
         fm, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
     )
     z = [1.0, -0.5, 2.0]
-    logp, grad = logdensity_and_gradient(ldf, [log(0.004); z])
+    x = [log(0.02); z]
+    logp, grad = logdensity_and_gradient(ldf, x)
     @test isfinite(logp)
-    @test all(isfinite, grad)
+    ## Central finite differences of the same log density.
+    h = 1.0e-5
+    fd = map(eachindex(x)) do k
+        e = zeros(length(x))
+        e[k] = h
+        (logdensity(ldf, x .+ e) - logdensity(ldf, x .- e)) / (2h)
+    end
+    @test grad ≈ fd rtol = 1.0e-5
     ## The scan level moves each `z_scan` gradient off the prior's `-z`.
-    @test grad[1] != 0
-    @test all(grad[2:end] .!= -z)
+    @test maximum(abs.(grad[2:end] .+ z)) > 1.0e-3
     logp0, grad0 = logdensity_and_gradient(ldf, [-40.0; z])
     @test isfinite(logp0)
     @test all(isfinite, grad0)

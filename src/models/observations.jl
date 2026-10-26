@@ -3604,14 +3604,9 @@ end
 """
     onset_vintage_indices(report_idx, prev_report_idx)
 
-Map each increment cell onto the figures its two reads come from. The
-figures are the sorted distinct report days either read is taken on, so
-every read, current or previous, takes its own figure's index. Returns
-`(; vintage_idx, prev_vintage_idx, n_vintages)`, the first two
-length-matched to `report_idx`. The sentinel `prev_report_idx = 0` (the
-empty predecessor of an onset date's first print) maps to
-`prev_vintage_idx = 0`, which [`onset_scan_adjust`](@ref) reads as no
-figure.
+Figure index of each cell's current and previous read, over the sorted
+distinct report days of both, as `(; vintage_idx, prev_vintage_idx,
+n_vintages)`. Index `0` marks an empty predecessor (`prev_report_idx = 0`).
 """
 function onset_vintage_indices(
         report_idx::AbstractVector{<:Integer},
@@ -3629,19 +3624,8 @@ end
     onset_scan_adjust(level_cur, level_prev, scan_level, vintage_idx,
         prev_vintage_idx)
 
-Apply each figure's scan level to the modelled cumulative levels the
-increment cells difference. Cell `i` reads its current level off figure
-`vintage_idx[i]` and its previous level off figure `prev_vintage_idx[i]`:
-
-```math
-\\text{mean}_i = \\ell_{\\text{cur},i} \\, c_{s_i} -
-    \\ell_{\\text{prev},i} \\, c_{p_i},
-```
-
-with `c = scan_level` one multiplier per figure
-([`onset_reporting_model`](@ref) draws `c_s = exp(σ_scan z_s)`). The
-sentinel index `0` takes a multiplier of exactly one. Returns the
-per-cell means.
+Per-cell increment means with each read's level multiplied by its figure's
+`scan_level`. Index `0` takes a multiplier of one.
 """
 function onset_scan_adjust(
         level_cur::AbstractVector, level_prev::AbstractVector,
@@ -4206,8 +4190,8 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     τ ~ read_sd_prior
     reads = [p == 0 ? 1 : 2 for p in prev_report_days]
 
-    ## Scan level: one non-centred multiplier per figure, on the modelled
-    ## cumulative levels each cell differences.
+    ## An empty history has no figures; one unused `z_scan` keeps the
+    ## parameter defined there.
     vintages = onset_vintage_indices(report_days, prev_report_days)
     σ_scan ~ scan_sd_prior
     z_scan ~ product_distribution(
