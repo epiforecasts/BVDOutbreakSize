@@ -252,15 +252,20 @@ tau_prior_median = median(
 asc_prior_source = "src/models/priors.jl at the release commit: " *
     "pooled_ascertainment_model mu_prior centre"
 
-p90 = bounds90("p_drc")
+## The national suspected-case ascertainment. A release fitted with the
+## province detection carries it as `p_drc_national`, `p_drc` being only the
+## logit centre of the province probabilities. Earlier releases have `p_drc`.
+drc_key = hasproperty(draws, :p_drc_national) ? "p_drc_national" : "p_drc"
+p90 = bounds90(drc_key)
 add!(
-    "suspected_ascertainment_median", fmt2(median(draws.p_drc)),
-    "posterior_draws.csv: median of the thinned p_drc draws " *
+    "suspected_ascertainment_median",
+    fmt2(median(getproperty(draws, Symbol(drc_key)))),
+    "posterior_draws.csv: median of the thinned $(drc_key) draws " *
         "(suspected-case ascertainment)"
 )
 add!(
     "suspected_ascertainment_interval90", fmt_interval(p90...),
-    "posterior_summary.csv: p_drc, Lower 90% to Upper 90%"
+    "posterior_summary.csv: $(drc_key), Lower 90% to Upper 90%"
 )
 add!(
     "suspected_ascertainment_prior_median", fmt2(asc_prior_median),

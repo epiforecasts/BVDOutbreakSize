@@ -299,6 +299,8 @@ province_imports_fig #hide
 # We split it into people infected but not yet symptomatic and people with symptoms who have not yet been detected.
 # Together they are the infections in the community.
 # The [point prevalence](@ref methods-prevalence) section of the Methods gives the calculation.
+# A province's undetected count depends on its suspected-case detection probability.
+# The province compositions see that probability only as a product with case confirmation, so the province occupancy splits and its prior set it.
 # The table gives each rate per 100,000 residents and the number of people in the community, as medians with 90% credible intervals.
 
 #md # ```@raw html
@@ -376,7 +378,8 @@ spatial_labels = Dict(
     :region_sd => "Rt deviation spread",
     :region_halflife => "Rt deviation half-life (days)",
     :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
-    :province_ascertainment_sd => "Ascertainment spread",
+    :province_suspected_ascertainment_sd => "Detection spread (logit)",
+    :province_ascertainment_sd => "Confirmation spread",
     :importation_epsilon => "Importation intensity",
     :importation_destination_sd => "Importation destination spread",
     :importation_origin_destination_correlation =>
@@ -390,7 +393,7 @@ spatial_hyper_table = summary_table(
     chn_joint,
     [
         :region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd,
+        :province_suspected_ascertainment_sd, :province_ascertainment_sd,
     ];
     digits = 3, labels = spatial_labels
 );
@@ -475,8 +478,8 @@ spatial_pair_fig = plot_pair(
     chn_joint,
     [
         :region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd, :importation_epsilon,
-        :importation_destination_sd,
+        :province_suspected_ascertainment_sd, :province_ascertainment_sd,
+        :importation_epsilon, :importation_destination_sd,
         :importation_origin_destination_correlation, :importation_flow_sd,
         :importation_reciprocity, :province_cfr_sd,
         :province_death_ascertainment_sd,
@@ -494,7 +497,7 @@ spatial_pair_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Joint posterior of the spatial hyperparameters, with the prior overlaid.
-#md # These are the spread, half-life and correlation of the Rt deviations, the spread of case ascertainment, the importation intensity, its destination and flow spreads and their correlations, and the spreads of lethality and death confirmation.
+#md # These are the spread, half-life and correlation of the Rt deviations, the spreads of suspected-case detection and case confirmation, the importation intensity, its destination and flow spreads and their correlations, and the spreads of lethality and death confirmation.
 #md # </figcaption>
 #md # </figure>
 #md # ```
