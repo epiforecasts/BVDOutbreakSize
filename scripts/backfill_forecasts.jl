@@ -235,7 +235,11 @@ function backfill_driver(dest)
     i = findfirst(s -> s.id == "joint", specs)
     isnothing(i) && error("this tag's registry has no \\"joint\\" fit; " *
                           "known ids: " * join((s.id for s in specs), ", "))
-    chn = fit_or_load(fit_key("joint"), specs[i].thunk;
+    ## A release tag's registry keys a fit by its spec or, before the zone
+    ## sampler settings, by its id.
+    key = hasmethod(fit_key, Tuple{NamedTuple}) ? fit_key(specs[i]) :
+        fit_key("joint")
+    chn = fit_or_load(key, specs[i].thunk;
         cache_dir = "$(CACHE_DIR)")
 
     ## Keep the chain alongside the archive: `fit_or_load` already caches the

@@ -95,14 +95,14 @@ function fit_content_hash(; chains::Integer = 2, sampler::NamedTuple = (;))
 end
 
 """
-Content-addressed cache key for fit `id`, keyed on the sampler settings the
-fit samples at (`fit_sampler_args(id)`), so a run with the `BVD_JOINT_*`
-overrides set writes its own cache entry for every fit and one with
-`BVD_ZONE_TARGET_ACCEPT` set does so for the health-zone fits.
+Content-addressed cache key for fit `spec`, keyed on the sampler settings
+the fit samples at (`fit_sampler_args(spec)`), so a run with the
+`BVD_JOINT_*` overrides set writes its own cache entry for every fit and one
+with `BVD_ZONE_TARGET_ACCEPT` set does so for the health-zone fits.
 """
-function fit_key(id; chains::Integer = 2)
-    sampler = fit_sampler_args(id)
-    return string(id, "__", fit_content_hash(; chains, sampler))
+function fit_key(spec::NamedTuple; chains::Integer = 2)
+    sampler = fit_sampler_args(spec)
+    return string(spec.id, "__", fit_content_hash(; chains, sampler))
 end
 
 """
@@ -232,27 +232,24 @@ joint_sampler_args() = (;
     target_accept = joint_target_accept(), max_depth = joint_max_depth(),
 )
 
-## The health-zone fits' one departure from the joint's settings: a lower
-## target acceptance, so NUTS takes a larger step (#973). The zone posterior
-## needs just over 256 leapfrog steps at 0.80, so a slightly larger step can
-## halve the tree. `BVD_ZONE_TARGET_ACCEPT` overrides it; setting it to the
-## joint's value reverts the zone fits to the joint's settings.
+## The health-zone fits sample at a lower target acceptance than the joint,
+## so NUTS takes a larger step. `BVD_ZONE_TARGET_ACCEPT` overrides it;
+## setting it to the joint's value reverts them.
 zone_target_accept() = parse(
     Float64,
     get(ENV, "BVD_ZONE_TARGET_ACCEPT", "0.75")
 )
-
-## The ids of the health-zone fits, which sample at `zone_sampler_args()`.
-const ZONE_FIT_IDS = ("local", "local_frozen_validation")
 
 ## The joint's sampler budget with the zone target acceptance.
 zone_sampler_args() = merge(
     joint_sampler_args(), (; target_accept = zone_target_accept())
 )
 
-## The sampler settings fit `id` samples at.
-fit_sampler_args(id) =
-    id in ZONE_FIT_IDS ? zone_sampler_args() : joint_sampler_args()
+## The sampler settings fit `spec` samples at: its `sampler` field, a
+## function returning them and read when called so the environment overrides
+## apply, or the joint's when it has none. Both the cache key and a zone
+## fit's sampler call read them here, so the two cannot disagree.
+fit_sampler_args(spec::NamedTuple) = get(spec, :sampler, joint_sampler_args)()
 
 """
 Keyword arguments of the headline joint fit for `obs`, with `overrides`
@@ -327,8 +324,9 @@ stage, and carry no `model`. `zone_fitter` fits a zone model from a parent
 chain, `BVDOutbreakSize.fit_zone` when `nothing`, resolved when the thunk
 runs.
 
-Every fit samples at `joint_sampler_args()`, except the health-zone fits,
-which sample at `zone_sampler_args()`.
+Every fit samples at `fit_sampler_args(spec)`: the health-zone fits carry
+`sampler = zone_sampler_args` and every other fit samples at
+`joint_sampler_args()`.
 """
 function build_fit_specs(
         obs;
@@ -730,17 +728,23 @@ function build_fit_specs(
     function load_parent(parent_id)
         parent = specs[findfirst(s -> s.id == parent_id, specs)]
         return fit_or_load(
-            fit_key(parent_id), parent.thunk;
+            fit_key(parent), parent.thunk;
             cache_dir = cache_dir, strict = true
         )
     end
-    function fit_zone_from(parent_chn, o, name)
+    function fit_zone_from(parent_chn, o, spec)
         fitter = zone_fitter === nothing ? default_zone_fitter() : zone_fitter
         return fitter(
             parent_chn, o;
-            zone_sampler_args()..., chains = chains,
-            callback = fit_callback(name)
+            fit_sampler_args(spec)..., chains = chains,
+            callback = fit_callback(spec.id)
         )
+    end
+    ## A health-zone spec whose thunk `run` is handed the spec itself, so it
+    ## samples at the settings its cache key is built from.
+    function zone_spec(run; fields...)
+        spec = (; fields..., sampler = zone_sampler_args)
+        return merge(spec, (; thunk = () -> run(spec)))
     end
     ## A dependent key shares the parent's content hash and moves with the
     ## joint's sampler overrides, but says nothing
@@ -749,24 +753,21 @@ function build_fit_specs(
     push!(
         specs,
         ## The health-zone fit on the current data, melded from the headline.
-        (;
+        zone_spec(;
             id = "local", kind = :chain, needs = ["joint"],
-            thunk = () -> fit_zone_from(load_parent("joint"), obs, "local"),
-        ),
+        ) do spec
+            fit_zone_from(load_parent("joint"), obs, spec)
+        end,
         ## The same fit melded from the validation joint, on the observations
         ## that joint was fitted to, returned in the frozen shape.
-        (;
+        zone_spec(;
             id = "local_frozen_validation", kind = :frozen,
             needs = ["frozen_validation"],
-            thunk = () -> begin
-                parent = load_parent("frozen_validation")
-                chn = fit_zone_from(
-                    parent.chn, parent.o,
-                    "local_frozen_validation"
-                )
-                (; cutoff = parent.cutoff, o = parent.o, chn)
-            end,
-        )
+        ) do spec
+            parent = load_parent("frozen_validation")
+            chn = fit_zone_from(parent.chn, parent.o, spec)
+            (; cutoff = parent.cutoff, o = parent.o, chn)
+        end
     )
     validate_fit_specs(specs)
     return specs

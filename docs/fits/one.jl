@@ -46,7 +46,7 @@ i === nothing && error(
         join((s.id for s in specs), ", ")
 )
 
-key = fit_key(ID)
+key = fit_key(specs[i])
 @info "fit_one" id = ID key = key cache = CACHE dryrun = DRYRUN refit = REFIT
 if DRYRUN
     println(key)

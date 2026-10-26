@@ -342,26 +342,35 @@ end
         ## A fake headline under the joint's own key reaches the zone fitter
         ## with the current observations and the zone sampler settings.
         fake_joint = (; payload = "joint chain")
-        fit_or_load(fit_key("joint"), () -> fake_joint; cache_dir = dir)
+        fit_or_load(fit_key(spec("joint")), () -> fake_joint; cache_dir = dir)
         r = spec("local").thunk()
         @test r == (; zone = "chain", from = fake_joint)
         @test length(calls) == 1
         c = calls[1]
         @test c.parent == fake_joint
         @test c.o === obs
-        @test (; c.samples, c.n_adapts, c.target_accept, c.max_depth) ==
-            zone_sampler_args()
+        received = (; c.samples, c.n_adapts, c.target_accept, c.max_depth)
+        @test received == zone_sampler_args()
         @test c.target_accept == zone_target_accept()
+        ## The zone key is built from exactly the settings the fitter
+        ## received, and the joint's from the joint's settings.
+        @test fit_sampler_args(spec("local")) == received
+        @test fit_key(spec("local")) ==
+            string("local__", fit_content_hash(; sampler = received))
+        @test fit_sampler_args(spec("joint")) == joint_sampler_args()
+        @test fit_key(spec("joint")) == string(
+            "joint__", fit_content_hash(; sampler = joint_sampler_args())
+        )
         @test c.chains == 2
         @test c.callback === nothing
 
         ## The draw counts and both fit keys follow the joint overrides, so a
         ## zone chain melded from one joint is never served for another.
-        joint_key, zone_key = fit_key("joint"), fit_key("local")
+        joint_key, zone_key = fit_key(spec("joint")), fit_key(spec("local"))
         withenv("BVD_JOINT_SAMPLES" => "50", "BVD_JOINT_WARMUP" => "25") do
-            @test fit_key("joint") != joint_key
-            @test fit_key("local") != zone_key
-            fit_or_load(fit_key("joint"), () -> fake_joint; cache_dir = dir)
+            @test fit_key(spec("joint")) != joint_key
+            @test fit_key(spec("local")) != zone_key
+            fit_or_load(fit_key(spec("joint")), () -> fake_joint; cache_dir = dir)
             spec("local").thunk()
         end
         @test calls[2].samples == 50
@@ -375,7 +384,7 @@ end
             chn = (; payload = "frozen chain"),
         )
         fit_or_load(
-            fit_key("frozen_validation"), () -> fake_frozen;
+            fit_key(spec("frozen_validation")), () -> fake_frozen;
             cache_dir = dir
         )
         f = spec("local_frozen_validation").thunk()
@@ -391,7 +400,5 @@ end
     ## thunk runs.
     lazy = build_fit_specs(obs; run_sensitivity = false, cache_dir = dir)
     @test any(s -> s.id == "local", lazy)
-    ## The zone sampler settings key exactly the dependent fits.
-    @test Set(s.id for s in specs if is_dependent_fit(s)) == Set(ZONE_FIT_IDS)
     @test default_zone_fitter() === BVDOutbreakSize.fit_zone
 end

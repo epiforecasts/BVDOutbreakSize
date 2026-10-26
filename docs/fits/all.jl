@@ -42,7 +42,7 @@ for stage in stages
     fit_parallel(
         [
             () -> fit_or_load(
-                fit_key(s.id), s.thunk;
+                fit_key(s), s.thunk;
                 cache_dir = CACHE, refit = REFIT
             ) for s in stage_specs
         ]

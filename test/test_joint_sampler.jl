@@ -40,11 +40,10 @@ end
         @test j.target_accept == 0.8
         @test Base.structdiff(z, (; target_accept = 0)) ==
             Base.structdiff(j, (; target_accept = 0))
-        for id in ("local", "local_frozen_validation")
-            @test fit_sampler_args(id) == z
-        end
-        for id in ("joint", "deaths", "frozen_validation", "sens_no_patches")
-            @test fit_sampler_args(id) == j
+        specs = build_fit_specs(load_observations(); run_sensitivity = true)
+        for s in specs
+            zone = s.id in ("local", "local_frozen_validation")
+            @test fit_sampler_args(s) == (zone ? z : j)
         end
     end
     ## The zone override moves only the zone target, and the joint's
@@ -67,17 +66,12 @@ end
     ## `n_adapts` or `target_accept` out would drift from the others.
     root = joinpath(@__DIR__, "..")
     src = read(joinpath(root, "docs", "fits", "registry.jl"), String)
-    ## Every `nuts_sample` call, plus the one health-zone fitter call.
-    n_calls = count(r"nuts_sample\(", src) + count("return fitter(", src)
-    @test n_calls >= 13
-    ## The health-zone fitter call alone takes the zone settings, which
-    ## differ from the joint's only in the target acceptance.
-    @test count("joint_sampler_args()...", src) == n_calls - 1
-    @test count("zone_sampler_args()...", src) == 1
+    ## Every `nuts_sample` call splats the joint's settings. The health-zone
+    ## fitter's settings are checked by behaviour in `test_fit_cache.jl`.
+    n_calls = count(r"nuts_sample\(", src)
+    @test n_calls >= 12
+    @test count("joint_sampler_args()...", src) == n_calls
     @test !occursin("samples = samples", src)
-    @test count("n_adapts = joint_warmup(", src) == 1
-    @test count("target_accept = ", src) == 2
-    @test count("target_accept = zone_target_accept()", src) == 1
 
     ## The scripts that fit outside the registry take the same helpers.
     for (f, helper) in (
@@ -110,27 +104,26 @@ end
         "BVD_JOINT_TARGET_ACCEPT", "BVD_JOINT_MAX_DEPTH", "BVD_ZONE_TARGET_ACCEPT",
     )
     unset = Tuple(v => nothing for v in vars)
-    ids = (
-        "joint", "sens_no_patches", "frozen_validation",
-        "sens_community_delay", "sens_exp_growth_clock", "deaths",
-        "frozen_validation_cases", "frozen_2026-05-20", "local",
-        "local_frozen_validation",
-    )
+    specs = build_fit_specs(load_observations(); run_sensitivity = true)
+    spec(id) = specs[findfirst(s -> s.id == id, specs)]
+    key(id) = fit_key(spec(id))
+    zone_ids = ("local", "local_frozen_validation")
+    ids = Tuple(s.id for s in specs)
     base = withenv(unset...) do
-        Dict(id => fit_key(id) for id in ids)
+        Dict(id => key(id) for id in ids)
     end
 
     ## The same settings give the same key, and so does a default set
     ## explicitly.
     withenv(unset...) do
-        @test fit_key("joint") == base["joint"]
+        @test key("joint") == base["joint"]
     end
     withenv(
         "BVD_JOINT_SAMPLES" => "1000", "BVD_JOINT_WARMUP" => "1000",
         "BVD_JOINT_TARGET_ACCEPT" => "0.80", "BVD_JOINT_MAX_DEPTH" => "10"
     ) do
-        @test fit_key("joint") == base["joint"]
-        @test fit_key("sens_no_patches") == base["sens_no_patches"]
+        @test key("joint") == base["joint"]
+        @test key("sens_no_patches") == base["sens_no_patches"]
     end
 
     overrides = (
@@ -142,10 +135,10 @@ end
     for ov in overrides
         withenv(unset..., ov) do
             for id in ids
-                if first(ov) == "BVD_JOINT_TARGET_ACCEPT" && id in ZONE_FIT_IDS
-                    @test fit_key(id) == base[id]
+                if first(ov) == "BVD_JOINT_TARGET_ACCEPT" && id in zone_ids
+                    @test key(id) == base[id]
                 else
-                    @test fit_key(id) != base[id]
+                    @test key(id) != base[id]
                 end
             end
         end
@@ -154,10 +147,10 @@ end
     ## The zone target acceptance moves only the health-zone fits' keys.
     withenv(unset..., "BVD_ZONE_TARGET_ACCEPT" => "0.70") do
         for id in ids
-            if id in ZONE_FIT_IDS
-                @test fit_key(id) != base[id]
+            if id in zone_ids
+                @test key(id) != base[id]
             else
-                @test fit_key(id) == base[id]
+                @test key(id) == base[id]
             end
         end
     end

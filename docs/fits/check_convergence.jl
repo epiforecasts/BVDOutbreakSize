@@ -47,12 +47,22 @@ function _context()
     return line * "."
 end
 
+## The specs give each fit's cache key, which depends on its sampler settings.
+const SPECS = build_fit_specs(
+    load_observations(); run_sensitivity = true, cache_dir = CACHE
+)
+
 checks = map(IDS) do id
+    i = findfirst(s -> s.id == id, SPECS)
+    i === nothing && error(
+        "unknown convergence id $id; known: " *
+            join((s.id for s in SPECS), ", ")
+    )
     ## `strict` because the fit matrix has already produced every fit and the
     ## workflow downloads them here: a miss is a wiring bug, and refitting the
     ## joint model inside the gate would take hours.
     result = fit_or_load(
-        fit_key(id), () -> nothing;
+        fit_key(SPECS[i]), () -> nothing;
         cache_dir = CACHE, strict = true
     )
     fit_convergence(

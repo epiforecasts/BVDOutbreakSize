@@ -228,7 +228,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
         )
         result = _timed("fit $id") do
             fit_or_load(
-                fit_key(id), spec.thunk;
+                fit_key(spec), spec.thunk;
                 cache_dir = _fit_cache_dir,
                 refit = _refit_all,
                 strict = _strict
