@@ -133,16 +133,20 @@ end
         @test fit_key("sens_no_patches") == base["sens_no_patches"]
     end
 
-    ## Each override moves every fit's key, since every fit samples at the
-    ## joint's settings.
     overrides = (
         "BVD_JOINT_SAMPLES" => "1200", "BVD_JOINT_WARMUP" => "400",
         "BVD_JOINT_TARGET_ACCEPT" => "0.70", "BVD_JOINT_MAX_DEPTH" => "12",
     )
+    ## The health-zone fits take their own target acceptance, so the
+    ## joint's leaves their keys alone.
     for ov in overrides
         withenv(unset..., ov) do
             for id in ids
-                @test fit_key(id) != base[id]
+                if first(ov) == "BVD_JOINT_TARGET_ACCEPT" && id in ZONE_FIT_IDS
+                    @test fit_key(id) == base[id]
+                else
+                    @test fit_key(id) != base[id]
+                end
             end
         end
     end
