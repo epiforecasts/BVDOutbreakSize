@@ -947,8 +947,8 @@ end
     ## At `σ_scan = 0` every figure reads at level one, whatever `z_scan`
     ## is, so the increment likelihood is the one without a scan level.
     using BVDOutbreakSize: onset_reporting_model
-    using Turing: DynamicPPL, fix
-    using Random: seed!
+    using Turing: fix, loglikelihood, @varname
+    using Random: Xoshiro
 
     oc = (;
         onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
@@ -957,22 +957,23 @@ end
         increments = [2, 3, 1, 0, 1, 2, 3, 4, 5],
     )
     model = onset_reporting_model(oc, fill(30.0, 25))
-    seed!(20261027)
-    vi = DynamicPPL.VarInfo(model)
-    lik(z) = DynamicPPL.getloglikelihood(
-        last(
-            DynamicPPL.evaluate!!(
-                fix(model, (; σ_scan = 0.0, z_scan = z)), deepcopy(vi)
-            )
-        )
-    )
+    d = rand(Xoshiro(20261027), model)
+    function lik(σ, z)
+        θ = Dict(k => d[k] for k in keys(d))
+        θ[@varname(σ_scan)] = σ
+        θ[@varname(z_scan)] = z
+        return loglikelihood(model, θ)
+    end
     out = fix(model, (; σ_scan = 0.0, z_scan = [2.0, -3.0]))()
     @test all(==(1.0), out.scan_level)
     @test out.modelled == out.unscanned
-    @test lik([2.0, -3.0]) ≈ lik([-1.0, 0.5])
+    @test lik(0.0, [2.0, -3.0]) ≈ lik(0.0, [-1.0, 0.5])
     ## A small level moves the likelihood continuously away from it.
+    @test lik(1.0e-9, [2.0, -3.0]) ≈ lik(0.0, [2.0, -3.0]) rtol = 1.0e-6
+    @test lik(0.02, [2.0, -3.0]) != lik(0.0, [2.0, -3.0])
     small = fix(model, (; σ_scan = 1.0e-9, z_scan = [2.0, -3.0]))()
-    @test small.modelled ≈ out.modelled rtol = 1.0e-6
+    @test small.modelled ≈ small.unscanned rtol = 1.0e-6
+    @test small.modelled != small.unscanned
 end
 
 @testitem "onset scan level prior is a half-normal on the read-back gaps" begin
@@ -1267,11 +1268,12 @@ end
 @testitem "AD gradient: the onset scan level differentiates (Mooncake)" tags = [
     :ad,
 ] begin
-    ## The gradient reaches `σ_scan` and every figure's `z_scan` through
-    ## the scan level, at a level away from zero and at zero itself.
-    using Turing: DynamicPPL
+    ## With every other parameter fixed at a prior draw, the gradient
+    ## reaches `σ_scan` and every figure's `z_scan` through the scan level.
+    ## It stays finite as `σ_scan` goes to zero.
+    using Turing: DynamicPPL, fix
     using LogDensityProblems: logdensity_and_gradient
-    using Random: seed!
+    using Random: Xoshiro
     using BVDOutbreakSize: onset_reporting_model, default_adtype
 
     oc = (;
@@ -1280,35 +1282,28 @@ end
         prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0, 20, 20],
         increments = [2, 3, 1, 0, 1, 2, 3, 4, 5, -1, 2],
     )
-    seed!(20261029)
     model = onset_reporting_model(oc, fill(30.0, 25))
-    vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
+    d = rand(Xoshiro(20261029), model)
+    rest = Dict(
+        k => d[k] for k in keys(d) if !(string(k) in ("σ_scan", "z_scan"))
+    )
+    fm = fix(model, rest)
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(fm), fm)
+    @test string.(collect(keys(vi))) == ["σ_scan", "z_scan"]
     ldf = DynamicPPL.LogDensityFunction(
-        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+        fm, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
     )
-    x0 = collect(vi[:])
-    ## The linked coordinates of `σ_scan` and `z_scan`, by moving each in
-    ## the unlinked trace and seeing which entries change.
-    names = collect(keys(vi))
-    sizes = [length(vi[k]) for k in names]
-    offs = cumsum([0; sizes[1:(end - 1)]])
-    at(name) = only(
-        offs[i] .+ (1:sizes[i]) for i in eachindex(names)
-            if string(names[i]) == name
-    )
-    iσ = only(at("σ_scan"))
-    iz = at("z_scan")
-    @test length(iz) == 3
-    for σ_link in (x0[iσ], log(0.004), -40.0)
-        x = copy(x0)
-        x[iσ] = σ_link
-        x[iz] .= [1.0, -0.5, 2.0]
-        logp, grad = logdensity_and_gradient(ldf, x)
-        @test isfinite(logp)
-        @test all(isfinite, grad)
-        @test grad[iσ] != 0
-        @test all(!iszero, grad[iz])
-    end
+    z = [1.0, -0.5, 2.0]
+    logp, grad = logdensity_and_gradient(ldf, [log(0.004); z])
+    @test isfinite(logp)
+    @test all(isfinite, grad)
+    ## The scan level moves each `z_scan` gradient off the prior's `-z`.
+    @test grad[1] != 0
+    @test all(grad[2:end] .!= -z)
+    logp0, grad0 = logdensity_and_gradient(ldf, [-40.0; z])
+    @test isfinite(logp0)
+    @test all(isfinite, grad0)
+    @test grad0[2:end] ≈ -z
 end
 
 @testitem "bvd_joint: the onset stream is wired in" begin
