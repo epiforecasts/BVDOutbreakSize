@@ -421,7 +421,8 @@ zone_rt_release_fig = plot_evolution_by_group(
     _zone_release_groups("R_T");
     ylabel = "Reproduction number",
     title = "Zone reproduction number by release",
-    marks_label = "median, 90% bar", refline = 1.0, ymax = 3.0, ncols = 4,
+    released_label = "Released estimate", marks_label = "median, 90% bar",
+    refline = 1.0, ymax = 3.0, ncols = 4,
     empty_note = _no_zone_release_note
 );
 zone_cases_release_fig = plot_evolution_by_group(

@@ -514,7 +514,8 @@ province_rt_release_fig = plot_evolution_by_group(
     _province_release_groups("R_T");
     ylabel = "Reproduction number",
     title = "Province reproduction number by release",
-    marks_label = "median, 90% bar", refline = 1.0, ymax = 3.0, ncols = 4,
+    released_label = "Released estimate", marks_label = "median, 90% bar",
+    refline = 1.0, ymax = 3.0, ncols = 4,
     empty_note = _no_release_note
 );
 province_cases_release_fig = plot_evolution_by_group(
@@ -528,7 +529,8 @@ province_cfr_release_fig = plot_evolution_by_group(
     _province_release_groups("CFR");
     ylabel = "Case-fatality ratio",
     title = "Province case-fatality ratio by release",
-    marks_label = "median, 90% bar", ymax = 1.0, ncols = 4,
+    released_label = "Released estimate", marks_label = "median, 90% bar",
+    ymax = 1.0, ncols = 4,
     empty_note = _no_release_note
 );
 
