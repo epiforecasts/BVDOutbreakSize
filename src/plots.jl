@@ -1203,12 +1203,9 @@ interval or median past that crop is clamped and marked with an open triangle
 at the top of the axis. Every made date gets its own x tick, thinning to
 about a dozen for a busier release history.
 
-With `ncol` set, the panels are instead wrapped into a grid of `ncol`
-columns, one panel per stream and horizon in stream order, each titled with
-its stream (and its horizon when there is more than one). This suits many
-streams at a single horizon, such as one per province or zone, which the
-default layout stacks into a single column. Each panel keeps its own crop, the
-made-date axis is shared, and one legend sits below the grid.
+With `ncol` set, panels wrap into a grid of `ncol` columns, one per stream
+and horizon, titled by stream (and horizon when there is more than one).
+Suits many streams at one horizon.
 
 Returns a figure carrying `empty_message` in place of the panels when no
 forecasts have been scored yet.
@@ -1268,29 +1265,18 @@ function plot_forecast_overlay(
     ## lowest in its column (so carries the rotated date labels).
     wrapped = !isnothing(ncol)
     single_h = length(horizons) == 1
-    panels = if wrapped
-        pairs = [(s, h) for s in streams for h in horizons]
-        nc = min(ncol, length(pairs))
-        map(enumerate(pairs)) do (i, (s, h))
-            r, c = fldmod1(i, nc)
-            (;
-                s, h, r, c,
-                title = single_h ? string(s) : "$(s), $(h)-day ahead",
-                ylabel = c == 1 ? "Count" : "",
-                bottom = i + nc > length(pairs),
-            )
-        end
-    else
-        [
-            (;
-                s, h, r, c,
-                title = r == 1 ? "$(h)-day ahead" : "",
-                ylabel = c == 1 ? string(s) : "",
-                bottom = r == length(streams),
-            )
-                for (r, s) in enumerate(streams)
-                for (c, h) in enumerate(horizons)
-        ]
+    pairs = [(s, h) for s in streams for h in horizons]
+    nc = wrapped ? min(ncol, length(pairs)) : length(horizons)
+    panels = map(enumerate(pairs)) do (i, (s, h))
+        r, c = fldmod1(i, nc)
+        (;
+            s, h, r, c,
+            title = wrapped ?
+                (single_h ? string(s) : "$(s), $(h)-day ahead") :
+                (r == 1 ? "$(h)-day ahead" : ""),
+            ylabel = c == 1 ? (wrapped ? "Count" : string(s)) : "",
+            bottom = i + nc > length(pairs),
+        )
     end
     ncols = maximum(p.c for p in panels)
     nrows = maximum(p.r for p in panels)

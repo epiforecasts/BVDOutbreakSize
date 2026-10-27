@@ -541,20 +541,25 @@ end
         )
             for z in 1:7
     ]
-    axes(fig) = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
-    cols(fig) = sort(unique(ax.layoutobservables.gridcontent[].span.cols for ax in axes(fig)))
-    rows_(fig) = sort(unique(ax.layoutobservables.gridcontent[].span.rows for ax in axes(fig)))
+    panel_axes(fig) = [
+        x for x in fig.content if x isa CairoMakie.Makie.Axis
+    ]
+    ## Grid positions through `gridcontent`, which GridLayoutBase exports.
+    span(ax) = CairoMakie.Makie.GridLayoutBase.gridcontent(ax).span
+    grid_cols(fig) = sort(unique(span(ax).cols for ax in panel_axes(fig)))
+    grid_rows(fig) = sort(unique(span(ax).rows for ax in panel_axes(fig)))
     stacked = plot_forecast_overlay(DataFrame(rows))
-    @test length(cols(stacked)) == 1
-    @test length(rows_(stacked)) == 7
+    @test length(grid_cols(stacked)) == 1
+    @test length(grid_rows(stacked)) == 7
     wrapped = plot_forecast_overlay(DataFrame(rows); ncol = 3)
-    @test length(axes(wrapped)) == 7
-    @test length(cols(wrapped)) == 3
-    @test length(rows_(wrapped)) == 3
+    @test length(panel_axes(wrapped)) == 7
+    @test length(grid_cols(wrapped)) == 3
+    @test length(grid_rows(wrapped)) == 3
     ## Each panel is titled with its zone, and only the lowest panel in
     ## each column carries the date axis label.
-    @test sort([ax.title[] for ax in axes(wrapped)]) == ["zone $(z)" for z in 1:7]
-    @test count(ax -> ax.xlabel[] != "", axes(wrapped)) == 3
+    @test sort([ax.title[] for ax in panel_axes(wrapped)]) ==
+        ["zone $(z)" for z in 1:7]
+    @test count(ax -> ax.xlabel[] != "", panel_axes(wrapped)) == 3
     @test_throws ArgumentError plot_forecast_overlay(DataFrame(rows); ncol = 0)
 end
 

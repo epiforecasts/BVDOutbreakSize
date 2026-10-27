@@ -67,29 +67,32 @@ end
 ## Past forecasts against what was observed are scored on the forecast
 ## evaluation pages only, so no forecast page reads the archived forecast
 ## overlays or carries its own copy of the figure.
+## A source-text lint: it reads the page files, it does not render them.
 @testitem "report pages: past forecasts sit on the evaluation pages" tags = [
     :quality,
 ] begin
     using BVDOutbreakSize
     pages = joinpath(pkgdir(BVDOutbreakSize), "docs", "pages")
+    code(path) = filter(l -> !occursin(r"^\h*#", l), readlines(path))
     readers = String[]
+    plotters = String[]
     for (dir, _, files) in walkdir(pages), f in files
         endswith(f, ".jl") || continue
         path = joinpath(dir, f)
-        any(
-            l -> !occursin(r"^\h*#", l) &&
-                occursin("forecast_overlay.csv", l),
-            eachline(path)
-        ) && push!(readers, replace(relpath(path, pages), '\\' => '/'))
+        page = replace(relpath(path, pages), '\\' => '/')
+        lines = code(path)
+        any(contains("forecast_overlay.csv"), lines) && push!(readers, page)
+        any(contains("plot_forecast_overlay("), lines) &&
+            push!(plotters, page)
     end
     @test !isempty(readers)
     @test all(startswith("evaluation/forecast/"), readers)
-    for f in readdir(joinpath(pages, "forecasts"); join = true)
-        endswith(f, ".jl") || continue
+    @test !isempty(plotters)
+    @test all(startswith("evaluation/forecast/"), plotters)
+    for f in ("province.jl", "zone.jl")
         @test !any(
-            l -> startswith(l, "# ## Past") &&
-                occursin("against what was observed", l),
-            eachline(f)
+            contains("plot_forecast_overlay("),
+            code(joinpath(pages, "forecasts", f))
         )
     end
 end
