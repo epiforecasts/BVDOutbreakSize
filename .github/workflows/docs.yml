@@ -910,10 +910,32 @@ jobs:
             fits: fit-joint
             overlays: false
             recovery: false
+          - id: forecasts/province
+            slug: forecasts-province
+            fits: fit-joint
+            overlays: false
+            recovery: false
+    steps: *render-steps
+
+  # The province in-sample page shows the parameter recovery, as above, and
+  # its estimates against the past releases in the rescored overlays. Its own
+  # job, so the other joint-only pages do not wait on the overlays.
+  render_joint_insample_overlays:
+    name: Render ${{ matrix.id }}
+    needs: [fit_joint, recovery, overlays]
+    if: >-
+      ${{ !cancelled() && needs.fit_joint.result == 'success' &&
+      needs.overlays.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
           - id: evaluation/insample/province
             slug: evaluation-insample-province
             fits: fit-{joint,sens_no_patches}
-            overlays: false
+            overlays: true
             recovery: true
     steps: *render-steps
 
@@ -943,22 +965,6 @@ jobs:
             fits: fit-*
             overlays: true
             recovery: true
-    steps: *render-steps
-
-  render_joint_overlays:
-    name: Render ${{ matrix.id }}
-    needs: [fit_joint, overlays]
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - id: forecasts/province
-            slug: forecasts-province
-            fits: fit-joint
-            overlays: true
-            recovery: false
     steps: *render-steps
 
   render_validation:
@@ -1003,8 +1009,8 @@ jobs:
   # The health-zone pages read the zone melds alongside the joint and frozen
   # chains they were melded from. `fit_zone` already waits on both parent
   # groups, so waiting on it is enough for all four artifacts to be in the
-  # run. The zone forecast and its evaluation read the rescored release
-  # overlays.
+  # run. The zone forecast, its evaluation and the zone in-sample page read
+  # the rescored release overlays.
   render_zone:
     name: Render ${{ matrix.id }}
     needs: [fit_zone, overlays]
@@ -1021,11 +1027,11 @@ jobs:
           - id: forecasts/zone
             slug: forecasts-zone
             fits: fit-{joint,local}
-            overlays: true
+            overlays: false
           - id: evaluation/insample/zone
             slug: evaluation-insample-zone
             fits: fit-{joint,local,frozen_validation,local_frozen_validation}
-            overlays: false
+            overlays: true
           - id: evaluation/forecast/zone
             slug: evaluation-forecast-zone
             fits: fit-{frozen_validation,local_frozen_validation}
@@ -1066,7 +1072,7 @@ jobs:
     needs:
       - render_methods
       - render_joint
-      - render_joint_overlays
+      - render_joint_insample_overlays
       - render_insample
       - render_validation
       - render_evaluation
@@ -1097,7 +1103,7 @@ jobs:
       ${{ !cancelled() && github.actor != 'dependabot[bot]' &&
       needs.render_methods.result == 'success' &&
       needs.render_joint.result == 'success' &&
-      needs.render_joint_overlays.result == 'success' &&
+      needs.render_joint_insample_overlays.result == 'success' &&
       needs.render_insample.result == 'success' &&
       needs.render_validation.result == 'success' &&
       needs.render_evaluation.result == 'success' &&

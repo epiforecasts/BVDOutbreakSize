@@ -144,12 +144,39 @@
     return { bot: bot, top: top, step: step };
   }
 
+  // Where an observed count `obs` falls in its posterior predictive `q`
+  // (median, lower_90/upper_90, lower_50/upper_50), as a probability
+  // integral transform read off those quantiles: 0.025 below the 90%
+  // interval, 0.15 below the 50% interval, 0.5 inside it, 0.85 above it and
+  // 0.975 above the 90% interval. A count on a bound is inside it, so a
+  // count the predictive puts all its mass on reads 0.5. Null without both.
+  function fitClass(obs, q) {
+    if (!num(obs) || !q || !num(q.lower_90) || !num(q.upper_90) ||
+        !num(q.lower_50) || !num(q.upper_50)) { return null; }
+    if (obs < q.lower_90) { return 0.025; }
+    if (obs < q.lower_50) { return 0.15; }
+    if (obs > q.upper_90) { return 0.975; }
+    if (obs > q.upper_50) { return 0.85; }
+    return 0.5;
+  }
+  // An area's observed weekly count and its predictive for the week ending
+  // on week end `w`, from the indexed series `obsIx` and `fitIx`, or null
+  // when either lacks that week.
+  function fitAt(obsIx, fitIx, w) {
+    var o = pointAt(obsIx, w, true), q = pointAt(fitIx, w, true);
+    if (!o || !q || !num(o.count)) { return null; }
+    return { date: q.date, obs: o.count, median: q.median, lower_90: q.lower_90,
+             upper_90: q.upper_90, lower_50: q.lower_50, upper_50: q.upper_50,
+             pit: fitClass(o.count, q) };
+  }
+
   var T = {
     dayOf: dayOf, isoOf: isoOf, indexSeries: indexSeries, pointAt: pointAt,
     weekEnd: weekEnd, weeksSum: weeksSum, totalAt: totalAt,
     SAVED_FIELDS: SAVED_FIELDS, vintageAt: vintageAt, rowAt: rowAt,
     span: span, clampDay: clampDay, playStart: playStart, playNext: playNext,
-    rangeFrom: rangeFrom, inRange: inRange, rtAxis: rtAxis
+    rangeFrom: rangeFrom, inRange: inRange, rtAxis: rtAxis,
+    fitClass: fitClass, fitAt: fitAt
   };
   if (typeof module === "object" && module.exports) { module.exports = T; }
   else { root.BVDTime = T; }

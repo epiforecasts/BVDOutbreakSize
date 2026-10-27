@@ -168,3 +168,33 @@ test("the range keeps the chosen weeks and the axis fits them", () => {
   assert.deepEqual(T.rtAxis([{ lower_90: 0.2, upper_90: 9 }]), { bot: 0, top: 5, step: 1 });
   assert.deepEqual(T.rtAxis([]), { bot: 0.5, top: 1.5, step: 0.25 });
 });
+
+test("fitClass places an observed count in its predictive's intervals", () => {
+  const q = { median: 10, lower_90: 4, upper_90: 18, lower_50: 7, upper_50: 13 };
+  assert.equal(T.fitClass(3, q), 0.025);
+  assert.equal(T.fitClass(4, q), 0.15);
+  assert.equal(T.fitClass(7, q), 0.5);
+  assert.equal(T.fitClass(13, q), 0.5);
+  assert.equal(T.fitClass(14, q), 0.85);
+  assert.equal(T.fitClass(18, q), 0.85);
+  assert.equal(T.fitClass(19, q), 0.975);
+  // A predictive with all its mass on zero, and an observed zero.
+  assert.equal(T.fitClass(0, { median: 0, lower_90: 0, upper_90: 0, lower_50: 0, upper_50: 0 }), 0.5);
+  assert.equal(T.fitClass(null, q), null);
+  assert.equal(T.fitClass(5, { median: 1 }), null);
+});
+
+test("fitAt pairs a week's observed count with its predictive", () => {
+  const obs = T.indexSeries(weekly([5, 9]));
+  const fit = T.indexSeries([
+    { date: T.isoOf(CUT - 7), median: 6, lower_90: 2, upper_90: 8, lower_50: 4, upper_50: 7 },
+    { date: T.isoOf(CUT), median: 4, lower_90: 1, upper_90: 8, lower_50: 3, upper_50: 5 }
+  ]);
+  const f = T.fitAt(obs, fit, CUT);
+  assert.equal(f.obs, 9);
+  assert.equal(f.median, 4);
+  assert.equal(f.pit, 0.975);
+  assert.equal(T.fitAt(obs, fit, CUT - 7).pit, 0.5);
+  assert.equal(T.fitAt(obs, fit, CUT - 14), null);
+  assert.equal(T.fitAt(obs, T.indexSeries([]), CUT), null);
+});
