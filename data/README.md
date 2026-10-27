@@ -596,7 +596,7 @@ No script tracks mirror-sourced values, so this check is manual.
   Haut-Uélé prints 184 lits at SitRep 161 and 158 at SitRep 162, against 169 at SitRep 158, with no centre named as opening or closing.
 - **Laboratory and recoveries, SitReps 160 and 162**: SitRep 162's page 1 prints 450 samples analysed, while its five laboratory bullets sum to 435 (Ituri 225, Nord-Kivu 179, Haut-Uélé 5, Tshopo 13, Bas-Uélé 13); the province sum enters `tests_analysed_daily_history`.
   The recovered tile rises by 23 at SitRep 160 and 11 at SitRep 162, against 32 and 28 recoveries printed that day; the tile enters `recovered_history`.
-- **Duplicate media file, SitRep 163**: insp.cd briefly served SitRep 162 under the number 163; the genuine SitRep 163 (`SitRep N°163/MVE-BDBV/24/10/2026`, published 25 October) is a distinct file.
+- **SitRep 163 file**: SitRep 163 (`SitRep N°163/MVE-BDBV/24/10/2026`, published 25 October) is a distinct file from SitRep 162.
 - **SitRep 163 (24 October)**: Haut-Uélé's care paragraph repeats SitRep 162's word for word (15 admissions, 6 sorties, 41 patients for 158 lits at 25,9 %, 68 accompagnants and 91 PPL), and its challenges say `Au Haut-Uélé, les données de prise en charge ne sont pas remontées`, so it is listed in `STALE`.
   Searched every local PDF for `prise en charge ne sont pas remont`: SitRep 163 is the only hit.
   The national `bed_capacity_history` takes Nord-Kivu's 410 alone, since Tshopo prints no paragraph.
