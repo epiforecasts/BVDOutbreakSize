@@ -49,7 +49,6 @@ virus outbreak. https://doi.org/10.5281/zenodo.20312758
 
 The DOI above resolves to the latest release.
 Please also cite the INSP situation reports and the WHO situation reports and Disease Outbreak News, which supply the data.
-The other works the report draws on need no citation to use it.
 The [news](news.md) page records what changed in each one.
 
 ## Reuse
