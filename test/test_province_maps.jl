@@ -337,6 +337,35 @@ end
     @test t.count == [3, 7, 1, 0]
 end
 
+@testitem "weekly_quantile_table bins replicates into the observed weeks" begin
+    using BVDOutbreakSize: weekly_count_table, weekly_quantile_table
+    using Dates: Date
+    using Statistics: quantile
+    ## The vintages of the weekly_count_table test. Each draw adds `d` to
+    ## every increment of area A, so its week-to-13 September sum is 3 + 2d
+    ## (two vintages) and its week-to-20 September sum is 7 + 2d.
+    days = [2, 9, 10, 16, 20]
+    inc = [5 1 2 3 4; 0 0 1 0 0]
+    a = reduce(vcat, [permutedims(inc[1, :] .+ d) for d in 0:10])
+    b = repeat(permutedims(inc[2, :]), 11)
+    kw = (; cutoff = Date(2026, 9, 20), n = 20, weeks = 3)
+    t = weekly_quantile_table(days, [a, b], ["A", "B"]; kw...)
+    obs = weekly_count_table(days, inc, ["A", "B"]; kw...)
+    @test t.area == obs.area
+    @test t.date == obs.date
+    @test names(t) == ["area", "date", "median", "lower_90", "upper_90", "lower_50", "upper_50"]
+    s13 = [3 + 2d for d in 0:10]
+    @test t.median[1] == quantile(s13, 0.5)
+    @test t.lower_90[1] == quantile(s13, 0.05)
+    @test t.upper_50[2] == quantile([7 + 2d for d in 0:10], 0.75)
+    ## Replicates equal to the observed counts give their counts back.
+    @test t.median[3:4] == obs.count[3:4]
+    @test t.lower_90[3:4] == obs.count[3:4]
+    @test_throws ArgumentError weekly_quantile_table(days, [a], ["A", "B"]; kw...)
+    @test_throws ArgumentError weekly_quantile_table(days, [a[:, 1:4], b], ["A", "B"]; kw...)
+    @test isempty(weekly_quantile_table(Int[], [zeros(2, 0)], ["A"]; kw...))
+end
+
 @testitem "province_map_estimates counts only draws above one and defaults to the patches" begin
     using BVDOutbreakSize: province_map_estimates, PROVINCE_MEMBERS,
         PROVINCE_NAMES, PROVINCE_SOURCE_NAMES

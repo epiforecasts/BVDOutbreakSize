@@ -198,6 +198,12 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- The dashboard map's detail draws the posterior predictive of the weekly confirmed cases and deaths over the observed bars, on by default with a toggle, and a new fit metric shades each area by where its latest week's count falls in that predictive (#PRNUM).
+  The province and national predictive is the joint's, split by the fitted province shares as the province in-sample page scores it.
+  The zone predictive is the zone composition's for the cases, which splits each patch's observed count across its zones.
+  The zones carry no deaths predictive, since the model drops the reattributed death vintages that the observed series keeps.
+  The province time series now draws the joint posterior predictive, which adds about 100 seconds to that page's render (docs CI run 40350643349, province in-sample job).
+  The model and the fitted values do not change.
 - The dashboard map has a date slider under its title that every metric follows, with a play button that steps it a week at a time (#1168).
   The reproduction number, the confirmed cases and deaths to date and over the past 7, 14 and 28 days, and the reported treatment-centre figures come from the map's time series on that date.
   The counts are whole weeks ending on the cut-off's weekday, and the total to date is the cut-off's total less the later weeks.

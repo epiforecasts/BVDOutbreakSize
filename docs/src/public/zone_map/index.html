@@ -49,7 +49,11 @@ Runtime inputs, fetched by relative URL from this directory:
                         (the date slider reads every series before the
                         cut-off), series "cases" the confirmed cases (count)
                         in the week ending on that date and series "deaths" the
-                        confirmed deaths; zones are keyed as in the
+                        confirmed deaths, and series "cases_fit" and
+                        "deaths_fit" the posterior predictive of the same
+                        weekly counts (median, lower_90/upper_90,
+                        lower_50/upper_50; the zones carry cases only, from
+                        the zone composition); zones are keyed as in the
                         zone CSV, provinces by patch label plus "National".
                         The province file also carries series "isolation"
                         and "beds", the reported patients in isolation and
@@ -358,6 +362,7 @@ Nothing else is fetched.
     <label><input type="radio" name="metric" value="R_T" checked><span>Reproduction number</span></label>
     <label><input type="radio" name="metric" value="forecast"><span>7-day forecast</span></label>
     <label><input type="radio" name="metric" value="cases"><span>To date</span></label>
+    <label><input type="radio" name="metric" value="fit"><span>Fit vs data</span></label>
     <label class="zone-only"><input type="radio" name="metric" value="share"><span>Share of patch</span></label>
     <label class="zone-only"><input type="radio" name="metric" value="p_ge"><span>Chance of K+ cases</span></label>
     <label><input type="radio" name="metric" value="p_rt"><span>Chance R &gt; 1</span></label>
@@ -536,6 +541,15 @@ Nothing else is fetched.
     { max: 0.9, c: "#e34948", l: "75% to 90%" },
     { max: Infinity, c: "#a8302f", l: "90% and above" }
   ];
+  // Where a week's observed count falls in the model's posterior predictive
+  // (see T.fitClass), centred on the middle half.
+  var FIT_BINS = [
+    { max: 0.05, c: "#256abf", l: "below the 90% interval" },
+    { max: 0.25, c: "#86b6ef", l: "below the 50% interval" },
+    { max: 0.75, c: "neutral", l: "inside the 50% interval" },
+    { max: 0.95, c: "#f1a4a3", l: "above the 50% interval" },
+    { max: Infinity, c: "#a8302f", l: "above the 90% interval" }
+  ];
   var NODATA = { c: "nodata", l: "no estimate" };
   var HIDDEN = { c: "hidden", l: "hidden by filter" };
   // The neutral midpoint, the no-data and the filtered fills come from the
@@ -662,6 +676,23 @@ Nothing else is fetched.
       text: function (r) {
         return "Confirmed cases to date " + fmt0(r.cases) +
           ", confirmed deaths " + fmt0(r.deaths);
+      }
+    },
+    // The latest week's observed count against its posterior predictive.
+    fit: {
+      title: "Fit vs data",
+      legend: function () {
+        return "Latest week's " + S().name + " against the model's predictive";
+      },
+      kind: "diverging",
+      fmt: function (v) { return num(v) ? pick(FIT_BINS, v).l : "–"; },
+      value: function (r) { var f = fitOf(r); return f ? f.pit : null; },
+      text: function (r) {
+        var f = fitOf(r);
+        if (!f) { return "No predictive of " + S().name + " for this week"; }
+        return cap(S().name) + " in the week to " + longDate(f.date) + " " + fmt0(f.obs) +
+          ", predictive median " + fmtN(f.median) + " (90% interval " +
+          interval(f.lower_90, f.upper_90, fmtN) + ")";
       }
     },
     // The modelled, delay-adjusted ratio; the health-zone model has none.
@@ -944,6 +975,14 @@ Nothing else is fetched.
     shifted.forEach(function (r) { by[r[level]] = r; });
     timeCache = { key: key, rows: shifted, byKey: by };
   }
+  // An area's observed count of the chosen stream and its posterior
+  // predictive for the week ending on or before the map's date.
+  function fitOf(r) {
+    var end = cutoffDay();
+    if (!r || !num(end)) { return null; }
+    return T.fitAt(ixOf(series, level, r, stream), ixOf(series, level, r, stream + "_fit"),
+      T.weekEnd(timeOn() ? timeDay : end, end));
+  }
   // The metrics read from the time series before the cut-off.
   function seriesMetric() {
     return metric === "R_T" || metric === "cases" ||
@@ -954,6 +993,9 @@ Nothing else is fetched.
   // slider, the legend and the tooltips.
   function timeNote() {
     if (!timeOn() || metric === "R_T") { return ""; }
+    if (metric === "fit") {
+      return "The week ending " + longDate(isoOf(T.weekEnd(timeDay, cutoffDay()))) + ".";
+    }
     if (metric === "cases") {
       return cap(S().name) + " to the week ending " +
         longDate(isoOf(T.weekEnd(timeDay, cutoffDay()))) + ".";
@@ -970,7 +1012,9 @@ Nothing else is fetched.
   // The same, as a short tag for the table's column title.
   function timeTag() {
     if (!timeOn()) { return ""; }
-    if (metric === "cases") { return ", week to " + shortDate(T.weekEnd(timeDay, cutoffDay())); }
+    if (metric === "cases" || metric === "fit") {
+      return ", week to " + shortDate(T.weekEnd(timeDay, cutoffDay()));
+    }
     if (seriesMetric()) { return ", " + shortDate(timeDay); }
     if (!vintages.length) { return ", at the cut-off"; }
     var v = T.vintageAt(vintages, timeDay);
@@ -1030,7 +1074,7 @@ Nothing else is fetched.
     }
   });
   // Deep links: `?layer=zone|province`, `?area=<zone or province key>`,
-  // `?metric=R_T|forecast|cases|share|p_ge|p_rt`, `?k=1|5|10|20`,
+  // `?metric=R_T|forecast|cases|fit|share|p_ge|p_rt`, `?k=1|5|10|20`,
   // `?summary=median|lower|upper`, `?filter=all|with|without`,
   // `?window=7|14|28`, `?r=all|modelled|province`, `?stream=cases|deaths`,
   // `?care=<basis>:<figure>` (the treatment-centre menu's values),
@@ -1325,7 +1369,9 @@ Nothing else is fetched.
   // point with its 90% interval. `p`, the area's row at the compared
   // cut-off, adds that cut-off's forecast, dashed, over the week it covered.
   // `mark`, a week's last day, draws a vertical rule through that week.
-  function countChart(weeks, r, p, mark) {
+  // `fit`, the weeks' posterior predictive, draws its 50% and 90% bands and
+  // median over the bars.
+  function countChart(weeks, r, p, mark, fit) {
     var f = S().fc;
     var fc = r ? { median: r[f + "_median"], lower: r[f + "_lower"],
                    upper: r[f + "_upper"] } : {};
@@ -1342,9 +1388,15 @@ Nothing else is fetched.
       { median: p[f + "_median"], lower: p[f + "_lower"], upper: p[f + "_upper"],
         slot: (dayOf(pastDate) + 7 - dayOf(weeks[0].date)) / 7 } : null;
     if (pfc && !(pfc.slot >= 0 && pfc.slot <= nb - 1)) { pfc = null; }
+    // Each predictive week in the slot of its observed bar.
+    var slots = weeks.map(function (w) { return w.date; });
+    fit = (fit || []).filter(function (q) {
+      return slots.indexOf(q.date) !== -1 && num(q.median);
+    });
     var top = Math.max(1, Math.max.apply(null, weeks.map(function (w) {
       return w.count;
-    }).concat(hasFc ? [fc.upper] : [0], pfc ? [pfc.upper] : []).filter(num)));
+    }).concat(hasFc ? [fc.upper] : [0], pfc ? [pfc.upper] : [],
+      fit.map(function (q) { return q.upper_90; })).filter(num)));
     var step = Math.pow(10, Math.floor(Math.log10(top * 1.05)) - 1);
     top = Math.ceil(top * 1.05 / step) * step;
     var bw = (W - L0 - R0) / nb;
@@ -1376,7 +1428,21 @@ Nothing else is fetched.
         ": " + fmtN(pfc.median) + (num(pfc.lower) ? " (90% interval " +
         interval(pfc.lower, pfc.upper, fmtN) + ")" : "")) + "</title></circle>";
     }
-    var wi = weeks.map(function (w) { return w.date; }).indexOf(num(mark) ? isoOf(mark) : "");
+    function sx(q) { return (L0 + (slots.indexOf(q.date) + 0.5) * bw).toFixed(1); }
+    function band(lo, hi, cls) {
+      var ps = fit.filter(function (q) { return num(q[lo]) && num(q[hi]); });
+      if (!ps.length) { return ""; }
+      return "<polygon class=\"" + cls + "\" points=\"" + ps.map(function (q) {
+        return sx(q) + "," + Y(q[hi]).toFixed(1);
+      }).concat(ps.slice().reverse().map(function (q) {
+        return sx(q) + "," + Y(q[lo]).toFixed(1);
+      })).join(" ") + "\"/>";
+    }
+    var fitEl = fit.length ? band("lower_90", "upper_90", "b90") +
+      band("lower_50", "upper_50", "b50") + "<polyline class=\"med\" points=\"" +
+      fit.map(function (q) { return sx(q) + "," + Y(q.median).toFixed(1); }).join(" ") +
+      "\"/>" : "";
+    var wi = slots.indexOf(num(mark) ? isoOf(mark) : "");
     var rule = wi === -1 ? "" : "<line class=\"now\" x1=\"" + (L0 + (wi + 0.5) * bw).toFixed(1) +
       "\" x2=\"" + (L0 + (wi + 0.5) * bw).toFixed(1) + "\" y1=\"" + T0 + "\" y2=\"" +
       (H - B0) + "\"/>";
@@ -1388,9 +1454,10 @@ Nothing else is fetched.
         "\" text-anchor=\"end\">" + fmt0(v) + "</text>";
     }).join("");
     return svgEl(W, H, cap(S().name) + " per week" +
+        (fitEl ? " with the posterior predictive" : "") +
         (hasFc ? " and next week's forecast" : ""),
       "<line class=\"axis\" x1=\"" + L0 + "\" x2=\"" + (W - R0) + "\" y1=\"" +
-        (H - B0) + "\" y2=\"" + (H - B0) + "\"/>" + bars + rule + fcEl + yt + xt) +
+        (H - B0) + "\" y2=\"" + (H - B0) + "\"/>" + bars + fitEl + rule + fcEl + yt + xt) +
       (pfc ? pastKey("forecast for the week after") : "");
   }
   // Reported patients in isolation and beds by day, then the forecast 7
@@ -1508,6 +1575,13 @@ Nothing else is fetched.
     // The charts show the chosen span before the cut-off.
     var from = T.rangeFrom(dayOf(r.as_of), rangeWeeks);
     function shown(ps) { return T.inRange(ps, from); }
+    // The stream's posterior predictive, drawn over the weekly bars unless
+    // the viewer turns it off.
+    var fitPts = shown(ts[stream + "_fit"]);
+    var fitOn = showFit && fitPts.length > 0;
+    var fitWord = !fitOn ? "" : " Bands: the model's posterior predictive, 50% and 90%, " +
+      "with its median." + (lvl === "zone" ?
+        " At zone level it splits the patch's observed count across its zones." : "");
     var mark = timeOn() ? timeDay : null;
     // During play the column redraws every step, so it is not announced.
     d.setAttribute("aria-live", playTimer ? "off" : "polite");
@@ -1522,11 +1596,24 @@ Nothing else is fetched.
       rtChart(shown(ts.rt), shown(pts.rt), mark) +
       timeCaption(lvl, r, from) +
       "<h3>" + esc(cap(S().name)) + " per week</h3><p class=\"cap\">" +
-      esc(fcWord) + "</p>" +
+      esc(fcWord + fitWord) + "</p>" +
+      (fitPts.length ? "<div class=\"switch\"><label><input type=\"checkbox\" " +
+        "id=\"showfit\"" + (showFit ? " checked" : "") + "><span>Show fit</span>" +
+        "</label></div>" : "") +
       countChart(shown(ts[stream]), r, pr,
-        mark === null ? null : T.weekEnd(mark, dayOf(r.as_of)));
+        mark === null ? null : T.weekEnd(mark, dayOf(r.as_of)), fitOn ? fitPts : null);
     var b = document.getElementById("clear");
     if (b) { b.addEventListener("click", function () { select(null); fitAll(); }); }
+    var sf = document.getElementById("showfit");
+    if (sf) {
+      sf.addEventListener("change", function () {
+        showFit = sf.checked;
+        try { localStorage.setItem(FIT_KEY, showFit ? "1" : "0"); } catch (e) { /* storage blocked */ }
+        renderDetail();
+        var again = document.getElementById("showfit");
+        if (again) { again.focus(); }
+      });
+    }
     d.querySelectorAll("input[name=range]").forEach(function (el) {
       el.addEventListener("change", function () {
         rangeWeeks = Number(el.value);
@@ -1548,6 +1635,10 @@ Nothing else is fetched.
       rangeWeeks = savedRange;
     }
   } catch (e) { /* storage blocked: keep the default */ }
+  // Whether the weekly chart draws the posterior predictive, on unless the
+  // viewer turned it off.
+  var FIT_KEY = "bvd-zone-map-fit", showFit = true;
+  try { showFit = localStorage.getItem(FIT_KEY) !== "0"; } catch (e) { /* storage blocked */ }
   function rangeSwitch() {
     return "<div class=\"switch\" role=\"radiogroup\" aria-label=\"Period shown in the charts\">" +
       RANGES.map(function (x) {
@@ -1588,21 +1679,19 @@ Nothing else is fetched.
                        maxZoom: 12 });
     if (byKey[key]) { select(key); } else { shapes[0].openTooltip(b.getCenter()); }
   }
+  var SERIES = ["rt", "cases", "deaths", "isolation", "beds", "cases_fit", "deaths_fit"];
   // Long time-series rows grouped by area, then by series, in date order,
   // each series also indexed by day under `ix`.
   function groupSeries(rows) {
     var out = {};
     rows.forEach(function (r) {
-      var a = out[r.area] = out[r.area] ||
-        { rt: [], cases: [], deaths: [], isolation: [], beds: [] };
-      if (a[r.series]) { a[r.series].push(r); }
+      var a = out[r.area] = out[r.area] || {};
+      if (SERIES.indexOf(r.series) !== -1) { (a[r.series] = a[r.series] || []).push(r); }
     });
     Object.keys(out).forEach(function (k) {
-      ["rt", "cases", "deaths", "isolation", "beds"].forEach(function (s) {
-        out[k][s].sort(function (a, b) { return a.date < b.date ? -1 : 1; });
-      });
       out[k].ix = {};
-      ["rt", "cases", "deaths", "isolation", "beds"].forEach(function (s) {
+      SERIES.forEach(function (s) {
+        out[k][s] = (out[k][s] || []).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
         out[k].ix[s] = T.indexSeries(out[k][s]);
       });
     });
@@ -1615,6 +1704,7 @@ Nothing else is fetched.
       bins = binsFromCuts(BED_USE_CUTS, fmtPct);
     }
     else if (metric === "p_rt") { bins = P_RT_BINS; }
+    else if (metric === "fit") { bins = FIT_BINS; }
     else if (m.kind === "diverging") { bins = RT_BINS; }
     // The classes come from the cut-off's shown areas on every date, so
     // colours compare across dates and the cut-off matches its own scale.
@@ -1650,6 +1740,11 @@ Nothing else is fetched.
     }
     if (metric === "cfr" && none) {
       notes.push("No estimate at this level.");
+    }
+    if (metric === "fit") {
+      notes.push(none ? "No predictive at this level." : level === "zone" ?
+        "The zone predictive splits the patch's observed count." :
+        "Bluer: fewer than the model expected. Redder: more.");
     }
     var pool = rows.filter(function (r) { return r.pooled === 1; })[0];
     if (level === "zone" && !none) {
@@ -1687,6 +1782,17 @@ Nothing else is fetched.
       return [{ title: cap(other.name), value: function (r) {
         return fmt0(r[other.total]);
       } }];
+    }
+    if (metric === "fit") {
+      return [
+        { title: "Observed", value: function (r) { var f = fitOf(r); return f ? fmt0(f.obs) : "–"; } },
+        { title: "Predictive median", value: function (r) {
+            var f = fitOf(r); return f ? fmtN(f.median) : "–";
+          } },
+        { title: "90% interval", value: function (r) {
+            var f = fitOf(r); return f ? interval(f.lower_90, f.upper_90, fmtN) : "–";
+          } }
+      ];
     }
     if (metric === "cfr") {
       if (!rows.some(function (r) { return num(r.cfr_median); })) { return []; }
@@ -2132,6 +2238,8 @@ Nothing else is fetched.
       esc(vsLabel()) + ", " + esc(what) + ".</p>";
   }
   function pastTip(f) {
+    // The fit is read from the current series only.
+    if (metric === "fit") { return ""; }
     var p = past && past[level].byKey[featureKey(f)], m = METRICS[metric];
     // Before the cut-off, the compared cut-off's figure for the same day
     // from its own series, for the metrics with a history, on or before
