@@ -184,7 +184,6 @@ The views expressed are those of the author(s) and not necessarily those of the 
 ## Further references
 
 The works this project builds on and compares against.
-Citing them is not needed to use it.
 
 - **McCabe et al. estimates** that this work re-implements and compares
   against, in all three released versions (the two Imperial reports and
