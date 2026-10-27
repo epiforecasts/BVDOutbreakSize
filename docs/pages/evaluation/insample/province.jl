@@ -320,57 +320,12 @@ MarkdownTable(province_calibration_table) #hide
 #md # <details><summary>Build the province count panels</summary>
 #md # ```
 
-## The joint posterior predictive, shared with the national page (see
-## `joint_posterior_predictive` in `docs/pages/_setup.jl`). Its draws pair
-## one to one with `chn_joint`, whose shares split them.
-pp_joint = joint_posterior_predictive();
-_pp_draws(vn) = collect(pp_joint[BVDOutbreakSize.FlexiChains.Prefixed(vn)]);
-
-## The national confirmed cases are replicated per laboratory window, oldest
-## first, as on the national page. The first confirmed vintage is an
-## unreplicated baseline.
-_conf_windows = BVDOutbreakSize.confirmed_positivity_windows(
-    obs.confirmed_history, obs.lab_history, obs.lab_daily_history
-);
-_conf_obs = collect(
-    first(
-        pp_joint[k] for k in keys(pp_joint)
-            if occursin(
-                "confirmed_state.confirmed_positives.positives", string(k)
-            )
-    )
-);
-_conf_replicates = [
-    vcat(collect(e), collect(p), collect(l))
-        for (e, p, l) in zip(
-            vec(_pp_draws(@varname(early_increments.increments))),
-            vec(_conf_obs),
-            vec(_pp_draws(@varname(late_increments.increments)))
-        )
-];
-province_case_count_panels = province_count_panels(
-    chn_joint;
-    share_key = :province_shares,
-    obs_increments = province_cases.increments,
-    province_days = province_cases.days,
-    national_days = vcat(
-        _conf_windows.early_days, _conf_windows.obs_days,
-        _conf_windows.late_days
-    ),
-    national_replicates = _conf_replicates,
-    baseline = Int(first(obs.confirmed_history.counts)),
-    stream = "Confirmed cases", n_patches = N_PATCHES
-);
-## The national confirmed deaths are replicated from zero at every vintage.
-province_death_count_panels = province_count_panels(
-    chn_joint;
-    share_key = :province_death_shares,
-    obs_increments = province_deaths.increments,
-    province_days = province_deaths.days,
-    national_days = obs.confirmed_deaths_history.days,
-    national_replicates = _pp_draws(@varname(cdeath_increments.increments)),
-    stream = "Confirmed deaths", n_patches = N_PATCHES
-);
+## Each province's confirmed cases and deaths split from the national
+## posterior predictive by the fitted shares, shared with the dashboard's
+## province series (see `joint_count_replicates` in `docs/pages/_setup.jl`).
+province_count_replicates = joint_count_replicates();
+province_case_count_panels = province_count_replicates.cases.panels;
+province_death_count_panels = province_count_replicates.deaths.panels;
 province_count_calibration_table = stream_calibration(
     vcat(province_case_count_panels, province_death_count_panels)
 );

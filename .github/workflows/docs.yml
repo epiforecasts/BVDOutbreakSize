@@ -910,6 +910,11 @@ jobs:
             fits: fit-joint
             overlays: false
             recovery: false
+          - id: forecasts/province
+            slug: forecasts-province
+            fits: fit-joint
+            overlays: false
+            recovery: false
     steps: *render-steps
 
   # The province in-sample page shows the parameter recovery, as above, and
@@ -960,22 +965,6 @@ jobs:
             fits: fit-*
             overlays: true
             recovery: true
-    steps: *render-steps
-
-  render_joint_overlays:
-    name: Render ${{ matrix.id }}
-    needs: [fit_joint, overlays]
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - id: forecasts/province
-            slug: forecasts-province
-            fits: fit-joint
-            overlays: true
-            recovery: false
     steps: *render-steps
 
   render_validation:
@@ -1038,7 +1027,7 @@ jobs:
           - id: forecasts/zone
             slug: forecasts-zone
             fits: fit-{joint,local}
-            overlays: true
+            overlays: false
           - id: evaluation/insample/zone
             slug: evaluation-insample-zone
             fits: fit-{joint,local,frozen_validation,local_frozen_validation}
@@ -1084,7 +1073,6 @@ jobs:
       - render_methods
       - render_joint
       - render_joint_insample_overlays
-      - render_joint_overlays
       - render_insample
       - render_validation
       - render_evaluation
@@ -1116,7 +1104,6 @@ jobs:
       needs.render_methods.result == 'success' &&
       needs.render_joint.result == 'success' &&
       needs.render_joint_insample_overlays.result == 'success' &&
-      needs.render_joint_overlays.result == 'success' &&
       needs.render_insample.result == 'success' &&
       needs.render_validation.result == 'success' &&
       needs.render_evaluation.result == 'success' &&

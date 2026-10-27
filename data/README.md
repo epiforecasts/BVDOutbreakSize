@@ -604,6 +604,13 @@ No script tracks mirror-sourced values, so this check is manual.
   The wording appears before with no fraction (SitReps 096, 097, 111, 113 and 147).
   SitRep 160 prints no Haut-Uélé paragraph, and the others sum to 1062 against a tile of 1091, which is kept; the 29 difference equals the 29 Haut-Uélé carried at SitRep 159.
   Haut-Uélé prints 184 lits at SitRep 161 and 158 at SitRep 162, against 169 at SitRep 158, with no centre named as opening or closing.
+- **Occupancy break, SitReps 158 to 163 (19 to 24 October)**: the start-of-day stock is implied from each care paragraph as the end-of-day count less the admissions plus the sorties.
+  23 October (SitRep 162) is in `occupancy_break_dates`, where its numbers are given.
+  SitRep 163 holds Ituri's lower level: `88 nouvelles admissions ... contre 76 sorties ... Ainsi, 422 patients` implies a start of 410 against 397.
+  The 26 July Ituri -104 (SitRep 073) is not a break, since Tableau 6 `Patients au lit (J-1)` then rarely matched the previous Fin J (#489); the care-paragraph balance matched Ituri's previous count on each pair from 16 to 22 October.
+  19 October (SitRep 158, 937 to 1029) is not a break.
+  Of its +92, 58 is the day's admissions less sorties, with Nord-Kivu's `154 nouvelles admissions ... contre 95 sorties` closing exactly against its 450 of 18 October.
+  The remaining +34 comes from Bas-Uélé (+24) and Haut-Uélé (+14), which printed no paragraph at SitRep 157, so it is confounded with the missing 18 October reports and lies above the previous count rather than below it.
 - **Laboratory and recoveries, SitReps 160 and 162**: SitRep 162's page 1 prints 450 samples analysed, while its five laboratory bullets sum to 435 (Ituri 225, Nord-Kivu 179, Haut-Uélé 5, Tshopo 13, Bas-Uélé 13); the province sum enters `tests_analysed_daily_history`.
   The recovered tile rises by 23 at SitRep 160 and 11 at SitRep 162, against 32 and 28 recoveries printed that day; the tile enters `recovered_history`.
 - **Duplicate media file, SitRep 163**: the insp.cd media library carries a file numbered 163 that is byte-identical to SitRep 162 (`SitRep N°162/MVE-BDBV/23/10/2026`), so SitRep 163 is treated as not yet published.

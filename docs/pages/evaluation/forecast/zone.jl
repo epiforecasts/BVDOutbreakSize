@@ -283,7 +283,7 @@ zone_release_by_cutoff_fig #hide
 
 zone_release_overlay_fig = plot_forecast_overlay(
     _zone_release(zone_release_overlay_df, zone_release_top);
-    empty_message = _zone_release_empty
+    empty_message = _zone_release_empty, ncol = 3
 );
 
 #md # ```@raw html
