@@ -1116,14 +1116,22 @@ a slow drift, so a knot per `week` carries the time variation with far
 fewer innovations than a daily walk. The series is gated to zero before
 the surveillance `onset`, since the non-BVD background does not exist
 before surveillance began, and ramps in over the first `onset_ramp` days
-of the window. With knot values
-`\\log\\lambda` and knot days `d`,
+of the window. With `K` fitted knots, knot values `\\log\\lambda_k` and
+the walk `w_k`,
 
 ```math
-\\log \\lambda_d = \\log \\lambda_0 + \\sum_{s < d} \\epsilon_s,
+w_k = \\sum_{s < k} \\epsilon_s, \\qquad
+\\log \\lambda_k = \\log \\lambda_\\mu + w_k - \\frac{1}{K} \\sum_{j=1}^{K} w_j,
 \\qquad \\epsilon_s \\sim \\mathcal N(0, \\sigma_{rw}),
 \\qquad \\lambda_t = 0 \\ \\text{for}\\ t < \\text{onset}.
 ```
+
+The log-deviations from `\\log\\lambda_\\mu` sum to zero over the fitted
+knots, so `λ_mu` is the geometric mean of the knot values rather than the
+value at either end of the window. Centring the walk projects it onto the
+sum-to-zero subspace ([`sum_to_zero_basis`](@ref)) and leaves its
+increments, and so their prior, unchanged. `σ_rw = 0` gives a constant
+background at `λ_mu`.
 
 `σ_rw` is the per-knot innovation SD on the log scale, passed in and shared
 across the suspected-case and suspected-death streams via
@@ -1157,20 +1165,20 @@ Knots run only over the surveillance window `[onset, n]`, so the number
 of innovations is small. `onset ≤ 1` runs it over the whole grid. Pass
 `week` to change the knot spacing.
 
-`λ_mu ~ truncated(Normal(0, 20); lower = 0)` is the scale the walk
-multiplies, not the level over the window. The log-deviation is pinned to
-zero on the first knot, so `λ_mu` anchors the window's start and the
-innovations carry the series from there. The half-normal shrinks that
-anchor toward zero, which stops the background out-explaining the outbreak
-signal, and the scale is wide enough not to truncate the anchor the
-suspected-case data support. Pass `baseline_prior` to override.
+`λ_mu ~ truncated(Normal(0, 20); lower = 0)` is the geometric-mean daily
+background over the fitted knots, before the onset ramp. No single knot is
+pinned to it. The half-normal shrinks that level toward zero, which stops
+the background out-explaining the outbreak signal, and the scale is wide
+enough not to truncate the level the suspected-case data support. Pass
+`baseline_prior` to override.
 
 Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series (zero
 before `onset`).
 
 With a `cutoff` before the grid end the fitted knots end at `cutoff` and
 the walk continues past it on knots a week apart, with future steps drawn
-at the same scale.
+at the same scale from the last fitted knot. The centring covers the fitted
+knots only, so the forecast does not move the fitted series.
 """
 @model function background_walk_model(
         n::Integer, σ_rw::Real;
@@ -1204,10 +1212,13 @@ at the same scale.
         z ~ product_distribution(fill(Normal(0, 1), m))
         walk_steps = σ_rw .* z[1:max(nb - 1, 0)]
     end
-    ## Smooth multiplicative deviation, a cumulative log-deviation from the
-    ## baseline, anchored there on the first knot. Interpolated to daily so a
-    ## death background scaled from it is smooth.
-    log_knots = vcat(zero(σ_rw), cumsum(walk_steps))
+    ## Smooth multiplicative deviation from the baseline: the walk centred
+    ## over the fitted knots by the projector `Q Qᵀ = I - J / nb`, so its
+    ## log-deviations sum to zero and no knot is pinned to `λ_mu`.
+    ## Interpolated to daily so a death background scaled from it is smooth.
+    walk_knots = vcat(zero(σ_rw), cumsum(walk_steps))
+    Q = sum_to_zero_basis(nb)
+    log_knots = Q * (Q' * walk_knots)
     if cutoff !== nothing && n > nc
         fdays = future_knot_days(nc, n - nc; week)
         nf = length(fdays)

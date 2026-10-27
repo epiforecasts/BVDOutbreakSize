@@ -64,7 +64,7 @@ end
     using Statistics: mean
     using BVDOutbreakSize: background_walk_model
 
-    ## Default `truncated(Normal(0, 20); lower = 0)` on the window anchor: fold
+    ## Default `truncated(Normal(0, 20); lower = 0)` on the window level: fold
     ## the half-normal back to its untruncated SD via E|X| = σ√(2/π). Wide
     ## enough that the joint posterior for `λ_mu` sits inside it rather than
     ## against its upper tail.
@@ -105,9 +105,9 @@ end
     using Statistics: mean, std
 
     n, σ_rw, onset = 60, 0.2, 10
-    ## Accumulated log deviation from the window anchor on the last day. Both
-    ## forms carry the same prior over it, a cumulative sum of
-    ## `Normal(0, σ_rw)` steps, so its mean and spread must agree.
+    ## Log deviation from the window level on the last day. Both forms carry
+    ## the same prior over it, a centred cumulative sum of `Normal(0, σ_rw)`
+    ## steps, so its mean and spread must agree.
     function drift(centred)
         mdl = background_walk_model(
             n, σ_rw; onset = onset,
@@ -127,6 +127,48 @@ end
     @test isapprox(std(c), std(nc); rtol = 0.1)
     ## A walk, not noise: the drift accumulates well beyond one step.
     @test std(c) > σ_rw
+end
+
+@testitem "background_walk_model deviations sum to zero over the fitted knots" begin
+    using BVDOutbreakSize: background_walk_model, knot_days
+    using Turing: returned
+    using Random: MersenneTwister
+
+    ## A hard onset so the knot values carry no ramp factor. The log
+    ## deviations from `λ_mu` at the fitted knots sum to zero, so no knot is
+    ## pinned to the level, and the knot-to-knot increments are the sampled
+    ## steps.
+    n, σ_rw, onset = 50, 0.3, 6
+    days = knot_days(n; start = onset)
+    mdl = background_walk_model(n, σ_rw; onset = onset, onset_ramp = 1)
+    for seed in 1:5
+        draw = rand(MersenneTwister(seed), mdl)
+        s = returned(mdl, draw)
+        dev = log.(s.λ[days] ./ s.λ_mu)
+        @test abs(sum(dev)) < 1.0e-10
+        @test !(dev[1] ≈ 0) && !(dev[end] ≈ 0)
+        @test diff(dev) ≈ draw[:steps][1:(length(days) - 1)]
+    end
+
+    ## With a cut-off short of the grid end the fitted knots still sum to
+    ## zero, and the forecast knots past the cut-off do not enter the sum.
+    cutoff = 30
+    fdays = knot_days(cutoff; start = onset)
+    fmdl = background_walk_model(
+        n, σ_rw; onset = onset, onset_ramp = 1, cutoff = cutoff
+    )
+    fs = returned(fmdl, rand(MersenneTwister(9), fmdl))
+    @test abs(sum(log.(fs.λ[fdays] ./ fs.λ_mu))) < 1.0e-10
+
+    ## A zero walk scale gives a constant background at the level.
+    flat = returned(
+        background_walk_model(n, 0.0; onset = onset, onset_ramp = 1),
+        rand(
+            MersenneTwister(1),
+            background_walk_model(n, 0.0; onset = onset, onset_ramp = 1)
+        )
+    )
+    @test all(flat.λ[onset:end] .≈ flat.λ_mu)
 end
 
 @testitem "background_walk_model edge cases (ungated, single day)" begin

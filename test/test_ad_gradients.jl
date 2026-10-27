@@ -217,3 +217,42 @@ end
     fd = (logdensity(ldf, x .+ e) - logdensity(ldf, x .- e)) / (2h)
     @test grad[i] ≈ fd rtol = 1.0e-4
 end
+
+@testitem "AD gradient: cases_only_model with the background walk matches finite differences (Mooncake)" tags = [
+    :ad,
+] begin
+    using LogDensityProblems: logdensity, logdensity_and_gradient
+    using BVDOutbreakSize: cases_only_model, reported_cases_model,
+        background_walk_model, default_adtype
+    using Random: Xoshiro
+    include(joinpath(@__DIR__, "ad_fixtures.jl"))
+
+    ## The single-stream composers run the constant background. Injecting
+    ## the centred walk, as the production joint does, puts its sum-to-zero
+    ## projection on the gradient path.
+    walk = (nn; kw...) -> background_walk_model(nn, 0.2; onset = 5, kw...)
+    cases = (args...; kw...) -> reported_cases_model(
+        args...; background_re = walk, kw...
+    )
+    model = cases_only_model(
+        ADFixtures.N, ADFixtures.REPORTED_TOTAL;
+        reported_history = ADFixtures.REPORTED_HISTORY,
+        suspected_daily_history = ADFixtures.SUSPECTED_DAILY_HISTORY,
+        cases
+    )
+    scen = ADFixtures.Scenario(
+        "cases_only_model (background walk)", "Composer", model,
+        ADFixtures.SEED
+    )
+    ldf, x = ADFixtures.log_density_function(scen, default_adtype())
+    logp, grad = logdensity_and_gradient(ldf, x)
+    @test isfinite(logp)
+    @test all(isfinite, grad)
+    @test any(!iszero, grad)
+    ## A directional finite difference checks the whole gradient at once.
+    v = randn(Xoshiro(1), length(x))
+    v ./= sqrt(sum(abs2, v))
+    h = 1.0e-5
+    fd = (logdensity(ldf, x .+ h .* v) - logdensity(ldf, x .- h .* v)) / (2h)
+    @test sum(grad .* v) ≈ fd rtol = 1.0e-4
+end

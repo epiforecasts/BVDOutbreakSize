@@ -1143,15 +1143,20 @@ cfr_prior_fig #hide
 # It is a per-day rate $\lambda_{\text{bg},t}$ that follows a lognormal random walk on weekly knots around a baseline $\lambda_\mu$, linearly interpolated to the daily grid,
 #
 # ```math
-# \lambda_{\text{bg},t} = \lambda_\mu \exp\!\bigl(w_t\bigr), \qquad
-# w_t = \mathrm{interp}\Bigl(\sigma_{\text{rw}} \sum_{s < k} z_s\Bigr),
+# \lambda_{\text{bg},t} = \lambda_\mu \exp\!\bigl(\mathrm{interp}(\ell)_t\bigr), \qquad
+# \ell_k = v_k - \frac{1}{K} \sum_{j=1}^{K} v_j, \qquad
+# v_k = \sigma_{\text{rw}} \sum_{s < k} z_s,
 # \qquad z_s \sim \mathcal N(0, 1),
 # ```
+#
+# with $K$ the number of knots up to the cut-off.
+# The log-deviations $\ell_k$ sum to zero over those knots, so $\lambda_\mu$ is the geometric mean of the knot values rather than its value at either end of the window.
+# A zero innovation SD gives a constant background at $\lambda_\mu$.
 #
 # This rate is gated to zero before the surveillance onset, a report-to-receipt lead before the first suspected-case report, since the background does not exist before surveillance began.
 # It is shared, with one tight innovation SD $\sigma_{\text{rw}}$, between the suspected-case and suspected-death streams.
 # Weekly knots match the reproduction-number walk and keep the background a gentle drift over a small number of innovations.
-# The baseline carries a half-normal $\mathrm{Normal}^{+}(0, 8)$ prior on the natural scale.
+# The baseline carries a half-normal $\mathrm{Normal}^{+}(0, 20)$ prior on the natural scale.
 # A log-scale level would have a heavy right tail the background/outbreak-size degeneracy could exploit, whereas the natural-scale half-normal bounds it.
 # It is wide enough that the laboratory positivity (only $210/755 \approx 0.28$ of analysed specimens are positive) identifies the background.
 # The background is inferred to be the majority of the suspect pool.

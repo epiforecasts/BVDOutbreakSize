@@ -22,6 +22,12 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The non-BVD suspected-case background walk is centred over its fitted knots, so its log-deviations from the level `λ_mu` sum to zero and no knot is pinned to it (#PRNUM, refs #1084).
+  Previously the walk was pinned to `λ_mu` at the window start, which put the level prior on the onset ramp, where the daily new-suspect series says little.
+  Pinning it at the cut-off instead (#1145) holds the recent background near the level prior, so a recent rise in suspected cases has to come from transmission.
+  With the deviations summing to zero, `λ_mu` is the geometric mean of the background over the knots and neither end of the window is favoured.
+  The walk's increments and their pooled innovation SD prior are unchanged, and a zero innovation SD still gives a constant background at `λ_mu`.
+  Fitted values change.
 - The onset-to-admission Gamma scale prior is `LogNormal(log(3.694), 0.32)` at the onset-to-report, onset-to-detection and onset-to-death delays, and fitted values change (#1087).
 - Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
   SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.
