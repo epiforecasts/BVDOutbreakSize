@@ -181,6 +181,7 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Report
 
+- Kath Sherratt and Samuel Brand move from the authors to the acknowledgements, as authors of versions 1.0.0 to 3.0.0 (#1176).
 - The spatial hyperparameter pair plot against the prior moves from the province estimates to the province in-sample checks, where it replaces a pair plot of every province's reproduction number and case total.
 - Tables with more than ten body rows are compact, scroll inside a box with a sticky header, and have a row filter and sortable columns.
   Sorting is numeric where a column holds numbers, by the first number in a cell such as "1.2 (0.8–1.9)" or "12%".

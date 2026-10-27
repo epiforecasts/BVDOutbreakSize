@@ -1,6 +1,6 @@
 # Estimating the current size of the 2026 DRC Bundibugyo virus outbreak
 
-**Authors:** Sam Abbott, Kath Sherratt, Samuel Brand and Sebastian Funk.
+**Authors:** Sam Abbott and Sebastian Funk.
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://epiforecasts.io/BVDOutbreakSize/stable) [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://epiforecasts.io/BVDOutbreakSize/dev) [![Tests](https://github.com/epiforecasts/BVDOutbreakSize/actions/workflows/test.yml/badge.svg)](https://github.com/epiforecasts/BVDOutbreakSize/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/epiforecasts/BVDOutbreakSize/branch/main/graph/badge.svg)](https://codecov.io/gh/epiforecasts/BVDOutbreakSize) [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) [![Code Style: Runic](https://img.shields.io/badge/code_style-%E1%9A%B1%E1%9A%A2%E1%9A%BE%E1%9B%81%E1%9A%B2-black)](https://github.com/fredrikekre/Runic.jl) [![DOI](https://zenodo.org/badge/1243778099.svg)](https://doi.org/10.5281/zenodo.20312758)
 
@@ -157,7 +157,7 @@ The rendered report is published from the
 
 If you use or build on this project, please cite the works this repository depends on:
 
-- **This project** — Abbott, S., Brand, S., Funk, S. (2026).
+- **This project** — Abbott, S., Funk, S. (2026).
   *BVDOutbreakSize: joint forward-generative Turing model for the
   2026 DRC Bundibugyo outbreak.*
   <https://github.com/epiforecasts/BVDOutbreakSize>.
@@ -218,6 +218,11 @@ If you use or build on this project, please cite the works this repository depen
   delay priors — Funk, S. (2026). *bdbv-linelist-analysis:
   Bayesian reanalysis of the 2012 Isiro Bundibugyo line list.*
   <https://github.com/sbfnk/bdbv-linelist-analysis>.
+
+## Acknowledgements
+
+Kath Sherratt and Samuel Brand were authors of versions 1.0.0 to 3.0.0.
+We thank them for their contributions to those versions and their review of them.
 
 ## Funding
 
