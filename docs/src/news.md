@@ -198,6 +198,10 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- Tables with more than ten body rows are compact, scroll inside a box with a sticky header, and have a row filter and sortable columns.
+  Sorting is numeric where a column holds numbers, by the first number in a cell such as "1.2 (0.8–1.9)" or "12%".
+  Smaller tables, and every table without JavaScript, render as before.
+  The site's theme entry extends the DocumenterVitepress default, which the docs build copies from the installed package.
 - The province and health-zone estimates report point prevalence at the cut-off: the people infected but not yet symptomatic and the people with symptoms who have not yet been detected, per 100,000 residents.
   A figure ranks the areas by the rate in the community.
   Each posterior draw gives its own prevalence from its daily infections and delays, and the methods give the calculation.

@@ -161,6 +161,20 @@ function stage_zone_map()
     return
 end
 
+## Copy the DocumenterVitepress default theme entry to `theme/base.ts`.
+## The site's own `theme/index.ts` extends it with the large-table
+## enhancement, and DocumenterVitepress writes its default entry only when the
+## source has none, so the copy keeps the base in step with the installed
+## package version.
+function stage_base_theme()
+    template = joinpath(
+        pkgdir(DocumenterVitepress), "template", "src", ".vitepress", "theme", "index.ts"
+    )
+    dest = joinpath(LITERATE_OUT, ".vitepress", "theme", "base.ts")
+    write(dest, read(template, String))
+    return
+end
+
 ## Assemble and deploy the Vitepress site from the pre-rendered markdown. The
 ## two report pages are already executed (Literate `execute = true`), so
 ## makedocs does not re-run them; it resolves `@ref`/`@cite`/`@bibliography`
@@ -172,6 +186,7 @@ function combine()
     write_index()
     write_references()
     stage_zone_map()
+    stage_base_theme()
     makedocs(;
         sitename = "BVDOutbreakSize",
         authors = "Sam Abbott and contributors",
