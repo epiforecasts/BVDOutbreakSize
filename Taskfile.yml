@@ -339,6 +339,11 @@ tasks:
     cmds:
       - julia --project=. -e 'using Pkg; Pkg.test(; test_args = ["skip_quality"])'
 
+  test-dashboard:
+    desc: Run the dashboard map's date logic tests under Node.
+    cmds:
+      - node --test docs/test/zone_map_timeline.test.js
+
   tensorboard:
     desc: >
       Launch TensorBoard on the per-fit logs from a dev/report build in this
