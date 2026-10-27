@@ -394,7 +394,7 @@ evaluation_province_overlay_df = _release_data(
 )
 evaluation_province_overlay_fig = plot_forecast_overlay(
     scored_overlay(evaluation_province_overlay_df);
-    empty_message = _province_empty
+    empty_message = _province_empty, ncol = 3
 );
 
 #md # ```@raw html

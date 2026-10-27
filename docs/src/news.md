@@ -200,6 +200,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- Past province and health-zone forecasts against what was observed are shown only on the forecast evaluation pages, not also on the forecast pages.
+  Each forecast page links to its evaluation section instead.
+- The past province and health-zone forecasts are drawn as a grid of three columns, one panel per province stream or zone, rather than a single column.
 - The dashboard map's detail draws the posterior predictive of the weekly confirmed cases and deaths over the observed bars, on by default with a toggle, and a new fit metric shades each area by where its latest week's count falls in that predictive (#1173).
   The province and national predictive is the joint's, split by the fitted province shares as the province in-sample page scores it.
   The zone predictive is the zone composition's for the cases, which splits each patch's observed count across its zones.
