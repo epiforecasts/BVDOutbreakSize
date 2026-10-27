@@ -7,12 +7,6 @@
   max-width: 100%;
 }
 
-/* A DataFrame display wraps its table in a div that always scrolls
-   horizontally; the scroll box takes that over. */
-.vp-doc div.data-frame:has(> .bvd-table) {
-  overflow: visible !important;
-}
-
 .vp-doc .bvd-table-tools {
   display: flex;
   flex-wrap: wrap;

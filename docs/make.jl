@@ -170,7 +170,13 @@ function stage_base_theme()
     template = joinpath(
         pkgdir(DocumenterVitepress), "template", "src", ".vitepress", "theme", "index.ts"
     )
+    isfile(template) || error(
+        "DocumenterVitepress $(pkgversion(DocumenterVitepress)) has no default " *
+            "theme entry at $(template); docs/src/.vitepress/theme/index.ts " *
+            "extends it, so update `stage_base_theme` for this version."
+    )
     dest = joinpath(LITERATE_OUT, ".vitepress", "theme", "base.ts")
+    mkpath(dirname(dest))
     write(dest, read(template, String))
     return
 end

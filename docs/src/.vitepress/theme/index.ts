@@ -6,6 +6,10 @@ import type { Theme as ThemeConfig } from 'vitepress'
 import BaseTheme from './base'
 import { watchTables } from './tables'
 import './tables.css'
+// DocumenterVitepress fills these two markers in this entry, not only in its
+// default one: it injects plugin components into the build's theme/index.ts,
+// which is this file when the source has one (src/vitepress_config.jl,
+// `inject_plugin_components!`, in 0.3.6).
 // __DV_PLUGIN_COMPONENT_IMPORTS__
 
 export const Theme: ThemeConfig = {
