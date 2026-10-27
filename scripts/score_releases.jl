@@ -1488,9 +1488,12 @@ const AREA_ESTIMATE_COLUMNS = Dict(
     ]
 )
 
-## A numeric cell, or `missing` when it is empty or not a number (a zone
-## that is not walking has no reproduction number).
-_area_value(s) = something(tryparse(Float64, s), missing)
+## A finite numeric cell, or `missing` when it is empty, not a number or not
+## finite (a zone that is not walking has no reproduction number).
+function _area_value(s)
+    x = tryparse(Float64, strip(s))
+    return isnothing(x) || !isfinite(x) ? missing : x
+end
 
 ## The `(release, date, area, ..., quantity, median, lo90, hi90)` rows of a
 ## release's per-province (`level = :province`) or per-zone (`:zone`)
@@ -1526,8 +1529,14 @@ function area_estimate_rows(tag, path, cutoff, level::Symbol)
     end
 
     out = NamedTuple[]
+    no_province = 0
     for r in rows
         length(r) == length(header) || continue
+        ## A zone with no province has no model key, so it is not read.
+        if level === :zone && isempty(cell(r, "province"))
+            no_province += 1
+            continue
+        end
         area = level === :zone ? string(cell(r, "province"), ".", r[keycol]) :
             r[keycol]
         ids = level === :zone ?
@@ -1546,6 +1555,9 @@ function area_estimate_rows(tag, path, cutoff, level::Symbol)
             )
         end
     end
+    no_province > 0 && @warn string(
+        tag, ": skipped ", no_province, " zone row(s) with no province"
+    )
     return out
 end
 

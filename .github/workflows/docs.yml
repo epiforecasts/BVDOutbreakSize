@@ -891,12 +891,9 @@ jobs:
   render_joint:
     name: Render ${{ matrix.id }}
     # The in-sample pages show the parameter recovery. A failed recovery run
-    # leaves that section empty rather than blocking the pages. The province
-    # in-sample page also reads the rescored release overlays.
-    needs: [fit_joint, recovery, overlays]
-    if: >-
-      ${{ !cancelled() && needs.fit_joint.result == 'success' &&
-      needs.overlays.result == 'success' }}
+    # leaves that section empty rather than blocking the pages.
+    needs: [fit_joint, recovery]
+    if: ${{ !cancelled() && needs.fit_joint.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -913,6 +910,23 @@ jobs:
             fits: fit-joint
             overlays: false
             recovery: false
+    steps: *render-steps
+
+  # The province in-sample page shows the parameter recovery, as above, and
+  # its estimates against the past releases in the rescored overlays. Its own
+  # job, so the other joint-only pages do not wait on the overlays.
+  render_joint_insample_overlays:
+    name: Render ${{ matrix.id }}
+    needs: [fit_joint, recovery, overlays]
+    if: >-
+      ${{ !cancelled() && needs.fit_joint.result == 'success' &&
+      needs.overlays.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
           - id: evaluation/insample/province
             slug: evaluation-insample-province
             fits: fit-{joint,sens_no_patches}
@@ -1069,6 +1083,7 @@ jobs:
     needs:
       - render_methods
       - render_joint
+      - render_joint_insample_overlays
       - render_joint_overlays
       - render_insample
       - render_validation
@@ -1100,6 +1115,7 @@ jobs:
       ${{ !cancelled() && github.actor != 'dependabot[bot]' &&
       needs.render_methods.result == 'success' &&
       needs.render_joint.result == 'success' &&
+      needs.render_joint_insample_overlays.result == 'success' &&
       needs.render_joint_overlays.result == 'success' &&
       needs.render_insample.result == 'success' &&
       needs.render_validation.result == 'success' &&

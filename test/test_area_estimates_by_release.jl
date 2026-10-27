@@ -34,6 +34,8 @@
             zone,label,province,patch,cases,deaths,R_T_median,p_rt_above_one,R_T_lower,R_T_upper,as_of
             mambasa,Mambasa,ituri,Ituri,55,15,0.97,0.45,0.58,1.46,2026-10-20
             adja,Adja,ituri,Ituri,11,1,,,,,2026-10-20
+            bunia,Bunia,ituri,Ituri,90,20, NaN ,,Inf,NaN,2026-10-20
+            mongbwalu,Mongbwalu,,Ituri,30,5,0.9,0.4,0.6,1.3,2026-10-20
             """
         )
         return [
@@ -107,6 +109,17 @@ end
         ## gives its counts.
         adja = [r for r in zone.rows if r.area == "ituri.adja"]
         @test sort([r.quantity for r in adja]) == ["cases", "deaths"]
+        ## A non-finite reproduction number reads as no value, padding and
+        ## all.
+        bunia = [r for r in zone.rows if r.area == "ituri.bunia"]
+        @test sort([r.quantity for r in bunia]) == ["cases", "deaths"]
+        @test _area_value(" 1.5 ") == 1.5
+        @test ismissing(_area_value("NaN")) && ismissing(_area_value("-Inf"))
+        ## A zone with no province has no key and gives no row.
+        @test !any(r -> endswith(r.area, "mongbwalu"), zone.rows)
+        @test_logs (:warn, r"1 zone row") match_mode = :any _collect(
+            releases, :zone, ZONE_ESTIMATES_ASSET
+        )
         ## A table with no area column is not read.
         p = joinpath(dir, "bad.csv")
         write(p, "cases,deaths\n1,2\n")
