@@ -189,6 +189,11 @@ A major version: the report gains a health-zone level below the provinces, with 
   Dakwa (Bas-Uélé), new at SitRep 147, has no polygon in the Ministry of Health health-zone map, so its case is carried in the Bas-Uélé unallocated row until the zone is mapped.
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
 - `province_admissions_history` block, sparse by province, to SitRep 159 (20 October), and province beds raised to the rate-implied beds where the patients exceed a stale printed count (#958).
+- Where a health zone's cumulative count falls, its increment takes the report's printed 24h figure for that zone rather than the clamped zero (#1161, resolves #750).
+  The figures are read from Tableau 2 on the flagged zone-vintages only: 6 of the 8 case falls and 8 of the 9 death falls, with the three falls of 11 June predating the 24h columns.
+  Only three of those figures are non-zero: Butembo's 4 cases and Bunia's 7 and Bambu's 4 deaths on 22 July.
+  The death composition still leaves out the vintages with a zone fall, so the one change the health-zone fit sees is Butembo's 4 cases in the Nord-Kivu composition on 22 July.
+  Fitted health-zone values change.
 
 ### Report
 
