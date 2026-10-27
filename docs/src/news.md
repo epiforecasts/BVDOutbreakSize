@@ -20,7 +20,7 @@ A minor version: every affected province is its own patch, the importation kerne
 
 - The health-zone stage's shared quantity draws the weekly patch infections independently of the importation intensities and the delays, so a pull of the zone compositions on the delays no longer moves every province's level (#1122).
   The zone likelihood scores compositions within each province, which see the delays through the timing of the shares but not a province's level.
-  With the two blocks correlated as the joint posterior correlates them, the zone stage's daily infections summed over zones ran 8 to 13% below the joint's in each of the last ten weeks, and 10 to 15% in every province over the last fortnight.
+  With the two blocks correlated as the joint posterior correlates them, the zone stage's daily infections summed over zones ran 8 to 13% below the joint's in each of the last ten weeks, and 10 to 15% in every province over the last fortnight (docs-run fits of `main` at 71fc0551, reported in #1122).
   Each block keeps the joint posterior within it, so each draw still carries the joint's uncertainty in the delays and the patch trajectories.
   The zone in-sample page reports the zone stage's infections against the joint's by province over the last four weeks.
   Fitted zone values change.
