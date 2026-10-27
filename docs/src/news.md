@@ -126,7 +126,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
-- 23 October is an occupancy reclassification break, because Ituri's start-of-day stock implied by its care paragraph falls 96 below the previous report's count while the same balance matched on the seven previous days.
+- 23 October is an occupancy reclassification break, because Ituri's start-of-day stock implied by its care paragraph falls 96 below the previous report's count while the same balance matched on the seven previous days (#1172).
   The 19 October rise is not a break, since most of it is the day's admissions and the rest follows two provinces missing on 18 October.
   Fitted values change and the fit needs a refit.
 - The onset curve gains SitReps 151, 153 and 158, so its latest vintage is 19 October rather than 10 October (#1138, #1148).
