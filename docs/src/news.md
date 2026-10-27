@@ -198,9 +198,13 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
-- The dashboard map has a date slider on the reproduction-number metrics that recolours the zones or provinces by the daily reproduction number on that date, with a play button that steps it a week at a time (#1168).
-  It starts at the cut-off, where the map is unchanged, and before it the chance-R-above-one metric shows the median reproduction number, since the daily series carry no probability.
+- The dashboard map has a date slider under its title that every metric follows, with a play button that steps it a week at a time (#1168).
+  The reproduction number, the confirmed cases and deaths to date and over the past 7, 14 and 28 days, and the reported treatment-centre figures come from the map's time series on that date.
+  The counts are whole weeks ending on the cut-off's weekday, and the total to date is the cut-off's total less the later weeks.
+  The estimates without a series take the latest saved cut-off on or before the date, or stay at the cut-off when no earlier one is saved.
+  The colour classes are the cut-off's at every date, and at the cut-off the map is unchanged.
   The detail charts show the last 4 or 8 weeks or the whole series, 8 weeks by default, with the reproduction number's axis fitted to the period shown and a rule on the map's date.
+  The date logic sits in its own script with Node tests that pre-commit runs.
   The model and the fitted values do not change.
 - The province and health-zone estimates report point prevalence at the cut-off: the people infected but not yet symptomatic and the people with symptoms who have not yet been detected, per 100,000 residents.
   A figure ranks the areas by the rate in the community.

@@ -46,7 +46,7 @@ Runtime inputs, fetched by relative URL from this directory:
   province_timeseries.csv long format, one row per area, series and date:
                         series "rt" carries the daily reproduction number's
                         median, lower_90/upper_90 and lower_50/upper_50
-                        (the date slider colours the map by it before the
+                        (the date slider reads every series before the
                         cut-off), series "cases" the confirmed cases (count)
                         in the week ending on that date and series "deaths" the
                         confirmed deaths; zones are keyed as in the
@@ -63,11 +63,16 @@ Runtime inputs, fetched by relative URL from this directory:
                         newest first, each with the five CSVs above as of
                         that cut-off under archive/<as_of>/. When present,
                         the "Compare" menu draws one beside the current
-                        estimates in the detail column and tooltips
+                        estimates in the detail column and tooltips, and
+                        before the cut-off the date slider shows the
+                        estimates with no time series as of the latest
+                        cut-off on or before its date
 
 Leaflet, and Turf for the province shapes, come from cdnjs with
 subresource-integrity hashes computed from the served files (the allowlist
 pragmas keep detect-secrets from flagging them).
+timeline.js beside this page holds the date slider's logic, tested by
+docs/test/zone_map_timeline.test.js.
 Nothing else is fetched.
 -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha256-tXCrvaljxgtN5LT/Syb5Mm9T+yzPFGH98JVcoJT7JTk=" crossorigin="anonymous"><!-- pragma: allowlist secret -->
@@ -160,8 +165,7 @@ Nothing else is fetched.
     border: 1px solid var(--line); border-radius: 6px;
     box-shadow: 0 1px 4px rgba(0,0,0,.25);
   }
-  /* The date slider of the reproduction-number layers, a row of its own
-     at the foot of the controls. */
+  /* The map's date slider, a row of its own under the title. */
   #timebar {
     flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center;
     gap: 4px 8px; min-width: 0;
@@ -253,7 +257,6 @@ Nothing else is fetched.
     #more .more-body { left: auto; right: 0; }
     /* The comparison menu joins the menus row rather than adding one. */
     #vs { order: 1; }
-    #timebar { order: 2; }
     #timebar input[type=range] { flex-basis: 100px; }
     #timebar output { min-width: 0; }
     #stage { flex-direction: column; flex: none; }
@@ -334,6 +337,14 @@ Nothing else is fetched.
   <span class="asof" id="asof"></span>
   <select class="plain" id="vs" hidden
     aria-label="Earlier data cut-off to compare with"></select>
+  <div id="timebar" hidden>
+    <button class="plain" id="play" aria-pressed="false">Play</button>
+    <input type="range" id="tdate" min="0" max="0" step="1" value="0"
+      aria-label="Date the map shows">
+    <output id="tlabel" for="tdate"></output>
+    <button class="plain" id="treset" hidden>Back to the cut-off</button>
+    <span class="note" id="tnote"></span>
+  </div>
   <span class="links">
     <a class="plain" id="csv" href="zone_estimates.csv" download>Download CSV</a>
     <a class="plain" id="methods" href="../methods#Health-zone-model"
@@ -412,14 +423,6 @@ Nothing else is fetched.
     </div>
   </details>
   <button class="plain" id="toggle-table" aria-pressed="false">Table</button>
-  <div id="timebar" hidden>
-    <button class="plain" id="play" aria-pressed="false">Play</button>
-    <input type="range" id="tdate" min="0" max="0" step="1" value="0"
-      aria-label="Date of the reproduction number shown on the map">
-    <output id="tlabel" for="tdate"></output>
-    <button class="plain" id="treset" hidden>Back to the cut-off</button>
-    <span class="note" id="tnote"></span>
-  </div>
 </header>
 <svg id="hatch-defs" aria-hidden="true" focusable="false">
   <defs>
@@ -439,6 +442,7 @@ Nothing else is fetched.
   <aside id="detail" aria-live="polite" aria-label="Detail for the selected area"></aside>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" integrity="sha256-XJrs/DDkVkUZ29zdzFOkGCJ9zHVo5hnpdi3c7HYJ7Uc=" crossorigin="anonymous"></script><!-- pragma: allowlist secret -->
+<script src="timeline.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/7.4.0/turf.min.js" integrity="sha384-G+b+P1TXEQX2nQW+hvnd1dWiV2mysujghcENksJYyeXd0Z1Bp23Ac/6IRftCtdmI" crossorigin="anonymous"></script><!-- pragma: allowlist secret -->
 <script>
 (function () {
@@ -498,11 +502,12 @@ Nothing else is fetched.
   function cssVar(name) {
     return getComputedStyle(root).getPropertyValue(name).trim();
   }
-  if (typeof L === "undefined") {
+  if (typeof L === "undefined" || !window.BVDTime) {
     say("The map library did not load, so the map cannot be drawn. " +
         "The estimates are still available in the analysis tables.");
     return;
   }
+  var T = window.BVDTime, dayOf = T.dayOf, isoOf = T.isoOf;
 
   // Colour: a blue-grey-red diverging scale about one for the reproduction
   // number, and a single blue ramp for the magnitudes.
@@ -886,44 +891,90 @@ Nothing else is fetched.
   var bins = [];
   var threshold = "10", filterMode = "all", windowDays = "14", summary = "median";
   var rSource = "all";
-  // The date the reproduction-number metrics show on the map, as a day
-  // number, or null at the data cut-off. At the cut-off the map reads the
-  // estimates tables; before it, the daily reproduction number series.
+  // The date the map shows, as a day number, or null at the data cut-off,
+  // where every metric reads the estimates tables. Before it, timeline.js
+  // takes the reproduction number, the counts and the reported
+  // treatment-centre figures from the time series, and the estimates with
+  // no series from the latest saved cut-off on or before the date. With no
+  // earlier cut-off saved, those stay at the cut-off.
   var timeDay = null;
-  function timeOn() {
-    return timeDay !== null && (metric === "R_T" || metric === "p_rt");
-  }
-  // The metric the map draws. The series carry only the reproduction
-  // number, so before the cut-off the chance-R-above-one metric shows the
-  // median reproduction number.
-  function shownMetric() { return timeOn() ? "R_T" : metric; }
-  function isoOf(d) { return new Date(d * 864e5).toISOString().slice(0, 10); }
-  // An area's daily reproduction number in the series `src` (the current
-  // cut-off's or a compared one's), and its point on day `d`.
-  function rtOf(src, lvl, r) {
-    if (!src || !r) { return []; }
+  function timeOn() { return timeDay !== null; }
+  // An area's indexed series `s` in the time series `src` (the current
+  // cut-off's or a compared one's). Provinces are keyed by patch, except
+  // for the treatment-centre series, which are keyed by province.
+  function ixOf(src, lvl, r, s) {
+    if (!src || !r) { return null; }
     var a = lvl === "zone" ? src.zone[r.zone] :
-      src.province[lvl === "national" ? "National" : r.patch];
-    return a && a.rt || [];
+      src.province[lvl === "national" ? "National" :
+        s === "isolation" || s === "beds" ? r.province : r.patch];
+    return a ? a.ix[s] : null;
   }
-  function rtAt(pts, d) {
-    var iso = isoOf(d);
-    for (var i = pts.length - 1; i >= 0 && pts[i].date >= iso; i--) {
-      if (pts[i].date === iso) { return pts[i]; }
+  function rtAt(src, lvl, r, d) { return T.pointAt(ixOf(src, lvl, r, "rt"), d, true); }
+  function rowOn(r, src, lvl, d, saved) {
+    return T.rowAt(r, lvl, d, function (s) { return ixOf(src, lvl, r, s); }, saved);
+  }
+  // The saved cut-offs before the current one, oldest first (see
+  // loadArchive), and the tables of those loaded so far.
+  var vintages = [], archiveCache = {}, vintageTables = {};
+  function archiveTables(d) {
+    archiveCache[d] = archiveCache[d] || loadTables("archive/" + d + "/")
+      .then(function (t) {
+        vintageTables[d] = t;
+        if (timeOn()) { rebuildTime(); recolour(); }
+        return t;
+      });
+    return archiveCache[d];
+  }
+  // The shown level's rows on the map's date, and the same keyed as
+  // `byKey`. Every metric reads its column from these, so they are rebuilt
+  // only when the date, the level or the loaded saved cut-off changes.
+  var timeCache = { key: null, rows: [], byKey: {} };
+  function rebuildTime() {
+    var v = timeOn() && vintages.length ? T.vintageAt(vintages, timeDay) : null;
+    var key = [timeDay, level, rows.length, v && vintageTables[v] ? v : ""].join("|");
+    if (key === timeCache.key) { return; }
+    if (v && !vintageTables[v]) { archiveTables(v); }
+    var t = v && vintageTables[v];
+    if (!timeOn()) { timeCache = { key: key, rows: rows, byKey: byKey }; return; }
+    var shifted = rows.map(function (r) {
+      return rowOn(r, series, level, timeDay,
+        !vintages.length ? undefined : t && t[level].byKey[r[level]] || null);
+    });
+    var by = {};
+    shifted.forEach(function (r) { by[r[level]] = r; });
+    timeCache = { key: key, rows: shifted, byKey: by };
+  }
+  // The metrics read from the time series before the cut-off.
+  function seriesMetric() {
+    return metric === "R_T" || metric === "cases" ||
+      metric === "care" && care.basis === "reported";
+  }
+  function cutoffDay() { return rows.length && rows[0].as_of ? dayOf(rows[0].as_of) : NaN; }
+  // What the map shows for the chosen metric before the cut-off, for the
+  // slider, the legend and the tooltips.
+  function timeNote() {
+    if (!timeOn() || metric === "R_T") { return ""; }
+    if (metric === "cases") {
+      return cap(S().name) + " to the week ending " +
+        longDate(isoOf(T.weekEnd(timeDay, cutoffDay()))) + ".";
     }
-    return null;
+    if (seriesMetric()) { return "The last report on or before " + longDate(isoOf(timeDay)) + "."; }
+    if (!vintages.length) {
+      return "This estimate is only available at the cut-off, so the map shows it as of " +
+        longDate(isoOf(cutoffDay())) + ".";
+    }
+    var v = T.vintageAt(vintages, timeDay);
+    return v ? "As of " + longDate(v) + ", the latest saved cut-off on or before this date." :
+      "No saved estimate on or before this date.";
   }
-  // An area's row with its reproduction number taken from the series on the
-  // map's date; the row itself at the cut-off.
-  function timeRow(r) {
-    if (!timeOn() || !r) { return r; }
-    var p = rtAt(rtOf(series, level, r), timeDay) || {};
-    var o = Object.assign({}, r);
-    o.R_T_median = num(p.median) ? p.median : null;
-    o.R_T_lower = num(p.lower_90) ? p.lower_90 : null;
-    o.R_T_upper = num(p.upper_90) ? p.upper_90 : null;
-    o.p_rt_above_one = null;
-    return o;
+  // The same, as a short tag for the table's column title.
+  function timeTag() {
+    if (!timeOn()) { return ""; }
+    if (metric === "cases") { return ", week to " + shortDate(T.weekEnd(timeDay, cutoffDay())); }
+    if (seriesMetric()) { return ", " + shortDate(timeDay); }
+    if (!vintages.length) { return ", at the cut-off"; }
+    var v = T.vintageAt(vintages, timeDay);
+    return v ? ", as of " + shortDate(dayOf(v)) : ", none saved";
   }
   // The table's sort column (null sorts by the metric) and direction.
   var sortKey = null, sortDesc = true;
@@ -1031,9 +1082,8 @@ Nothing else is fetched.
       r["cases_last_" + windowDays] > 0;
     return filterMode === "with" ? !has : has;
   }
-  // The shown rows, on the map's date.
   function visibleRows() {
-    return rows.filter(function (r) { return !isHidden(r); }).map(timeRow);
+    return timeCache.rows.filter(function (r) { return !isHidden(r); });
   }
   // A zone without its own walk takes its reproduction number from its
   // province's, scaled by a level, and is hatched on every metric.
@@ -1096,15 +1146,15 @@ Nothing else is fetched.
       p.zone || slug(p.label || p.nom);
   }
   function featureKey(f) { return keyAt(level, f); }
-  function featureRow(f) { return timeRow(byKey[featureKey(f)] || null); }
+  function featureRow(f) { return timeCache.byKey[featureKey(f)] || null; }
   function styleFor(f) {
     var r = featureRow(f);
     var b = !r ? NODATA : isHidden(r) ? HIDDEN :
-      pick(bins, METRICS[shownMetric()].value(r));
+      pick(bins, METRICS[metric].value(r));
     var fill = paint(b.c);
     // As on the static map, a reproduction number whose 90% interval
     // spans one is washed out towards the background.
-    if (shownMetric() === "R_T" && b !== NODATA && b !== HIDDEN &&
+    if (metric === "R_T" && b !== NODATA && b !== HIDDEN &&
         METRICS.R_T.straddles(r)) {
       fill = mix(fill, cssVar("--bg"), 0.6);
     }
@@ -1121,7 +1171,7 @@ Nothing else is fetched.
   function hatchStyle(f) {
     var r = featureRow(f);
     var on = (levelOnly(r) || pooled(r)) && !isHidden(r) &&
-      num(METRICS[shownMetric()].value(r));
+      num(METRICS[metric].value(r));
     return { fillColor: "url(#hatch)", fillOpacity: on ? 1 : 0,
              stroke: false, interactive: false };
   }
@@ -1131,7 +1181,12 @@ Nothing else is fetched.
     if (!r) { return s + "<div class=\"tip-s\">No province estimate.</div>"; }
     var note = r.pooled === 1 ?
       "<div class=\"tip-s\">" + esc(pooledText(r)) + ".</div>" : "";
-    return s + "<div>" + esc(METRICS[shownMetric()].text(r)) + "</div>" + note;
+    return s + "<div>" + esc(METRICS[metric].text(r)) + "</div>" + timeTip() + note;
+  }
+  // The tooltip's line on what the map's date shows for the metric.
+  function timeTip() {
+    var n = timeNote();
+    return n ? "<div class=\"tip-s\">" + esc(n) + "</div>" : "";
   }
   function tipHTML(f) {
     if (level === "province") { return provinceTip(f); }
@@ -1143,9 +1198,9 @@ Nothing else is fetched.
     if (isHidden(r)) { return s + "<div class=\"tip-s\">Hidden by filter.</div>"; }
     var note = "<div class=\"tip-s\">" +
       esc(levelOnly(r) ? LEVEL_ONLY_TEXT : WALKING_TEXT) + ".</div>";
-    if (metric === "p_ge") { return s + pGeLines(r) + note; }
-    if (shownMetric() === "p_rt") { return s + pRtLines(r) + note; }
-    return s + "<div>" + esc(METRICS[shownMetric()].text(r)) + "</div>" + note;
+    if (metric === "p_ge") { return s + pGeLines(r) + timeTip() + note; }
+    if (metric === "p_rt") { return s + pRtLines(r) + timeTip() + note; }
+    return s + "<div>" + esc(METRICS[metric].text(r)) + "</div>" + timeTip() + note;
   }
   // The detail column: the selected area's key numbers and its reproduction
   // number and weekly cases over time, or the country's with nothing
@@ -1205,7 +1260,6 @@ Nothing else is fetched.
     return "<svg class=\"chart\" viewBox=\"0 0 " + w + " " + h +
       "\" role=\"img\" aria-label=\"" + esc(label) + "\">" + body + "</svg>";
   }
-  function dayOf(d) { return Date.parse(d + "T00:00:00Z") / 864e5; }
   function shortDate(d) {
     return new Date(d * 864e5).toLocaleDateString("en-GB",
       { day: "numeric", month: "short", timeZone: "UTC" });
@@ -1213,8 +1267,7 @@ Nothing else is fetched.
   // Daily reproduction number: 90% and 50% bands, the median, and one.
   // `prev`, the compared cut-off's series, adds its 90% band and median
   // dashed. `mark`, a day number, draws a vertical rule on that day. The
-  // y-axis spans the shown points' 90% intervals, always including 0.5 to
-  // 1.5 and never beyond 0 to 5.
+  // y-axis is T.rtAxis of the points shown.
   function rtChart(pts, prev, mark) {
     if (!pts || !pts.length) {
       return "<p class=\"cap\">No reproduction number over time.</p>";
@@ -1223,10 +1276,7 @@ Nothing else is fetched.
     var W = 340, H = 150, L0 = 30, R0 = 6, T0 = 6, B0 = 20;
     var days = pts.concat(prev).map(function (p) { return dayOf(p.date); });
     var x0 = Math.min.apply(null, days), x1 = Math.max.apply(null, days);
-    var all = pts.concat(prev);
-    function ends(k) { return all.map(function (p) { return p[k]; }).filter(num); }
-    var top = Math.max(1.5, Math.ceil(Math.min(5, Math.max.apply(null, ends("upper_90"))) * 2) / 2);
-    var bot = Math.min(0.5, Math.floor(Math.max(0, Math.min.apply(null, ends("lower_90"))) * 2) / 2);
+    var ax = T.rtAxis(pts.concat(prev)), top = ax.top, bot = ax.bot;
     function X(d) { return L0 + (W - L0 - R0) * (x1 > x0 ? (d - x0) / (x1 - x0) : 0.5); }
     function Y(v) {
       return T0 + (H - T0 - B0) * (1 - (Math.max(bot, Math.min(v, top)) - bot) / (top - bot));
@@ -1248,7 +1298,7 @@ Nothing else is fetched.
     var med = line(pts);
     var then = prev.length ? band(prev, "lower_90", "upper_90", "pb90") +
       "<polyline class=\"pmed\" points=\"" + line(prev) + "\"/>" : "";
-    var ticks = "", step = top - bot > 3 ? 1 : top - bot > 1.5 ? 0.5 : 0.25;
+    var ticks = "", step = ax.step;
     for (var v = Math.ceil(bot / step) * step; v <= top; v += step) {
       ticks += "<text x=\"" + (L0 - 4) + "\" y=\"" + (Y(v) + 4) +
         "\" text-anchor=\"end\">" + v + "</text>";
@@ -1274,7 +1324,8 @@ Nothing else is fetched.
   // The stream's weekly counts as bars, then next week's forecast as a
   // point with its 90% interval. `p`, the area's row at the compared
   // cut-off, adds that cut-off's forecast, dashed, over the week it covered.
-  function countChart(weeks, r, p) {
+  // `mark`, a week's last day, draws a vertical rule through that week.
+  function countChart(weeks, r, p, mark) {
     var f = S().fc;
     var fc = r ? { median: r[f + "_median"], lower: r[f + "_lower"],
                    upper: r[f + "_upper"] } : {};
@@ -1325,6 +1376,10 @@ Nothing else is fetched.
         ": " + fmtN(pfc.median) + (num(pfc.lower) ? " (90% interval " +
         interval(pfc.lower, pfc.upper, fmtN) + ")" : "")) + "</title></circle>";
     }
+    var wi = weeks.map(function (w) { return w.date; }).indexOf(num(mark) ? isoOf(mark) : "");
+    var rule = wi === -1 ? "" : "<line class=\"now\" x1=\"" + (L0 + (wi + 0.5) * bw).toFixed(1) +
+      "\" x2=\"" + (L0 + (wi + 0.5) * bw).toFixed(1) + "\" y1=\"" + T0 + "\" y2=\"" +
+      (H - B0) + "\"/>";
     var xt = weeks.length ?
       "<text x=\"" + L0 + "\" y=\"" + (H - 4) + "\" text-anchor=\"start\">" +
         shortDate(dayOf(weeks[0].date)) + "</text>" : "";
@@ -1335,12 +1390,13 @@ Nothing else is fetched.
     return svgEl(W, H, cap(S().name) + " per week" +
         (hasFc ? " and next week's forecast" : ""),
       "<line class=\"axis\" x1=\"" + L0 + "\" x2=\"" + (W - R0) + "\" y1=\"" +
-        (H - B0) + "\" y2=\"" + (H - B0) + "\"/>" + bars + fcEl + yt + xt) +
+        (H - B0) + "\" y2=\"" + (H - B0) + "\"/>" + bars + rule + fcEl + yt + xt) +
       (pfc ? pastKey("forecast for the week after") : "");
   }
   // Reported patients in isolation and beds by day, then the forecast 7
-  // days on as points with their 90% intervals.
-  function careChart(iso, beds, r, withFc) {
+  // days on as points with their 90% intervals. `mark`, a day number, draws
+  // a vertical rule on that day.
+  function careChart(iso, beds, r, withFc, mark) {
     iso = iso || []; beds = beds || [];
     var end = dayOf(r.as_of) + 7;
     var fcs = withFc ? ["isolation", "beds"].filter(function (q) {
@@ -1386,12 +1442,14 @@ Nothing else is fetched.
         (fcs.length ? ", and the forecast 7 days on" : ""),
       "<line class=\"axis\" x1=\"" + L0 + "\" x2=\"" + (W - R0) + "\" y1=\"" +
         (H - B0) + "\" y2=\"" + (H - B0) + "\"/>" + line(beds, "beds") +
-        line(iso, "med") + fcEl + yt + xt);
+        line(iso, "med") + (num(mark) && mark >= x0 && mark <= end ?
+          "<line class=\"now\" x1=\"" + X(mark).toFixed(1) + "\" x2=\"" + X(mark).toFixed(1) +
+          "\" y1=\"" + T0 + "\" y2=\"" + (H - B0) + "\"/>" : "") + fcEl + yt + xt);
   }
   // The treatment-centre figures of a province or the country: last
   // reported, modelled at the cut-off and forecast 7 days ahead, then the
-  // reported series over time.
-  function careDetail(r, ts) {
+  // reported series over time, with `mark` as in careChart.
+  function careDetail(r, ts, mark) {
     var bases = ["reported", "modelled", "forecast"];
     var head = ["", "Reported", "Modelled now", "In 7 days"];
     var body = Object.keys(CARE).map(function (q) {
@@ -1415,7 +1473,7 @@ Nothing else is fetched.
       "</tr></thead><tbody>" + body + "</tbody></table>" +
       notes.map(function (n) { return "<p class=\"cap\">" + esc(n) + "</p>"; }).join("") +
       "<p class=\"cap\">Patients in isolation (blue) and beds (grey).</p>" +
-      careChart(ts.isolation, ts.beds, r, r.pooled !== 1);
+      careChart(ts.isolation, ts.beds, r, r.pooled !== 1, mark);
   }
   function renderDetail() {
     var d = document.getElementById("detail"), r, name, sub, ts, lvl;
@@ -1448,23 +1506,25 @@ Nothing else is fetched.
     var careKey = lvl === "national" ? "National" : r.province;
     var cts = series.province[careKey] || {};
     // The charts show the chosen span before the cut-off.
-    var from = rangeWeeks && num(dayOf(r.as_of)) ? dayOf(r.as_of) - 7 * rangeWeeks : null;
-    function shown(ps) {
-      return from === null ? ps : (ps || []).filter(function (p) { return dayOf(p.date) > from; });
-    }
+    var from = T.rangeFrom(dayOf(r.as_of), rangeWeeks);
+    function shown(ps) { return T.inRange(ps, from); }
+    var mark = timeOn() ? timeDay : null;
     // During play the column redraws every step, so it is not announced.
     d.setAttribute("aria-live", playTimer ? "off" : "polite");
     d.innerHTML = "<h2>" + esc(name) + clear + "</h2><p class=\"sub\">" + esc(sub) +
       "</p>" + (metric === "care" && lvl !== "zone" ?
-        careDetail(r, { isolation: shown(cts.isolation), beds: shown(cts.beds) }) : "") +
+        careDetail(r, { isolation: shown(cts.isolation), beds: shown(cts.beds) }, mark) : "") +
+      (mark === null ? "" : "<p class=\"cap\">" + esc("Figures at the cut-off, " +
+        longDate(r.as_of) + ". The charts mark the map's date.") + "</p>") +
       keyNumbers(r, lvl, pr) +
       "<h3>Reproduction number</h3><p class=\"cap\">Median with 50% and 90% " +
       "intervals.</p>" + rangeSwitch() +
-      rtChart(shown(ts.rt), shown(pts.rt), timeOn() ? timeDay : null) +
-      timeCaption(lvl, r, ts.rt, from) +
+      rtChart(shown(ts.rt), shown(pts.rt), mark) +
+      timeCaption(lvl, r, from) +
       "<h3>" + esc(cap(S().name)) + " per week</h3><p class=\"cap\">" +
       esc(fcWord) + "</p>" +
-      countChart(shown(ts[stream]), r, pr);
+      countChart(shown(ts[stream]), r, pr,
+        mark === null ? null : T.weekEnd(mark, dayOf(r.as_of)));
     var b = document.getElementById("clear");
     if (b) { b.addEventListener("click", function () { select(null); fitAll(); }); }
     d.querySelectorAll("input[name=range]").forEach(function (el) {
@@ -1496,12 +1556,12 @@ Nothing else is fetched.
       }).join("") + "</div>";
   }
   // The area's reproduction number on the map's date, under its chart.
-  function timeCaption(lvl, r, pts, from) {
+  function timeCaption(lvl, r, from) {
     if (!timeOn()) { return ""; }
-    var q = rtAt(pts || [], timeDay), on = longDate(isoOf(timeDay));
+    var q = rtAt(series, lvl, r, timeDay), on = longDate(isoOf(timeDay));
     var s = q && num(q.median) ? "On " + on + ", " + fmt2(q.median) + " (90% interval " +
       interval(q.lower_90, q.upper_90, fmt2) + ")." : "No estimate on " + on + ".";
-    var pq = past && rtAt(rtOf(past.series, lvl, pastRow(lvl, r)), timeDay);
+    var pq = past && rtAt(past.series, lvl, pastRow(lvl, r), timeDay);
     if (pq && num(pq.median)) { s += " As of " + vsLabel() + ", " + fmt2(pq.median) + "."; }
     if (from !== null && timeDay <= from) { s += " The map's date is before the period shown. Choose All to include it."; }
     return "<p class=\"cap\">" + esc(s) + "</p>";
@@ -1528,7 +1588,8 @@ Nothing else is fetched.
                        maxZoom: 12 });
     if (byKey[key]) { select(key); } else { shapes[0].openTooltip(b.getCenter()); }
   }
-  // Long time-series rows grouped by area, then by series, in date order.
+  // Long time-series rows grouped by area, then by series, in date order,
+  // each series also indexed by day under `ix`.
   function groupSeries(rows) {
     var out = {};
     rows.forEach(function (r) {
@@ -1540,23 +1601,32 @@ Nothing else is fetched.
       ["rt", "cases", "deaths", "isolation", "beds"].forEach(function (s) {
         out[k][s].sort(function (a, b) { return a.date < b.date ? -1 : 1; });
       });
+      out[k].ix = {};
+      ["rt", "cases", "deaths", "isolation", "beds"].forEach(function (s) {
+        out[k].ix[s] = T.indexSeries(out[k][s]);
+      });
     });
     return out;
   }
   function computeBins() {
-    var m = METRICS[shownMetric()];
+    var m = METRICS[metric];
     if (metric === "p_ge") { bins = binsFromCuts(P_GE_CUTS, fmtPct); }
     else if (metric === "care" && care.q === "bed_use") {
       bins = binsFromCuts(BED_USE_CUTS, fmtPct);
     }
-    else if (shownMetric() === "p_rt") { bins = P_RT_BINS; }
+    else if (metric === "p_rt") { bins = P_RT_BINS; }
     else if (m.kind === "diverging") { bins = RT_BINS; }
-    else { bins = sequentialBins(visibleRows().map(m.value), m.fmt); }
+    // The classes come from the cut-off's shown areas on every date, so
+    // colours compare across dates and the cut-off matches its own scale.
+    else {
+      bins = sequentialBins(rows.filter(function (r) { return !isHidden(r); })
+        .map(m.value), m.fmt);
+    }
   }
   window.__recolour = recolour;
   function recolour() {
     updateTimebar();
-    var m = METRICS[shownMetric()];
+    var m = METRICS[metric];
     computeBins();
     if (layer) { layer.setStyle(styleFor); }
     if (hatch) { hatch.setStyle(hatchStyle); }
@@ -1570,10 +1640,10 @@ Nothing else is fetched.
     var extra = level === "province" || filterMode === "all" &&
       rSource === "all" ? [NODATA] : [NODATA, HIDDEN];
     var notes = [];
-    if (shownMetric() === "R_T") {
+    if (metric === "R_T") {
       notes.push("Paler: the 90% interval spans one.");
     }
-    if (timeOn() && metric === "p_rt") { notes.push(P_RT_TIME_TEXT); }
+    if (timeNote()) { notes.push(timeNote()); }
     var none = !visibleRows().some(function (r) { return num(m.value(r)); });
     if (metric === "forecast" && none) {
       notes.push("No forecast at this level.");
@@ -1601,7 +1671,7 @@ Nothing else is fetched.
   function text(x) { return typeof x === "function" ? x() : x; }
   // The table's extra columns (beyond zone/province/metric) vary by metric.
   function extraCols() {
-    if (shownMetric() === "R_T") {
+    if (metric === "R_T") {
       return [{ title: "90% interval", value: function (r) {
         return fmt2(r.R_T_lower) + " to " + fmt2(r.R_T_upper);
       } }];
@@ -1655,10 +1725,10 @@ Nothing else is fetched.
     return [];
   }
   function renderTable() {
-    var m = METRICS[shownMetric()], t = document.getElementById("table");
+    var m = METRICS[metric], t = document.getElementById("table");
     if (t.hidden) { return; }
     var colTitle = text(m.title) +
-      (timeOn() ? ", " + shortDate(timeDay) : "") +
+      timeTag() +
       (summaryApplies() && summary !== "median" ?
         " (" + (summary === "lower" ? "lower 90%" : "upper 90%") + ")" : "");
     // Every column shows `html` and sorts on `key`; the extra columns sort
@@ -1844,6 +1914,7 @@ Nothing else is fetched.
   function showLevel() {
     var d = data[level], other = layers[level === "zone" ? "province" : "zone"];
     rows = d.rows; byKey = d.byKey;
+    clampTime(); rebuildTime();
     // The two layers' tables have different columns.
     sortKey = null; sortDesc = true;
     if (other) { map.removeLayer(other.fill); map.removeLayer(other.hatch); }
@@ -1928,32 +1999,33 @@ Nothing else is fetched.
     setLevel("province");
   }
 
-  // The date slider of the reproduction-number metrics. It runs from the
-  // shown level's first daily estimate to the cut-off, where it starts, and
-  // play steps it a week at a time on the cut-off's weekday.
+  // The map's date slider. It runs from the shown level's first dated
+  // figure or saved cut-off to the cut-off, where it starts, and play steps
+  // it a week at a time on the cut-off's weekday.
   var tbar = document.getElementById("timebar"), tdate = document.getElementById("tdate");
   var tplay = document.getElementById("play"), treset = document.getElementById("treset");
   var playTimer = null;
-  var P_RT_TIME_TEXT = "The chance R > 1 is estimated at the cut-off only, " +
-    "so earlier dates show the median reproduction number.";
   function timeSpan() {
-    var end = rows.length && rows[0].as_of ? dayOf(rows[0].as_of) : NaN;
-    var src = series[level] || {}, first = Infinity;
+    var src = series[level] || {}, firsts = vintages.length ? [dayOf(vintages[0])] : [];
     Object.keys(src).forEach(function (k) {
-      var p = src[k].rt;
-      if (p.length) { first = Math.min(first, dayOf(p[0].date)); }
+      Object.keys(src[k].ix).forEach(function (s) {
+        // A week's count covers the six days before its date too.
+        firsts.push(src[k].ix[s].first - (s === "cases" || s === "deaths" ? 7 : 0));
+      });
     });
-    return num(end) && first < end ? { first: first, end: end } : null;
+    return T.span(firsts, cutoffDay());
   }
-  // Shows or hides the slider for the metric and level, keeping its date
-  // inside the level's span.
+  // Keeps the date inside the span, wherever the span changes: on a new
+  // level or once the saved cut-offs are known.
+  function clampTime() {
+    timeDay = T.clampDay(timeDay, timeSpan());
+    if (!timeSpan()) { stopPlay(); }
+  }
+  // The slider's controls for the current date.
   function updateTimebar() {
     var span = timeSpan();
-    tbar.hidden = !(metric === "R_T" || metric === "p_rt") || !span;
-    if (tbar.hidden) { stopPlay(); }
-    if (!span) { timeDay = null; return; }
-    if (timeDay !== null) { timeDay = Math.max(span.first, timeDay); }
-    if (timeDay >= span.end) { timeDay = null; }
+    tbar.hidden = !span;
+    if (!span) { return; }
     var d = timeDay === null ? span.end : timeDay;
     var lab = longDate(isoOf(d)) + (timeDay === null ? ", the cut-off" : "");
     tdate.max = span.end - span.first;
@@ -1961,22 +2033,21 @@ Nothing else is fetched.
     tdate.setAttribute("aria-valuetext", lab);
     document.getElementById("tlabel").textContent = lab;
     treset.hidden = timeDay === null;
-    document.getElementById("tnote").textContent = metric === "p_rt" ? P_RT_TIME_TEXT : "";
+    document.getElementById("tnote").textContent = timeNote();
     tplay.textContent = playTimer ? "Pause" : "Play";
     tplay.setAttribute("aria-pressed", String(!!playTimer));
   }
+  // Moves the map to day `d`, or to the cut-off with null.
   function setTime(d) {
-    var span = timeSpan();
-    if (!span) { return; }
-    d = Math.max(span.first, Math.min(span.end, d));
-    timeDay = d >= span.end ? null : d;
-    recolour(); renderDetail();
+    timeDay = T.clampDay(d, timeSpan());
+    rebuildTime(); recolour(); renderDetail();
   }
   function stopPlay() {
     if (!playTimer) { return; }
     clearInterval(playTimer); playTimer = null;
-    tplay.textContent = "Play"; tplay.setAttribute("aria-pressed", "false");
+    updateTimebar();
   }
+  function endPlay() { stopPlay(); renderDetail(); }
   tdate.addEventListener("input", function () {
     var span = timeSpan();
     stopPlay();
@@ -1984,20 +2055,18 @@ Nothing else is fetched.
   });
   tplay.addEventListener("click", function () {
     var span = timeSpan();
-    if (playTimer || !span) { stopPlay(); renderDetail(); return; }
+    if (playTimer || !span) { endPlay(); return; }
     playTimer = setInterval(function () {
-      if (timeDay === null) { stopPlay(); renderDetail(); return; }
-      setTime(timeDay + 7);
-      if (timeDay === null) { stopPlay(); renderDetail(); }
+      var next = T.playNext(timeDay, timeSpan());
+      setTime(next);
+      if (next === null) { endPlay(); }
     }, 800);
-    // From the cut-off, play starts at the first week of the series.
-    setTime(timeDay !== null ? timeDay :
-      span.end - 7 * Math.floor((span.end - span.first) / 7));
+    // From the cut-off, play starts at the first week of the span.
+    setTime(timeDay !== null ? timeDay : T.playStart(span));
   });
   treset.addEventListener("click", function () {
-    var span = timeSpan();
     stopPlay();
-    if (span) { setTime(span.end); }
+    setTime(null);
     tdate.focus();
   });
 
@@ -2063,13 +2132,15 @@ Nothing else is fetched.
       esc(vsLabel()) + ", " + esc(what) + ".</p>";
   }
   function pastTip(f) {
-    var p = past && past[level].byKey[featureKey(f)], m = METRICS[shownMetric()];
-    // Before the cut-off, the compared cut-off's estimate for the same day.
+    var p = past && past[level].byKey[featureKey(f)], m = METRICS[metric];
+    // Before the cut-off, the compared cut-off's figure for the same day
+    // from its own series, for the metrics with a history, on or before
+    // that cut-off.
     if (timeOn()) {
-      var q = p && rtAt(rtOf(past.series, level, p), timeDay);
-      return q && num(q.median) ? "<div class=\"tip-s\">" + esc("As of " + vsLabel() +
-        ", " + fmt2(q.median) + " (90% interval " +
-        interval(q.lower_90, q.upper_90, fmt2) + ")") + ".</div>" : "";
+      var w = p && seriesMetric() && timeDay <= dayOf(p.as_of) ?
+        m.value(rowOn(p, past.series, level, timeDay)) : null;
+      return num(w) ? "<div class=\"tip-s\">" + esc("As of " + vsLabel() + ", " +
+        m.fmt(w)) + ".</div>" : "";
     }
     var v = p ? m.value(p) : null;
     return num(v) ? "<div class=\"tip-s\">" + esc("Was " + m.fmt(v) + " on " +
@@ -2077,7 +2148,7 @@ Nothing else is fetched.
   }
   function compareWith(d) {
     if (!d) { past = null; pastDate = null; renderDetail(); return; }
-    loadTables("archive/" + d + "/").then(function (t) {
+    archiveTables(d).then(function (t) {
       if (vs.value !== d) { return; }
       past = t; pastDate = d; renderDetail();
     });
@@ -2091,6 +2162,9 @@ Nothing else is fetched.
       }).filter(function (d) {
         return /^\d{4}-\d{2}-\d{2}$/.test(d) && d !== now;
       });
+      // The map's date reads the cut-offs before the current one.
+      vintages = dates.filter(function (d) { return now && d < now; }).sort();
+      if (vintages.length) { clampTime(); rebuildTime(); recolour(); }
       if (!dates.length) { return; }
       vs.innerHTML = "<option value=\"\">Compare</option>" +
         dates.map(function (d) {
