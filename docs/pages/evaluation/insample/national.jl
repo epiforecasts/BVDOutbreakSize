@@ -2088,14 +2088,10 @@ mkpath(dashboard_dir)
 evaluation_insample_national_summary = let
     cal = filter(r -> isfinite(r["90% coverage"]), stream_calibration_table)
     n_cov = count(>=(0.8), cal[!, "90% coverage"])
+    biased = filter(r -> isfinite(r["Bias"]), cal)
     worst = first(
-        sort(cal, "Bias"; by = abs, rev = true), min(3, size(cal, 1))
+        sort(biased, "Bias"; by = abs, rev = true), min(3, size(biased, 1))
     )[!, "Stream"]
-    ## Semicolons separate the names when a name carries its own comma.
-    listed(v) = let sep = any(contains(","), v) ? "; " : ", "
-        length(v) <= 1 ? join(v) :
-            join(v, sep, sep == "; " && length(v) > 2 ? "; and " : " and ")
-    end
     pred(x, observed) = string(
         "observed ", observed, " against a predictive median of ",
         round(Int, quantile(x, 0.5)), " (90% interval ",
@@ -2109,7 +2105,7 @@ evaluation_insample_national_summary = let
         ),
         isempty(worst) ? nothing :
             string(
-                "- **Least well reproduced:** ", listed(worst),
+                "- **Least well reproduced:** ", join_names(worst),
                 length(worst) == 1 ? " has" : " have",
                 " the largest absolute bias."
             ),
@@ -2129,15 +2125,16 @@ evaluation_insample_national_summary = let
         "Still reporting" => [
             s in reporting ? "yes" : "no" for s in rows[!, "Stream"]
         ],
-        "Bias" => rows[!, "Bias"],
-        "50% coverage" => rows[!, "50% coverage"],
-        "90% coverage" => rows[!, "90% coverage"],
+        "Bias" => finite_round.(rows[!, "Bias"]),
+        "50% coverage" => finite_round.(rows[!, "50% coverage"]),
+        "90% coverage" => finite_round.(rows[!, "90% coverage"]),
         "Vintages" => rows[!, "Vintages"],
     )
     join(
         vcat(
             [join(filter(!isnothing, overall), "\n")],
-            size(table, 1) == 0 ? String[] : [markdown_table(table)]
+            size(table, 1) == 0 ? String[] :
+                [markdown_table(table; missing_text = "n/a")]
         ), "\n\n"
     )
 end

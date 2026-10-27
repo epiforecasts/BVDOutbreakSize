@@ -29,7 +29,7 @@ posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]));
 # Whether each province's cases and deaths are reproduced, from the checks below.
 # Bias and coverage are defined as on the [national in-sample checks](@ref "In-sample checks") page, with coverage of the 90% predictive interval.
 # The split columns score each province's share at the observed national total, and the count columns score its counts once the national total is predicted as well.
-# A blank cell is a check that was not scored.
+# A check that was not scored reads n/a.
 
 #md # ```@eval
 #md # using Markdown, BVDOutbreakSize
@@ -764,11 +764,6 @@ evaluation_insample_province_summary = let
     worst = first(
         sort(fitted, "Bias"; by = abs, rev = true), min(3, size(fitted, 1))
     )[!, "Stream"]
-    ## Semicolons separate the names when a name carries its own comma.
-    listed(v) = let sep = any(contains(","), v) ? "; " : ", "
-        length(v) <= 1 ? join(v) :
-            join(v, sep, sep == "; " && length(v) > 2 ? "; and " : " and ")
-    end
     function coverage_bullet(heading, tbl, scale)
         low = first(sort(tbl, "90% coverage"), min(1, size(tbl, 1)))
         return string(
@@ -785,7 +780,7 @@ evaluation_insample_province_summary = let
     overall = [
         isempty(worst) ? nothing :
             string(
-                "- **Least well reproduced:** ", listed(worst),
+                "- **Least well reproduced:** ", join_names(worst),
                 length(worst) == 1 ? " has" : " have",
                 " the largest absolute bias in the province split."
             ),
@@ -799,7 +794,7 @@ evaluation_insample_province_summary = let
         ),
     ]
     ## One row per province and stream, the split and the count checks
-    ## side by side. A check that was not scored is left blank.
+    ## side by side. A check that was not scored reads n/a.
     rows(tbl) = Dict(r["Stream"] => r for r in eachrow(tbl))
     cal = rows(province_calibration_table)
     count_cal = rows(province_count_calibration_table)
@@ -810,7 +805,7 @@ evaluation_insample_province_summary = let
     value(tbl, label, kind, col) = let r = get(
             tbl, string(kind, ", ", label), nothing
         )
-        r === nothing || !isfinite(r[col]) ? missing : r[col]
+        r === nothing ? missing : finite_round(r[col])
     end
     column(tbl, col) = Union{Missing, Float64}[
         value(tbl, label, kind, col) for (label, kind) in cells
@@ -824,7 +819,10 @@ evaluation_insample_province_summary = let
         "90% coverage (counts)" => column(count_cal, "90% coverage"),
     )
     join(
-        [join(filter(!isnothing, overall), "\n"), markdown_table(table)],
+        [
+            join(filter(!isnothing, overall), "\n"),
+            markdown_table(table; missing_text = "n/a"),
+        ],
         "\n\n"
     )
 end

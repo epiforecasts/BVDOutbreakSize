@@ -27,7 +27,8 @@ frozen_local = load_fit("local_frozen_validation");
 
 # ## Summary
 #
-# The bullets come from the [zone composition calibration](@ref "Zone composition calibration") table, which gives each province's own bias and coverage.
+# The overall bullets come first, then a table of each province's bias and coverage, from the [zone composition calibration](@ref "Zone composition calibration") below.
+# A cell is one zone at one vintage, and a composition that was not scored reads n/a.
 # Bias and coverage are defined as on the [national in-sample checks](@ref "In-sample checks") page, with a nominal coverage of 0.9.
 
 #md # ```@eval
@@ -403,15 +404,10 @@ evaluation_insample_zone_summary = let
         sort(fitted, "Bias"; by = abs, rev = true), min(3, size(fitted, 1))
     )[!, "Stream"]
     low = first(sort(fitted, "90% coverage"), min(1, size(fitted, 1)))
-    ## Semicolons separate the names when a name carries its own comma.
-    listed(v) = let sep = any(contains(","), v) ? "; " : ", "
-        length(v) <= 1 ? join(v) :
-            join(v, sep, sep == "; " && length(v) > 2 ? "; and " : " and ")
-    end
     overall = [
         isempty(worst) ? nothing :
             string(
-                "- **Least well reproduced:** ", listed(worst),
+                "- **Least well reproduced:** ", join_names(worst),
                 length(worst) == 1 ? " has" : " have",
                 " the largest absolute bias."
             ),
@@ -426,9 +422,34 @@ evaluation_insample_zone_summary = let
                 )
         ),
     ]
-    ## Each province's own rows are in the calibration table further down,
-    ## so they are not repeated here.
-    join(filter(!isnothing, overall), "\n")
+    ## One row per province and composition.
+    rows = Dict(r["Stream"] => r for r in eachrow(zone_calibration_table))
+    cells = [
+        (PROVINCE_LABELS[p], what, label) for p in 1:N_PATCHES
+            for (what, label) in
+            (("cases", "Confirmed cases"), ("deaths", "Confirmed deaths"))
+    ]
+    value(label, what, col) = let r = get(
+            rows, string(label, " (", what, ")"), nothing
+        )
+        r === nothing ? missing : r[col]
+    end
+    table = DataFrame(
+        "Province" => [c[1] for c in cells],
+        "Stream" => [c[3] for c in cells],
+        "Bias" => [finite_round(value(c[1], c[2], "Bias")) for c in cells],
+        "90% coverage" => [
+            finite_round(value(c[1], c[2], "90% coverage")) for c in cells
+        ],
+        "Cells" => [value(c[1], c[2], "Vintages") for c in cells],
+    )
+    join(
+        [
+            join(filter(!isnothing, overall), "\n"),
+            markdown_table(table; missing_text = "n/a"),
+        ],
+        "\n\n"
+    )
 end
 dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"

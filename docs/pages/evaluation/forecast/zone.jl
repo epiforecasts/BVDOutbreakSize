@@ -362,6 +362,7 @@ evaluation_forecast_zone_summary = let s = zone_validation_scores
         rule(p, m) = let r = s[(s.patch .== p) .& (s.method .== m), :]
             size(r, 1) == 0 ? nothing : first(eachrow(r))
         end
+        scored = filter(p -> rule(p, "zone model") !== nothing, patches)
         beats(p) = let m = rule(p, "zone model")
             m === nothing ? false :
                 all(
@@ -373,37 +374,46 @@ evaluation_forecast_zone_summary = let s = zone_validation_scores
         overall = [
             string(
                 "- **Split:** the zone model allocates the week better ",
-                "than both persistence rules in ", count(beats, patches),
-                " of ", length(patches), " provinces scored, over ",
+                "than both persistence rules in ", count(beats, scored),
+                " of ", length(scored), " provinces scored, over ",
                 observed_total, " observed confirmed cases."
             ),
         ]
-        ## One row per province: the split's log score under each rule,
-        ## then the zone model's total.
+        ## One row per province the zone model scored: the split's log
+        ## score under each rule, then the zone model's total.
+        unscored = setdiff(patches, scored)
+        isempty(unscored) || push!(
+            overall,
+            string("- **Not scored:** ", join_names(unscored), ".")
+        )
         score(p, m) = let r = rule(p, m)
-            r === nothing ? missing : round(r.log_score; digits = 2)
+            r === nothing ? missing : finite_round(r.log_score)
         end
         model(p) = rule(p, "zone model")
         table = DataFrame(
-            "Province" => patches,
-            "Split, zone model" => [score(p, "zone model") for p in patches],
+            "Province" => scored,
+            "Split, zone model" => [score(p, "zone model") for p in scored],
             "Split, share persistence" =>
-                [score(p, "share persistence") for p in patches],
+                [score(p, "share persistence") for p in scored],
             "Split, naive persistence" =>
-                [score(p, "naive persistence") for p in patches],
-            "Observed cases" => [model(p).observed for p in patches],
-            "Bias of the total" => [
-                ismissing(model(p).bias) ? missing :
-                    round(model(p).bias; digits = 2)
-                    for p in patches
+                [score(p, "naive persistence") for p in scored],
+            "Observed cases" => [model(p).observed for p in scored],
+            "Bias of the total" => Union{Missing, Float64}[
+                finite_round(model(p).bias) for p in scored
             ],
             "Total within 90%" => [
-                ismissing(model(p).coverage_90) ? "" :
+                ismissing(model(p).coverage_90) ? "n/a" :
                     model(p).coverage_90 ? "yes" : "no"
-                    for p in patches
+                    for p in scored
             ],
         )
-        join([join(overall, "\n"), markdown_table(table)], "\n\n")
+        join(
+            vcat(
+                [join(overall, "\n")],
+                isempty(scored) ? String[] :
+                    [markdown_table(table; missing_text = "n/a")]
+            ), "\n\n"
+        )
     end
 end
 dashboard_dir = joinpath(

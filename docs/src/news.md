@@ -200,7 +200,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 - The summaries at the top of the in-sample and forecast evaluation pages give their per-stream and per-province scores as a table rather than a bullet per row.
   The national in-sample table marks which streams are still reporting and replaces the folded calibration table further down that page.
-  The health-zone in-sample summary points to the calibration table on its page instead of repeating it.
+  A value that was not scored reads n/a.
 - The province and health-zone estimates report point prevalence at the cut-off: the people infected but not yet symptomatic and the people with symptoms who have not yet been detected, per 100,000 residents.
   A figure ranks the areas by the rate in the community.
   Each posterior draw gives its own prevalence from its daily infections and delays, and the methods give the calculation.

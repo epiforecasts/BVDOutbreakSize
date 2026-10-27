@@ -895,9 +895,9 @@ evaluation_forecast_national_summary = let
         DataFrame(
             "Stream" => r.stream,
             "Evaluation" => fill(lead, size(r, 1)),
-            "Relative skill" => round.(r.rel_to_baseline; digits = 2),
-            "90% coverage" => round.(r.coverage_90; digits = 2),
-            "Bias" => round.(r.bias; digits = 2),
+            "Relative skill" => finite_round.(r.rel_to_baseline),
+            "90% coverage" => finite_round.(r.coverage_90),
+            "Bias" => finite_round.(r.bias),
             "Forecasts" => r.n,
         )
     end
@@ -908,7 +908,8 @@ evaluation_forecast_national_summary = let
     join(
         vcat(
             [join(overall, "\n")],
-            size(table, 1) == 0 ? String[] : [markdown_table(table)]
+            size(table, 1) == 0 ? String[] :
+                [markdown_table(table; missing_text = "n/a")]
         ), "\n\n"
     )
 end

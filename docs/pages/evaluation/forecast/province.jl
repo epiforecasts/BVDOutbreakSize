@@ -460,7 +460,7 @@ evaluation_forecast_province_summary = let
     unscored = [PROVINCE_LABELS[p] for p in 1:N_PATCHES if p ∉ with_scores]
     isempty(with_scores) || isempty(unscored) || push!(
         overall,
-        string("- **Not scored yet:** ", join(unscored, ", "), ".")
+        string("- **Not scored yet:** ", join_names(unscored), ".")
     )
     ## One row per province and stream.
     table = reduce(
@@ -470,9 +470,8 @@ evaluation_forecast_province_summary = let
                 DataFrame(
                     "Province" => fill(PROVINCE_LABELS[p], size(sc.rows, 1)),
                     "Stream" => replace.(sc.rows.stream, sc.tag => ""),
-                    "Relative skill" =>
-                        round.(sc.rows.rel_to_baseline; digits = 2),
-                    "90% coverage" => round.(sc.rows.coverage_90; digits = 2),
+                    "Relative skill" => finite_round.(sc.rows.rel_to_baseline),
+                    "90% coverage" => finite_round.(sc.rows.coverage_90),
                     "Forecasts" => sc.rows.n,
                 )
             end
@@ -483,7 +482,8 @@ evaluation_forecast_province_summary = let
     join(
         vcat(
             [join(overall, "\n")],
-            size(table, 1) == 0 ? String[] : [markdown_table(table)]
+            size(table, 1) == 0 ? String[] :
+                [markdown_table(table; missing_text = "n/a")]
         ), "\n\n"
     )
 end
