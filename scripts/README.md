@@ -209,7 +209,7 @@ Each documents its own invocation in its header comment.
 | --- | --- |
 | `bench_convolve.jl` | Times the Mooncake gradient of the renewal convolution, scalar loop against a vectorised rewrite. Its finding is cited from a docstring in `src/renewal.jl`, which justifies keeping the simpler scalar loop. Run it if you touch that code path. |
 | `bench_discretise.jl` | Times the Mooncake gradient of the censored delay discretisation. Documents the reasoning behind the CDF-difference form in `src/renewal.jl`. |
-| `bench_province_composition.jl` | Times the Mooncake compile and gradient of the province composition's stick-breaking against a closed-form Dirichlet-multinomial, the form `zone_composition_logpdf` uses. Checks the two likelihoods agree only at two patches, and that neither form's compile is the stick-breaking's old per-cell blowup. |
+| `bench_province_composition.jl` | Times the Mooncake compile and gradient of the province composition's stick-breaking against the closed-form Dirichlet-multinomial the health-zone composition uses, at the fitted model's patch count. It also shows that the two likelihoods agree only at two patches, so the closed form is a different distribution rather than a faster way to compute the same one. |
 | `summarise_chain.jl` | Prints posterior summaries and fit diagnostics for a saved chain. |
 | `prior_vs_posterior.jl` | Samples the prior and sets it beside a saved posterior, so a parameter the data does not inform is visible. |
 | `fit_zone.jl` | Fits the health-zone model from a parent joint chain or extract outside the docs build, writing the chain, its diagnostics and a fit summary under `--out`. Runs under `--project=docs`; see its header for the flags. |
