@@ -600,9 +600,16 @@ zone_estimates = DataFrame(
 )
 CSV.write(joinpath(dashboard_dir, "zone_estimates.csv"), zone_estimates)
 ## Each zone's daily reproduction number, weekly allocated confirmed cases
-## and weekly confirmed deaths, for the dashboard map's detail column. A
-## zone's deaths are its own cumulative series, so each zone is binned on
-## its own vintages.
+## with their posterior predictive, and weekly confirmed deaths, for the
+## dashboard map's detail column. A zone's deaths are its own cumulative
+## series, so each zone is binned on its own vintages.
+##
+## The predictive is the zone composition's, which splits each patch's
+## observed count across its zones, so it checks the allocation rather than
+## the patch total. The deaths have none: the model zeroes the reattributed
+## death vintages that the observed series keeps, so the two would not bin
+## alike.
+_zone_case_ppc = zone_composition_draws(chn_local, zone_inputs);
 _with_series(t, s) = (t[!, :series] .= s; t)
 _zone_weekly_deaths = let h = obs.zone_death_history
     out = DataFrame(area = String[], date = Date[], count = Int[])
@@ -637,7 +644,13 @@ CSV.write(
                 cutoff = obs.cutoff, n = zone_inputs.n
             ), "cases"
         ),
-        _with_series(_zone_weekly_deaths, "deaths");
+        _with_series(_zone_weekly_deaths, "deaths"),
+        _with_series(
+            weekly_quantile_table(
+                zone_inputs.days, _zone_case_ppc.predictive, zone_map_keys;
+                cutoff = obs.cutoff, n = zone_inputs.n
+            ), "cases_fit"
+        );
         cols = :union
     )
 )

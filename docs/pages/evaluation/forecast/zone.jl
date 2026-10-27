@@ -23,8 +23,9 @@ frozen_local = load_fit("local_frozen_validation");
 
 # ## Summary
 #
-# The overall bullets come first, then a block per province, from the scores below.
-# The log score of the split is higher when the model allocates the week's cases better than the persistence rules.
+# The overall bullets come first, then a table of each province's scores, from the sections below.
+# The split columns give the log score of each rule's allocation of the week's cases, which is higher for a better allocation.
+# The total columns score the zone model's projected provincial total.
 
 #md # ```@eval
 #md # using Markdown, BVDOutbreakSize
@@ -283,7 +284,7 @@ zone_release_by_cutoff_fig #hide
 
 zone_release_overlay_fig = plot_forecast_overlay(
     _zone_release(zone_release_overlay_df, zone_release_top);
-    empty_message = _zone_release_empty
+    empty_message = _zone_release_empty, ncol = 3
 );
 
 #md # ```@raw html
@@ -351,8 +352,6 @@ CSV.write(
 ## the scores built further down, so they are written here and read back
 ## when the site is assembled.
 evaluation_forecast_zone_summary = let s = zone_validation_scores
-    fmt(x) = ismissing(x) || (x isa Real && isnan(x)) ? "n/a" :
-        string(round(x; digits = 2))
     if isempty(s)
         string(
             "- **Zone forecasts:** the zone tables end at or before the ",
@@ -363,6 +362,7 @@ evaluation_forecast_zone_summary = let s = zone_validation_scores
         rule(p, m) = let r = s[(s.patch .== p) .& (s.method .== m), :]
             size(r, 1) == 0 ? nothing : first(eachrow(r))
         end
+        scored = filter(p -> rule(p, "zone model") !== nothing, patches)
         beats(p) = let m = rule(p, "zone model")
             m === nothing ? false :
                 all(
@@ -374,42 +374,46 @@ evaluation_forecast_zone_summary = let s = zone_validation_scores
         overall = [
             string(
                 "- **Split:** the zone model allocates the week better ",
-                "than both persistence rules in ", count(beats, patches),
-                " of ", length(patches), " provinces scored, over ",
+                "than both persistence rules in ", count(beats, scored),
+                " of ", length(scored), " provinces scored, over ",
                 observed_total, " observed confirmed cases."
             ),
         ]
-        function detail(p)
-            m = rule(p, "zone model")
-            m === nothing && return string("**", p, "**", "\n\n- Not scored.")
-            return join(
-                [
-                    string("**", p, "**"), "",
-                    string(
-                        "- Log score of the split: ", fmt(m.log_score),
-                        ", against ",
-                        fmt(
-                            rule(p, "share persistence") === nothing ?
-                                missing : rule(p, "share persistence").log_score
-                        ),
-                        " for share persistence and ",
-                        fmt(
-                            rule(p, "naive persistence") === nothing ?
-                                missing : rule(p, "naive persistence").log_score
-                        ),
-                        " for naive persistence."
-                    ),
-                    string(
-                        "- Total over ", m.observed,
-                        " observed cases: bias ", fmt(m.bias),
-                        ", within the 90% interval: ",
-                        ismissing(m.coverage_90) ? "n/a" :
-                            string(m.coverage_90), "."
-                    ),
-                ], "\n"
-            )
+        ## One row per province the zone model scored: the split's log
+        ## score under each rule, then the zone model's total.
+        unscored = setdiff(patches, scored)
+        isempty(unscored) || push!(
+            overall,
+            string("- **Not scored:** ", join_names(unscored), ".")
+        )
+        score(p, m) = let r = rule(p, m)
+            r === nothing ? missing : finite_round(r.log_score)
         end
-        join(vcat([join(overall, "\n")], [detail(p) for p in patches]), "\n\n")
+        model(p) = rule(p, "zone model")
+        table = DataFrame(
+            "Province" => scored,
+            "Split, zone model" => [score(p, "zone model") for p in scored],
+            "Split, share persistence" =>
+                [score(p, "share persistence") for p in scored],
+            "Split, naive persistence" =>
+                [score(p, "naive persistence") for p in scored],
+            "Observed cases" => [model(p).observed for p in scored],
+            "Bias of the total" => Union{Missing, Float64}[
+                finite_round(model(p).bias) for p in scored
+            ],
+            "Total within 90%" => [
+                ismissing(model(p).coverage_90) ? "n/a" :
+                    model(p).coverage_90 ? "yes" : "no"
+                    for p in scored
+            ],
+        )
+        join(
+            vcat(
+                [join(overall, "\n")],
+                isempty(scored) ? String[] :
+                    [markdown_table(table; missing_text = "n/a")]
+            ), "\n\n"
+        )
     end
 end
 dashboard_dir = joinpath(
