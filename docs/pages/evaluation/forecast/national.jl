@@ -536,7 +536,8 @@ forecast_overlay_fig #hide
 #
 # The current model, frozen at earlier data cut-offs (see [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), is scored as the cross-release forecasts above, against the same baseline.
 # The tables in this section are the frozen joint model's, one row per stream.
-# Each stream's own frozen fit is scored only at the one-week-back cut-off for still-reported streams, and appears in the skill figures rather than the tables.
+# Each still-reported stream's own frozen fit is scored at the one-week-back cut-off, and confirmed cases and confirmed deaths also at each May cut-off.
+# These single-stream fits appear in the skill figures rather than the tables.
 # The May cut-offs predate the first reported bed occupancy and recoveries, so those windows are left unscored.
 # The baseline snapshot was taken weeks after the frozen cut-off, so it can hold later revisions to earlier days (see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline")).
 
@@ -731,11 +732,10 @@ MarkdownTable(frozen_score_by_vintage_display) #hide
 #md # ```
 
 ## The frozen joint and the persistence baseline only. A single-stream
-## frozen fit exists at the one-week-back cut-off alone, so its series lands
-## on one made date of a panel spanning every cut-off, overplotting the
-## joint point it sits beside rather than reading as a second series. The
-## single-stream frozen fits are compared against the joint in the skill
-## figures and in the validation plot at that cut-off.
+## frozen fit sits at the same made dates as the joint, so drawing it here
+## would overplot the joint point beside it. The single-stream frozen fits
+## are compared against the joint in the skill figures and in the
+## validation plot at the one-week-back cut-off.
 frozen_overlay_fig = plot_forecast_overlay(
     scored_overlay(
         vcat(
