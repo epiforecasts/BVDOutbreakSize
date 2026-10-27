@@ -323,9 +323,9 @@ MarkdownTable(province_calibration_table) #hide
 ## Each province's confirmed cases and deaths split from the national
 ## posterior predictive by the fitted shares, shared with the dashboard's
 ## province series (see `joint_count_replicates` in `docs/pages/_setup.jl`).
-## The national total is predicted rather than held at its observed value.
-province_case_count_panels = joint_count_replicates().cases.panels;
-province_death_count_panels = joint_count_replicates().deaths.panels;
+province_count_replicates = joint_count_replicates();
+province_case_count_panels = province_count_replicates.cases.panels;
+province_death_count_panels = province_count_replicates.deaths.panels;
 province_count_calibration_table = stream_calibration(
     vcat(province_case_count_panels, province_death_count_panels)
 );

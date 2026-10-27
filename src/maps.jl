@@ -788,7 +788,12 @@ function weekly_quantile_table(
         )
     )
     rows = NamedTuple[]
-    for (m, area) in zip(replicates, areas), (hi, vs) in _weekly_windows(days, n, weeks)
+    windows = _weekly_windows(days, n, weeks)
+    isempty(windows) && return DataFrame(
+        area = String[], date = Date[], median = Float64[], lower_90 = Float64[],
+        upper_90 = Float64[], lower_50 = Float64[], upper_50 = Float64[]
+    )
+    for (m, area) in zip(replicates, areas), (hi, vs) in windows
         v = vec(sum(m[:, vs]; dims = 2))
         q(pr) = round(quantile(v, pr); digits)
         push!(

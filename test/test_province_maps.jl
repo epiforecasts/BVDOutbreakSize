@@ -363,7 +363,9 @@ end
     @test t.lower_90[3:4] == obs.count[3:4]
     @test_throws ArgumentError weekly_quantile_table(days, [a], ["A", "B"]; kw...)
     @test_throws ArgumentError weekly_quantile_table(days, [a[:, 1:4], b], ["A", "B"]; kw...)
-    @test isempty(weekly_quantile_table(Int[], [zeros(2, 0)], ["A"]; kw...))
+    empty = weekly_quantile_table(Int[], [zeros(2, 0)], ["A"]; kw...)
+    @test isempty(empty)
+    @test names(empty) == names(t)
 end
 
 @testitem "province_map_estimates counts only draws above one and defaults to the patches" begin

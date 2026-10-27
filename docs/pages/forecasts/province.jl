@@ -374,9 +374,9 @@ function province_weekly(inc, national)
 end
 ## The joint's posterior predictive of the same weekly counts, binned into
 ## the same windows (see `joint_count_replicates` in `docs/pages/_setup.jl`).
-## The country is left out when its replicates sit on other vintage days
-## than its observed series over those weeks, since they would then be
-## binned differently.
+## The country is left out, with a warning, when its replicates sit on
+## other vintage days than its observed series over those weeks, since they
+## would then be binned differently.
 function province_weekly_fit(stream::Symbol, inc, national_days)
     r = getproperty(joint_count_replicates(), stream)
     as_matrix(reps) = permutedims(reduce(hcat, reps))
@@ -385,7 +385,11 @@ function province_weekly_fit(stream::Symbol, inc, national_days)
         PROVINCE_LABELS[1:N_PATCHES]; cutoff = obs.cutoff, n = obs.n
     )
     recent(d) = filter(>(obs.n - 7 * 8), d)
-    recent(r.national_days) == recent(national_days) || return t
+    if recent(r.national_days) != recent(national_days)
+        @warn "National $(stream) fit left out of the province time series: " *
+            "its replicates and observed counts are on different vintage days" replicated = recent(r.national_days) observed = recent(national_days)
+        return t
+    end
     return vcat(
         t, weekly_quantile_table(
             r.national_days, [as_matrix(r.national)], ["National"];

@@ -443,13 +443,8 @@ if !@isdefined(_BVD_SETUP_LOADED)
         _joint_pp_cache[] = pp
         return pp
     end
-    ## The joint posterior predictive of the national confirmed cases and
-    ## deaths, and of each province's split from them by the fitted shares,
-    ## for the province in-sample page and the dashboard's province series.
-    ## Each stream carries its count panels from `province_count_panels`,
-    ## and the national replicates as one increment vector per draw on
-    ## their vintage days. The first confirmed vintage is an unreplicated
-    ## baseline. Kept after the first call.
+    ## The first confirmed vintage is an unreplicated baseline, and the
+    ## deaths are replicated from zero at every vintage.
     _joint_counts_cache = Ref{Any}(nothing)
     function joint_count_replicates()
         cached = _joint_counts_cache[]
@@ -478,8 +473,6 @@ if !@isdefined(_BVD_SETUP_LOADED)
                     vec(conf_obs), vec(draws(@varname(late_increments.increments)))
                 )
         ]
-        ## The national confirmed deaths are replicated from zero at every
-        ## vintage.
         death_reps = [collect(r) for r in vec(draws(@varname(cdeath_increments.increments)))]
         cases = province_count_panels(
             chn;
