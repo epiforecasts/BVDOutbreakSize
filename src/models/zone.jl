@@ -970,13 +970,7 @@ function zone_share_renewal(
     )
 end
 
-## `zone_share_renewal` with `mix` and `ε` positional. The renewal is a
-## ComposableRecurrences `Recurrence` over the zones with the deviation as
-## its gain and the pre-grid force added, split among each patch's zones by
-## `Allocate`; mixed, `Allocate` takes the import pattern and the
-## within-patch spill, and its trace holds the spilled force and the
-## pattern. Each zone's own force is the infections through the generation
-## interval plus the pre-grid term.
+## `zone_share_renewal` with `mix` and `ε` positional.
 function zone_share_renewal_kernel(
         I_bar::AbstractMatrix, g::AbstractVector,
         δ_daily::AbstractMatrix, w0::AbstractVector,
@@ -1043,10 +1037,17 @@ function zone_share_renewal_kernel(
         u ./ max.(patch_sums(u), floor_)
     end
     imports = if on
-        ## The trace holds the spilled force and then the import pattern.
-        h = first(last(run).modifiers)[(nz + 1):(2nz), :]
+        ## The trace holds the spilled force and then the import pattern. A
+        ## patch whose pattern sums to zero, with no infected zones elsewhere
+        ## to send to it, takes its arrivals by its own spilled force.
+        tr = first(last(run).modifiers)
+        v, h = tr[1:nz, :], tr[(nz + 1):(2nz), :]
         arrivals = zone_rows(mix.import_fraction[:, days] .* I_bar[:, days])
-        arrivals .* h ./ max.(patch_sums(h), floor_)
+        sh = patch_sums(h)
+        arrivals .* ifelse.(
+            sh .> floor_, h ./ max.(sh, floor_),
+            v ./ max.(patch_sums(v), floor_)
+        )
     else
         zero(Iz)
     end

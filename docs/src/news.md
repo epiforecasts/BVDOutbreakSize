@@ -231,6 +231,8 @@ A major version: the report gains a health-zone level below the provinces, with 
   The care flows build their time-varying kernels element by element (EpiAware/ComposableRecurrences.jl#329), the patch renewal is still behind its rule (EpiAware/ComposableRecurrences.jl#296), small calls carry a fixed overhead (EpiAware/ComposableRecurrences.jl#330), and the PMF convolution pads its input with zeros (EpiAware/ComposableRecurrences.jl#336).
   The occupancy balance reads the previous day's pools through a coupled `Recent`, which allocates at every step (EpiAware/ComposableRecurrences.jl#338).
   A patch with no health zones is left out of the zone split, since `Allocate` takes non-empty groups only (EpiAware/ComposableRecurrences.jl#326).
+  A delay convolution now gives `NaN` rather than leaving a day alone where an `Inf` meets a lag of exactly zero weight (EpiAware/ComposableRecurrences.jl#297).
+  Only a warm-up proposal that overflows the infections reaches this, and its log density is non-finite either way.
   ComposableRecurrences 0.2 comes from GitHub through `[sources]` until it is registered.
 - The test matrix runs its version cell on Julia 1.11, the oldest the package supports, since ComposableRecurrences needs 1.11 (#1152).
 - The benchmark driver turns off Pkg's automatic precompilation, which under Julia 1.13.2 fails with "Unknown package" on indirect dependencies after AirspeedVelocity adds its own packages.
