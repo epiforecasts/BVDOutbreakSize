@@ -236,8 +236,9 @@ function backfill_driver(dest)
     isnothing(i) && error("this tag's registry has no \\"joint\\" fit; " *
                           "known ids: " * join((s.id for s in specs), ", "))
     ## Registry-era tags up to v3.0.0 key a fit by its id; later tags key it
-    ## by its spec.
-    key = hasmethod(fit_key, Tuple{NamedTuple}) ? fit_key(specs[i]) :
+    ## by its spec. Their `fit_key(id)` is untyped, so test for the helper
+    ## the spec form needs rather than for a method.
+    key = @isdefined(fit_sampler_args) ? fit_key(specs[i]) :
         fit_key("joint")
     chn = fit_or_load(key, specs[i].thunk;
         cache_dir = "$(CACHE_DIR)")
