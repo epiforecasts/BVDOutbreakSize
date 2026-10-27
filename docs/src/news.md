@@ -198,7 +198,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
-- The province and health-zone in-sample pages follow each area's estimates across releases, as the national page does (#PRNUM).
+- The province and health-zone in-sample pages follow each area's estimates across releases, as the national page does (#1174).
   The province page shows each province's reproduction number, confirmed cases and case-fatality ratio at every release, and the zone page the reproduction number and confirmed cases of the twelve zones with most cases.
   `scripts/score_releases.jl` collects them from each release's `province_estimates.csv` and `zone_estimates.csv` into `data/province/released_estimates.csv` and `data/zone/released_estimates.csv`, skipping a release without the table.
   The basename is already excluded from the fit hash, so the fit keys do not change, and neither do the fitted values.
