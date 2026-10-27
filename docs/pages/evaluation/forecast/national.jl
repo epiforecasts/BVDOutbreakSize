@@ -25,7 +25,7 @@ frozen_lastweek_streams = frozen_validation_stream_fits();
 
 # ## Summary
 #
-# The overall bullets come first, then each stream's own scores, from the sections below.
+# The overall bullets come first, then a table of each stream's scores, from the sections below.
 # Relative skill is the model's CRPS over the persistence baseline's, so a value below one beats the baseline.
 # Coverage is the fraction of forecasts whose observed value falls inside the 90% predictive interval, nominally 0.9.
 
@@ -874,8 +874,6 @@ CSV.write(
 ## tables built further down, so they are written here and read back when
 ## the site is assembled.
 evaluation_forecast_national_summary = let
-    fmt(x) = ismissing(x) || !isfinite(x) ? "n/a" :
-        string(round(x; digits = 2))
     scored(tbl) = filter(r -> !ismissing(r.rel_to_baseline), tbl)
     function beat(label, tbl)
         rows = scored(tbl)
@@ -887,37 +885,33 @@ evaluation_forecast_national_summary = let
             " streams."
         )
     end
-    function block(lead, tbl)
-        rows = scored(tbl)
-        size(rows, 1) == 0 && return nothing
-        return join(
-            vcat(
-                [string("**", lead, "**"), ""],
-                [
-                    string(
-                        "- ", r.stream, ": relative skill ",
-                        fmt(r.rel_to_baseline), ", 90% coverage ",
-                        fmt(r.coverage_90), ", bias ", fmt(r.bias), " over ",
-                        r.n, " forecasts."
-                    )
-                        for r in eachrow(rows)
-                ]
-            ), "\n"
-        )
-    end
     frozen_joint = select_fit_role(frozen_score_overview_table, "joint")
     overall = [
         beat("Joint model across releases", joint_score_overview_table),
         beat("Frozen joint model", frozen_joint),
     ]
-    blocks = filter(
-        !isnothing,
-        [
-            block("Across releases", joint_score_overview_table),
-            block("Frozen fits", frozen_joint),
-        ]
+    ## One row per stream and evaluation, the cross-release scores first.
+    rows(lead, tbl) = let r = scored(tbl)
+        DataFrame(
+            "Stream" => r.stream,
+            "Evaluation" => fill(lead, size(r, 1)),
+            "Relative skill" => finite_round.(r.rel_to_baseline),
+            "90% coverage" => finite_round.(r.coverage_90),
+            "Bias" => finite_round.(r.bias),
+            "Forecasts" => r.n,
+        )
+    end
+    table = vcat(
+        rows("Across releases", joint_score_overview_table),
+        rows("Frozen fit", frozen_joint)
     )
-    join(vcat([join(overall, "\n")], blocks), "\n\n")
+    join(
+        vcat(
+            [join(overall, "\n")],
+            size(table, 1) == 0 ? String[] :
+                [markdown_table(table; missing_text = "n/a")]
+        ), "\n\n"
+    )
 end
 dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
