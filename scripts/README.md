@@ -21,7 +21,8 @@ See `data/README.md` for the full data-update procedure, including the manual tr
 | `scan_province_tableau1.jl` | Scans Tableau 1 of the SitRep PDFs for the per-province confirmed cases and deaths and prints the `province_confirmed_history` and `province_death_history` blocks. Fails unless the provinces sum to the national series on every date. Also `task province-tableau1`. |
 | `scan_province_lab.jl` | Scans the laboratory section for the per-province samples analysed and positives and prints the `province_lab_daily_history` block. Fails unless the analysed counts sum to `tests_analysed_daily_history` on every date. Also `task province-lab-data`. |
 | `scan_province_care.jl` | Scans the occupation tables and the care-continuity prose for the per-province patients in isolation, beds and 24h flows into `data/province_care_scanned.csv`, one row per (SitRep, province) with the source text quoted. Exits non-zero on any entry it cannot parse. |
-| `province_care_manifest.jl` | Reconciles `data/province_care_scanned.csv` with the blind read `data/province_care_read.csv` and prints the sparse `province_isolation_history` and `province_bed_capacity_history` blocks. Stops on any cell the two reads disagree on. |
+| `province_care_manifest.jl` | Reconciles `data/province_care_scanned.csv` with the blind read `data/province_care_read.csv` and prints the sparse `province_isolation_history`, `province_bed_capacity_history` and `province_admissions_history` blocks. Stops on any cell the two reads disagree on. |
+| `province_effective_beds.jl` | The effective-beds rule the manifest applies to each province bed entry: the printed beds, or the rate-implied beds where the patients exceed the printed beds and the rate implies more. |
 
 `check_new_sitreps.jl`, `download_sitreps.jl` and `confirm_insp_data.jl` need no Julia packages beyond `Downloads`.
 The three `scan_province_*.jl` scripts need `pdftotext` on `PATH` and the PDFs from `download_sitreps.jl`.
@@ -169,7 +170,7 @@ Edge differences measure reporting lag between the two line lists; they are expe
 
 | Script | What it does |
 | --- | --- |
-| `score_releases.jl` | Scores every past release's saved forecasts against the now-observed data and refreshes the scoring and per-release R_T/C_T/R0 overlay CSVs. The national, province and health-zone forecasts are scored into their own tables, the zone ones under `data/zone/`. |
+| `score_releases.jl` | Scores every past release's saved forecasts against the now-observed data and refreshes the scoring and per-release R_T/C_T/R0 overlay CSVs. The national, province and health-zone forecasts are scored into their own tables, the zone ones under `data/zone/`, and each release's province and zone estimates are collected into `data/province/released_estimates.csv` and `data/zone/released_estimates.csv`. |
 | `archive_dashboard.jl` | Downloads the dashboard map's five tables from the newest results release of each data cut-off, for the last 14 cut-offs, into `logs/dashboard_archive/<as_of>/` with an `index.json` listing them newest first. The docs build stages them under `zone_map/archive/` on deploys from `main`. Releases that predate the tables are skipped. Needs the `gh` CLI. |
 
 It also runs under `--project=.`.

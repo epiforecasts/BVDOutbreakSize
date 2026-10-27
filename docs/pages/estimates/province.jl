@@ -220,8 +220,9 @@ province_bed_overview #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Beds, bed demand, occupied beds, utilisation and shortfall by province at the cut-off, from the occupancy and bed counts in the situation reports.
-#md # Occupied beds are the modelled demand capped at the beds, and the shortfall is the demand above them.
+#md # Beds, bed demand, occupied beds, utilisation and patients above the beds by province at the cut-off, from the occupancy and bed counts in the situation reports.
+#md # Each province's beds are its modelled share of the national capacity, and its occupied beds are its demand share of the national modelled occupancy.
+#md # Patients above the beds are the occupied beds in excess of them, and the provinces sum to the national figures.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -371,23 +372,6 @@ province_rt_fig #hide
 #md # <details><summary>Spatial hyperparameter summary table</summary>
 #md # ```
 
-## Labels for the spatial hyperparameters, shared by this table and the pair
-## plot against their prior below.
-spatial_labels = Dict(
-    :region_sd => "Rt deviation spread",
-    :region_halflife => "Rt deviation half-life (days)",
-    :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
-    :province_suspected_ascertainment_sd => "Detection spread (logit)",
-    :province_ascertainment_sd => "Confirmation spread",
-    :importation_epsilon => "Importation intensity",
-    :importation_destination_sd => "Importation destination spread",
-    :importation_origin_destination_correlation =>
-        "Origin-destination correlation",
-    :importation_flow_sd => "Importation flow spread",
-    :importation_reciprocity => "Importation reciprocity",
-    :province_cfr_sd => "Lethality spread (logit)",
-    :province_death_ascertainment_sd => "Death-confirmation spread"
-)
 spatial_hyper_table = summary_table(
     chn_joint,
     [
@@ -458,6 +442,7 @@ province_cfr #hide
 # ## Province parameters against their priors
 #
 # The pair plots below set the province parameters against their prior, drawn from the province model.
+# The spatial hyperparameters against their prior are on the [province in-sample checks](@ref "Spatial hyperparameters against their prior") page.
 
 #md # ```@raw html
 #md # <details><summary>Draw from the patch model's prior</summary>
@@ -467,38 +452,6 @@ prior_patch_chn = patch_prior_draws(obs);
 
 #md # ```@raw html
 #md # </details>
-#md # ```
-
-#md # ```@raw html
-#md # <details><summary>Spatial hyperparameter pair plot (prior overlaid)</summary>
-#md # ```
-
-spatial_pair_fig = plot_pair(
-    chn_joint,
-    [
-        :region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_suspected_ascertainment_sd, :province_ascertainment_sd,
-        :importation_epsilon, :importation_destination_sd,
-        :importation_origin_destination_correlation, :importation_flow_sd,
-        :importation_reciprocity, :province_cfr_sd,
-        :province_death_ascertainment_sd,
-    ];
-    prior = prior_patch_chn, labels = spatial_labels
-);
-
-#md # ```@raw html
-#md # </details>
-#md # <figure class="bvd-figure">
-#md # ```
-
-spatial_pair_fig #hide
-
-#md # ```@raw html
-#md # <figcaption>
-#md # Joint posterior of the spatial hyperparameters, with the prior overlaid.
-#md # These are the spread, half-life and correlation of the Rt deviations, the spreads of suspected-case detection and case confirmation, the importation intensity, its destination and flow spreads and their correlations, and the spreads of lethality and death confirmation.
-#md # </figcaption>
-#md # </figure>
 #md # ```
 
 # Each province's pair plot sets the reproduction number at the cut-off against the relative case ascertainment, the case-fatality ratio against the relative death confirmation, and the importation intensity against the export weight relative to Ituri.

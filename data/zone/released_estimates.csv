@@ -1,0 +1,1072 @@
+release,date,area,label,province,patch,quantity,median,lo90,hi90
+results-2720,2026-09-26,bas_uele.buta,Buta,bas_uele,Other provinces,cases,1,,
+results-2720,2026-09-26,bas_uele.buta,Buta,bas_uele,Other provinces,deaths,1,,
+results-2720,2026-09-26,bas_uele.ganga,Ganga,bas_uele,Other provinces,cases,3,,
+results-2720,2026-09-26,bas_uele.ganga,Ganga,bas_uele,Other provinces,deaths,2,,
+results-2720,2026-09-26,bas_uele.viadana,Viadana,bas_uele,Other provinces,R_T,1.18,0.805,1.612
+results-2720,2026-09-26,bas_uele.viadana,Viadana,bas_uele,Other provinces,cases,6,,
+results-2720,2026-09-26,bas_uele.viadana,Viadana,bas_uele,Other provinces,deaths,1,,
+results-2720,2026-09-26,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,R_T,0.886,0.511,1.417
+results-2720,2026-09-26,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,cases,39,,
+results-2720,2026-09-26,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,deaths,17,,
+results-2720,2026-09-26,haut_uele.dungu,Dungu,haut_uele,Haut-Uele,cases,1,,
+results-2720,2026-09-26,haut_uele.dungu,Dungu,haut_uele,Haut-Uele,deaths,1,,
+results-2720,2026-09-26,haut_uele.gombari,Gombari,haut_uele,Haut-Uele,cases,3,,
+results-2720,2026-09-26,haut_uele.gombari,Gombari,haut_uele,Haut-Uele,deaths,1,,
+results-2720,2026-09-26,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,R_T,0.511,0.269,0.924
+results-2720,2026-09-26,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,cases,100,,
+results-2720,2026-09-26,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,deaths,43,,
+results-2720,2026-09-26,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,R_T,0.95,0.588,1.403
+results-2720,2026-09-26,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,cases,77,,
+results-2720,2026-09-26,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,deaths,36,,
+results-2720,2026-09-26,haut_uele.rungu,Rungu,haut_uele,Haut-Uele,cases,2,,
+results-2720,2026-09-26,haut_uele.rungu,Rungu,haut_uele,Haut-Uele,deaths,1,,
+results-2720,2026-09-26,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,R_T,0.889,0.5,1.421
+results-2720,2026-09-26,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,cases,109,,
+results-2720,2026-09-26,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,deaths,40,,
+results-2720,2026-09-26,ituri.adja,Adja,ituri,Ituri,R_T,0.768,0.472,1.135
+results-2720,2026-09-26,ituri.adja,Adja,ituri,Ituri,cases,11,,
+results-2720,2026-09-26,ituri.adja,Adja,ituri,Ituri,deaths,1,,
+results-2720,2026-09-26,ituri.ariwara,Ariwara,ituri,Ituri,R_T,0.78,0.484,1.139
+results-2720,2026-09-26,ituri.ariwara,Ariwara,ituri,Ituri,cases,8,,
+results-2720,2026-09-26,ituri.ariwara,Ariwara,ituri,Ituri,deaths,2,,
+results-2720,2026-09-26,ituri.aru,Aru,ituri,Ituri,R_T,0.77,0.478,1.126
+results-2720,2026-09-26,ituri.aru,Aru,ituri,Ituri,cases,8,,
+results-2720,2026-09-26,ituri.aru,Aru,ituri,Ituri,deaths,6,,
+results-2720,2026-09-26,ituri.aungba,Aungba,ituri,Ituri,R_T,0.746,0.463,1.097
+results-2720,2026-09-26,ituri.aungba,Aungba,ituri,Ituri,cases,12,,
+results-2720,2026-09-26,ituri.aungba,Aungba,ituri,Ituri,deaths,5,,
+results-2720,2026-09-26,ituri.bambu,Bambu,ituri,Ituri,R_T,0.471,0.212,0.925
+results-2720,2026-09-26,ituri.bambu,Bambu,ituri,Ituri,cases,201,,
+results-2720,2026-09-26,ituri.bambu,Bambu,ituri,Ituri,deaths,46,,
+results-2720,2026-09-26,ituri.boga,Boga,ituri,Ituri,R_T,0.722,0.445,1.084
+results-2720,2026-09-26,ituri.boga,Boga,ituri,Ituri,cases,2,,
+results-2720,2026-09-26,ituri.boga,Boga,ituri,Ituri,deaths,2,,
+results-2720,2026-09-26,ituri.bunia,Bunia,ituri,Ituri,R_T,0.442,0.203,0.837
+results-2720,2026-09-26,ituri.bunia,Bunia,ituri,Ituri,cases,1697,,
+results-2720,2026-09-26,ituri.bunia,Bunia,ituri,Ituri,deaths,543,,
+results-2720,2026-09-26,ituri.damas,Damas,ituri,Ituri,R_T,0.534,0.272,1.019
+results-2720,2026-09-26,ituri.damas,Damas,ituri,Ituri,cases,40,,
+results-2720,2026-09-26,ituri.damas,Damas,ituri,Ituri,deaths,9,,
+results-2720,2026-09-26,ituri.drodro,Drodro,ituri,Ituri,R_T,0.624,0.364,0.939
+results-2720,2026-09-26,ituri.drodro,Drodro,ituri,Ituri,cases,15,,
+results-2720,2026-09-26,ituri.drodro,Drodro,ituri,Ituri,deaths,7,,
+results-2720,2026-09-26,ituri.fataki,Fataki,ituri,Ituri,R_T,0.467,0.241,0.854
+results-2720,2026-09-26,ituri.fataki,Fataki,ituri,Ituri,cases,82,,
+results-2720,2026-09-26,ituri.fataki,Fataki,ituri,Ituri,deaths,31,,
+results-2720,2026-09-26,ituri.gety,Gety,ituri,Ituri,R_T,0.691,0.416,1.022
+results-2720,2026-09-26,ituri.gety,Gety,ituri,Ituri,cases,7,,
+results-2720,2026-09-26,ituri.gety,Gety,ituri,Ituri,deaths,3,,
+results-2720,2026-09-26,ituri.kambala,Kambala,ituri,Ituri,R_T,0.713,0.438,1.049
+results-2720,2026-09-26,ituri.kambala,Kambala,ituri,Ituri,cases,2,,
+results-2720,2026-09-26,ituri.kambala,Kambala,ituri,Ituri,deaths,0,,
+results-2720,2026-09-26,ituri.kilo,Kilo,ituri,Ituri,R_T,0.552,0.284,1.0
+results-2720,2026-09-26,ituri.kilo,Kilo,ituri,Ituri,cases,35,,
+results-2720,2026-09-26,ituri.kilo,Kilo,ituri,Ituri,deaths,12,,
+results-2720,2026-09-26,ituri.komanda,Komanda,ituri,Ituri,R_T,0.625,0.296,1.152
+results-2720,2026-09-26,ituri.komanda,Komanda,ituri,Ituri,cases,166,,
+results-2720,2026-09-26,ituri.komanda,Komanda,ituri,Ituri,deaths,100,,
+results-2720,2026-09-26,ituri.lita,Lita,ituri,Ituri,R_T,0.467,0.205,0.892
+results-2720,2026-09-26,ituri.lita,Lita,ituri,Ituri,cases,283,,
+results-2720,2026-09-26,ituri.lita,Lita,ituri,Ituri,deaths,140,,
+results-2720,2026-09-26,ituri.logo,Logo,ituri,Ituri,R_T,0.716,0.441,1.049
+results-2720,2026-09-26,ituri.logo,Logo,ituri,Ituri,cases,13,,
+results-2720,2026-09-26,ituri.logo,Logo,ituri,Ituri,deaths,5,,
+results-2720,2026-09-26,ituri.lolwa,Lolwa,ituri,Ituri,R_T,0.582,0.283,1.142
+results-2720,2026-09-26,ituri.lolwa,Lolwa,ituri,Ituri,cases,33,,
+results-2720,2026-09-26,ituri.lolwa,Lolwa,ituri,Ituri,deaths,8,,
+results-2720,2026-09-26,ituri.mahagi,Mahagi,ituri,Ituri,R_T,0.761,0.475,1.099
+results-2720,2026-09-26,ituri.mahagi,Mahagi,ituri,Ituri,cases,4,,
+results-2720,2026-09-26,ituri.mahagi,Mahagi,ituri,Ituri,deaths,1,,
+results-2720,2026-09-26,ituri.mambasa,Mambasa,ituri,Ituri,R_T,0.687,0.415,1.031
+results-2720,2026-09-26,ituri.mambasa,Mambasa,ituri,Ituri,cases,27,,
+results-2720,2026-09-26,ituri.mambasa,Mambasa,ituri,Ituri,deaths,9,,
+results-2720,2026-09-26,ituri.mandima,Mandima,ituri,Ituri,R_T,1.885,1.216,2.636
+results-2720,2026-09-26,ituri.mandima,Mandima,ituri,Ituri,cases,118,,
+results-2720,2026-09-26,ituri.mandima,Mandima,ituri,Ituri,deaths,65,,
+results-2720,2026-09-26,ituri.mangala,Mangala,ituri,Ituri,R_T,0.398,0.159,0.824
+results-2720,2026-09-26,ituri.mangala,Mangala,ituri,Ituri,cases,346,,
+results-2720,2026-09-26,ituri.mangala,Mangala,ituri,Ituri,deaths,153,,
+results-2720,2026-09-26,ituri.mongbwalu,Mongbwalu,ituri,Ituri,R_T,0.536,0.226,1.065
+results-2720,2026-09-26,ituri.mongbwalu,Mongbwalu,ituri,Ituri,cases,697,,
+results-2720,2026-09-26,ituri.mongbwalu,Mongbwalu,ituri,Ituri,deaths,328,,
+results-2720,2026-09-26,ituri.nia_nia,Nia-Nia,ituri,Ituri,R_T,0.77,0.332,1.512
+results-2720,2026-09-26,ituri.nia_nia,Nia-Nia,ituri,Ituri,cases,284,,
+results-2720,2026-09-26,ituri.nia_nia,Nia-Nia,ituri,Ituri,deaths,159,,
+results-2720,2026-09-26,ituri.nizi,Nizi,ituri,Ituri,R_T,0.389,0.164,0.737
+results-2720,2026-09-26,ituri.nizi,Nizi,ituri,Ituri,cases,771,,
+results-2720,2026-09-26,ituri.nizi,Nizi,ituri,Ituri,deaths,277,,
+results-2720,2026-09-26,ituri.nyankunde,Nyankunde,ituri,Ituri,R_T,0.599,0.314,1.025
+results-2720,2026-09-26,ituri.nyankunde,Nyankunde,ituri,Ituri,cases,127,,
+results-2720,2026-09-26,ituri.nyankunde,Nyankunde,ituri,Ituri,deaths,37,,
+results-2720,2026-09-26,ituri.rimba,Rimba,ituri,Ituri,R_T,0.726,0.452,1.064
+results-2720,2026-09-26,ituri.rimba,Rimba,ituri,Ituri,cases,12,,
+results-2720,2026-09-26,ituri.rimba,Rimba,ituri,Ituri,deaths,4,,
+results-2720,2026-09-26,ituri.rwampara,Rwampara,ituri,Ituri,R_T,0.494,0.227,0.958
+results-2720,2026-09-26,ituri.rwampara,Rwampara,ituri,Ituri,cases,1078,,
+results-2720,2026-09-26,ituri.rwampara,Rwampara,ituri,Ituri,deaths,363,,
+results-2720,2026-09-26,ituri.tchomia,Tchomia,ituri,Ituri,R_T,0.507,0.246,0.992
+results-2720,2026-09-26,ituri.tchomia,Tchomia,ituri,Ituri,cases,76,,
+results-2720,2026-09-26,ituri.tchomia,Tchomia,ituri,Ituri,deaths,25,,
+results-2720,2026-09-26,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,R_T,0.999,0.675,1.383
+results-2720,2026-09-26,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,cases,329,,
+results-2720,2026-09-26,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,deaths,220,,
+results-2720,2026-09-26,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,R_T,0.721,0.456,1.072
+results-2720,2026-09-26,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,cases,18,,
+results-2720,2026-09-26,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,deaths,7,,
+results-2720,2026-09-26,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,R_T,0.477,0.247,0.828
+results-2720,2026-09-26,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,cases,256,,
+results-2720,2026-09-26,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,deaths,165,,
+results-2720,2026-09-26,nord_kivu.goma,Goma,nord_kivu,Nord-Kivu,cases,1,,
+results-2720,2026-09-26,nord_kivu.goma,Goma,nord_kivu,Nord-Kivu,deaths,0,,
+results-2720,2026-09-26,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,R_T,0.888,0.515,1.477
+results-2720,2026-09-26,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,cases,51,,
+results-2720,2026-09-26,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,deaths,16,,
+results-2720,2026-09-26,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,R_T,0.445,0.239,0.777
+results-2720,2026-09-26,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,cases,555,,
+results-2720,2026-09-26,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,deaths,353,,
+results-2720,2026-09-26,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,R_T,0.798,0.525,1.154
+results-2720,2026-09-26,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,cases,1,,
+results-2720,2026-09-26,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,deaths,0,,
+results-2720,2026-09-26,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,R_T,0.705,0.382,1.261
+results-2720,2026-09-26,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,cases,33,,
+results-2720,2026-09-26,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,deaths,20,,
+results-2720,2026-09-26,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,R_T,0.727,0.469,1.085
+results-2720,2026-09-26,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,cases,21,,
+results-2720,2026-09-26,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,deaths,11,,
+results-2720,2026-09-26,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,R_T,1.007,0.553,1.72
+results-2720,2026-09-26,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,cases,31,,
+results-2720,2026-09-26,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,deaths,11,,
+results-2720,2026-09-26,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,R_T,0.684,0.421,1.026
+results-2720,2026-09-26,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,cases,13,,
+results-2720,2026-09-26,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,deaths,5,,
+results-2720,2026-09-26,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,R_T,0.717,0.459,1.069
+results-2720,2026-09-26,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,cases,28,,
+results-2720,2026-09-26,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,deaths,9,,
+results-2720,2026-09-26,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,R_T,0.488,0.25,0.92
+results-2720,2026-09-26,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,cases,121,,
+results-2720,2026-09-26,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,deaths,65,,
+results-2720,2026-09-26,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,R_T,0.822,0.544,1.176
+results-2720,2026-09-26,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,cases,12,,
+results-2720,2026-09-26,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,deaths,2,,
+results-2720,2026-09-26,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,R_T,0.78,0.51,1.133
+results-2720,2026-09-26,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,cases,24,,
+results-2720,2026-09-26,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,deaths,14,,
+results-2720,2026-09-26,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,R_T,0.716,0.456,1.06
+results-2720,2026-09-26,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,cases,29,,
+results-2720,2026-09-26,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,deaths,8,,
+results-2720,2026-09-26,sud_kivu.miti_murhesa,Miti-Murhesa,sud_kivu,Other provinces,cases,3,,
+results-2720,2026-09-26,sud_kivu.miti_murhesa,Miti-Murhesa,sud_kivu,Other provinces,deaths,1,,
+results-2720,2026-09-26,sud_ubangi.bulu,Bulu,sud_ubangi,Other provinces,cases,2,,
+results-2720,2026-09-26,sud_ubangi.bulu,Bulu,sud_ubangi,Other provinces,deaths,1,,
+results-2720,2026-09-26,tshopo.bafwasende,Bafwasende,tshopo,Other provinces,R_T,1.208,0.822,1.646
+results-2720,2026-09-26,tshopo.bafwasende,Bafwasende,tshopo,Other provinces,cases,7,,
+results-2720,2026-09-26,tshopo.bafwasende,Bafwasende,tshopo,Other provinces,deaths,1,,
+results-2720,2026-09-26,tshopo.kabondo,Kabondo,tshopo,Other provinces,R_T,1.224,0.829,1.685
+results-2720,2026-09-26,tshopo.kabondo,Kabondo,tshopo,Other provinces,cases,5,,
+results-2720,2026-09-26,tshopo.kabondo,Kabondo,tshopo,Other provinces,deaths,1,,
+results-2720,2026-09-26,tshopo.lubunga,Lubunga,tshopo,Other provinces,cases,1,,
+results-2720,2026-09-26,tshopo.lubunga,Lubunga,tshopo,Other provinces,deaths,0,,
+results-2720,2026-09-26,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,R_T,1.253,0.836,1.715
+results-2720,2026-09-26,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,cases,23,,
+results-2720,2026-09-26,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,deaths,10,,
+results-2720,2026-09-26,tshopo.mangobo,Mangobo,tshopo,Other provinces,R_T,1.255,0.837,1.719
+results-2720,2026-09-26,tshopo.mangobo,Mangobo,tshopo,Other provinces,cases,5,,
+results-2720,2026-09-26,tshopo.mangobo,Mangobo,tshopo,Other provinces,deaths,3,,
+results-2720,2026-09-26,tshopo.tshopo,Tshopo,tshopo,Other provinces,cases,1,,
+results-2720,2026-09-26,tshopo.tshopo,Tshopo,tshopo,Other provinces,deaths,0,,
+results-2720,2026-09-26,tshopo.wanie_rukula,Wanie-Rukula,tshopo,Other provinces,cases,1,,
+results-2720,2026-09-26,tshopo.wanie_rukula,Wanie-Rukula,tshopo,Other provinces,deaths,1,,
+results-v3.0.0,2026-09-27,bas_uele.buta,Buta,bas_uele,Other provinces,cases,1,,
+results-v3.0.0,2026-09-27,bas_uele.buta,Buta,bas_uele,Other provinces,deaths,1,,
+results-v3.0.0,2026-09-27,bas_uele.ganga,Ganga,bas_uele,Other provinces,cases,3,,
+results-v3.0.0,2026-09-27,bas_uele.ganga,Ganga,bas_uele,Other provinces,deaths,2,,
+results-v3.0.0,2026-09-27,bas_uele.viadana,Viadana,bas_uele,Other provinces,R_T,1.048,0.757,1.4
+results-v3.0.0,2026-09-27,bas_uele.viadana,Viadana,bas_uele,Other provinces,cases,6,,
+results-v3.0.0,2026-09-27,bas_uele.viadana,Viadana,bas_uele,Other provinces,deaths,1,,
+results-v3.0.0,2026-09-27,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,R_T,0.825,0.504,1.253
+results-v3.0.0,2026-09-27,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,cases,39,,
+results-v3.0.0,2026-09-27,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,deaths,17,,
+results-v3.0.0,2026-09-27,haut_uele.dungu,Dungu,haut_uele,Haut-Uele,cases,1,,
+results-v3.0.0,2026-09-27,haut_uele.dungu,Dungu,haut_uele,Haut-Uele,deaths,1,,
+results-v3.0.0,2026-09-27,haut_uele.gombari,Gombari,haut_uele,Haut-Uele,cases,3,,
+results-v3.0.0,2026-09-27,haut_uele.gombari,Gombari,haut_uele,Haut-Uele,deaths,1,,
+results-v3.0.0,2026-09-27,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,R_T,0.515,0.277,0.885
+results-v3.0.0,2026-09-27,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,cases,101,,
+results-v3.0.0,2026-09-27,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,deaths,43,,
+results-v3.0.0,2026-09-27,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,R_T,0.956,0.603,1.371
+results-v3.0.0,2026-09-27,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,cases,80,,
+results-v3.0.0,2026-09-27,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,deaths,37,,
+results-v3.0.0,2026-09-27,haut_uele.rungu,Rungu,haut_uele,Haut-Uele,cases,2,,
+results-v3.0.0,2026-09-27,haut_uele.rungu,Rungu,haut_uele,Haut-Uele,deaths,1,,
+results-v3.0.0,2026-09-27,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,R_T,0.811,0.461,1.247
+results-v3.0.0,2026-09-27,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,cases,109,,
+results-v3.0.0,2026-09-27,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,deaths,40,,
+results-v3.0.0,2026-09-27,ituri.adja,Adja,ituri,Ituri,R_T,0.68,0.463,0.921
+results-v3.0.0,2026-09-27,ituri.adja,Adja,ituri,Ituri,cases,11,,
+results-v3.0.0,2026-09-27,ituri.adja,Adja,ituri,Ituri,deaths,1,,
+results-v3.0.0,2026-09-27,ituri.ariwara,Ariwara,ituri,Ituri,R_T,0.686,0.472,0.932
+results-v3.0.0,2026-09-27,ituri.ariwara,Ariwara,ituri,Ituri,cases,8,,
+results-v3.0.0,2026-09-27,ituri.ariwara,Ariwara,ituri,Ituri,deaths,2,,
+results-v3.0.0,2026-09-27,ituri.aru,Aru,ituri,Ituri,R_T,0.685,0.461,0.929
+results-v3.0.0,2026-09-27,ituri.aru,Aru,ituri,Ituri,cases,8,,
+results-v3.0.0,2026-09-27,ituri.aru,Aru,ituri,Ituri,deaths,6,,
+results-v3.0.0,2026-09-27,ituri.aungba,Aungba,ituri,Ituri,R_T,0.659,0.448,0.903
+results-v3.0.0,2026-09-27,ituri.aungba,Aungba,ituri,Ituri,cases,12,,
+results-v3.0.0,2026-09-27,ituri.aungba,Aungba,ituri,Ituri,deaths,5,,
+results-v3.0.0,2026-09-27,ituri.bambu,Bambu,ituri,Ituri,R_T,0.436,0.215,0.788
+results-v3.0.0,2026-09-27,ituri.bambu,Bambu,ituri,Ituri,cases,202,,
+results-v3.0.0,2026-09-27,ituri.bambu,Bambu,ituri,Ituri,deaths,46,,
+results-v3.0.0,2026-09-27,ituri.boga,Boga,ituri,Ituri,R_T,0.639,0.425,0.875
+results-v3.0.0,2026-09-27,ituri.boga,Boga,ituri,Ituri,cases,2,,
+results-v3.0.0,2026-09-27,ituri.boga,Boga,ituri,Ituri,deaths,2,,
+results-v3.0.0,2026-09-27,ituri.bunia,Bunia,ituri,Ituri,R_T,0.418,0.201,0.717
+results-v3.0.0,2026-09-27,ituri.bunia,Bunia,ituri,Ituri,cases,1705,,
+results-v3.0.0,2026-09-27,ituri.bunia,Bunia,ituri,Ituri,deaths,550,,
+results-v3.0.0,2026-09-27,ituri.damas,Damas,ituri,Ituri,R_T,0.481,0.253,0.908
+results-v3.0.0,2026-09-27,ituri.damas,Damas,ituri,Ituri,cases,40,,
+results-v3.0.0,2026-09-27,ituri.damas,Damas,ituri,Ituri,deaths,9,,
+results-v3.0.0,2026-09-27,ituri.drodro,Drodro,ituri,Ituri,R_T,0.563,0.363,0.778
+results-v3.0.0,2026-09-27,ituri.drodro,Drodro,ituri,Ituri,cases,15,,
+results-v3.0.0,2026-09-27,ituri.drodro,Drodro,ituri,Ituri,deaths,7,,
+results-v3.0.0,2026-09-27,ituri.fataki,Fataki,ituri,Ituri,R_T,0.413,0.231,0.706
+results-v3.0.0,2026-09-27,ituri.fataki,Fataki,ituri,Ituri,cases,82,,
+results-v3.0.0,2026-09-27,ituri.fataki,Fataki,ituri,Ituri,deaths,31,,
+results-v3.0.0,2026-09-27,ituri.gety,Gety,ituri,Ituri,R_T,0.615,0.406,0.84
+results-v3.0.0,2026-09-27,ituri.gety,Gety,ituri,Ituri,cases,7,,
+results-v3.0.0,2026-09-27,ituri.gety,Gety,ituri,Ituri,deaths,3,,
+results-v3.0.0,2026-09-27,ituri.kambala,Kambala,ituri,Ituri,R_T,0.636,0.429,0.865
+results-v3.0.0,2026-09-27,ituri.kambala,Kambala,ituri,Ituri,cases,2,,
+results-v3.0.0,2026-09-27,ituri.kambala,Kambala,ituri,Ituri,deaths,0,,
+results-v3.0.0,2026-09-27,ituri.kilo,Kilo,ituri,Ituri,R_T,0.502,0.264,0.814
+results-v3.0.0,2026-09-27,ituri.kilo,Kilo,ituri,Ituri,cases,35,,
+results-v3.0.0,2026-09-27,ituri.kilo,Kilo,ituri,Ituri,deaths,12,,
+results-v3.0.0,2026-09-27,ituri.komanda,Komanda,ituri,Ituri,R_T,0.567,0.278,1.03
+results-v3.0.0,2026-09-27,ituri.komanda,Komanda,ituri,Ituri,cases,167,,
+results-v3.0.0,2026-09-27,ituri.komanda,Komanda,ituri,Ituri,deaths,101,,
+results-v3.0.0,2026-09-27,ituri.lita,Lita,ituri,Ituri,R_T,0.426,0.192,0.761
+results-v3.0.0,2026-09-27,ituri.lita,Lita,ituri,Ituri,cases,283,,
+results-v3.0.0,2026-09-27,ituri.lita,Lita,ituri,Ituri,deaths,141,,
+results-v3.0.0,2026-09-27,ituri.logo,Logo,ituri,Ituri,R_T,0.631,0.418,0.865
+results-v3.0.0,2026-09-27,ituri.logo,Logo,ituri,Ituri,cases,13,,
+results-v3.0.0,2026-09-27,ituri.logo,Logo,ituri,Ituri,deaths,5,,
+results-v3.0.0,2026-09-27,ituri.lolwa,Lolwa,ituri,Ituri,R_T,0.529,0.271,1.015
+results-v3.0.0,2026-09-27,ituri.lolwa,Lolwa,ituri,Ituri,cases,33,,
+results-v3.0.0,2026-09-27,ituri.lolwa,Lolwa,ituri,Ituri,deaths,8,,
+results-v3.0.0,2026-09-27,ituri.mahagi,Mahagi,ituri,Ituri,R_T,0.672,0.46,0.914
+results-v3.0.0,2026-09-27,ituri.mahagi,Mahagi,ituri,Ituri,cases,4,,
+results-v3.0.0,2026-09-27,ituri.mahagi,Mahagi,ituri,Ituri,deaths,1,,
+results-v3.0.0,2026-09-27,ituri.mambasa,Mambasa,ituri,Ituri,R_T,0.593,0.39,0.828
+results-v3.0.0,2026-09-27,ituri.mambasa,Mambasa,ituri,Ituri,cases,29,,
+results-v3.0.0,2026-09-27,ituri.mambasa,Mambasa,ituri,Ituri,deaths,11,,
+results-v3.0.0,2026-09-27,ituri.mandima,Mandima,ituri,Ituri,R_T,1.576,1.056,2.157
+results-v3.0.0,2026-09-27,ituri.mandima,Mandima,ituri,Ituri,cases,120,,
+results-v3.0.0,2026-09-27,ituri.mandima,Mandima,ituri,Ituri,deaths,67,,
+results-v3.0.0,2026-09-27,ituri.mangala,Mangala,ituri,Ituri,R_T,0.356,0.158,0.664
+results-v3.0.0,2026-09-27,ituri.mangala,Mangala,ituri,Ituri,cases,346,,
+results-v3.0.0,2026-09-27,ituri.mangala,Mangala,ituri,Ituri,deaths,153,,
+results-v3.0.0,2026-09-27,ituri.mongbwalu,Mongbwalu,ituri,Ituri,R_T,0.491,0.231,0.883
+results-v3.0.0,2026-09-27,ituri.mongbwalu,Mongbwalu,ituri,Ituri,cases,698,,
+results-v3.0.0,2026-09-27,ituri.mongbwalu,Mongbwalu,ituri,Ituri,deaths,328,,
+results-v3.0.0,2026-09-27,ituri.nia_nia,Nia-Nia,ituri,Ituri,R_T,0.809,0.403,1.46
+results-v3.0.0,2026-09-27,ituri.nia_nia,Nia-Nia,ituri,Ituri,cases,293,,
+results-v3.0.0,2026-09-27,ituri.nia_nia,Nia-Nia,ituri,Ituri,deaths,159,,
+results-v3.0.0,2026-09-27,ituri.nizi,Nizi,ituri,Ituri,R_T,0.349,0.166,0.617
+results-v3.0.0,2026-09-27,ituri.nizi,Nizi,ituri,Ituri,cases,772,,
+results-v3.0.0,2026-09-27,ituri.nizi,Nizi,ituri,Ituri,deaths,278,,
+results-v3.0.0,2026-09-27,ituri.nyankunde,Nyankunde,ituri,Ituri,R_T,0.544,0.305,0.907
+results-v3.0.0,2026-09-27,ituri.nyankunde,Nyankunde,ituri,Ituri,cases,128,,
+results-v3.0.0,2026-09-27,ituri.nyankunde,Nyankunde,ituri,Ituri,deaths,37,,
+results-v3.0.0,2026-09-27,ituri.rimba,Rimba,ituri,Ituri,R_T,0.646,0.433,0.874
+results-v3.0.0,2026-09-27,ituri.rimba,Rimba,ituri,Ituri,cases,12,,
+results-v3.0.0,2026-09-27,ituri.rimba,Rimba,ituri,Ituri,deaths,4,,
+results-v3.0.0,2026-09-27,ituri.rwampara,Rwampara,ituri,Ituri,R_T,0.451,0.221,0.782
+results-v3.0.0,2026-09-27,ituri.rwampara,Rwampara,ituri,Ituri,cases,1079,,
+results-v3.0.0,2026-09-27,ituri.rwampara,Rwampara,ituri,Ituri,deaths,363,,
+results-v3.0.0,2026-09-27,ituri.tchomia,Tchomia,ituri,Ituri,R_T,0.457,0.23,0.798
+results-v3.0.0,2026-09-27,ituri.tchomia,Tchomia,ituri,Ituri,cases,76,,
+results-v3.0.0,2026-09-27,ituri.tchomia,Tchomia,ituri,Ituri,deaths,25,,
+results-v3.0.0,2026-09-27,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,R_T,0.891,0.619,1.199
+results-v3.0.0,2026-09-27,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,cases,337,,
+results-v3.0.0,2026-09-27,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,deaths,222,,
+results-v3.0.0,2026-09-27,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,R_T,0.652,0.438,0.92
+results-v3.0.0,2026-09-27,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,cases,18,,
+results-v3.0.0,2026-09-27,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,deaths,7,,
+results-v3.0.0,2026-09-27,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,R_T,0.438,0.26,0.726
+results-v3.0.0,2026-09-27,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,cases,257,,
+results-v3.0.0,2026-09-27,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,deaths,166,,
+results-v3.0.0,2026-09-27,nord_kivu.goma,Goma,nord_kivu,Nord-Kivu,cases,1,,
+results-v3.0.0,2026-09-27,nord_kivu.goma,Goma,nord_kivu,Nord-Kivu,deaths,0,,
+results-v3.0.0,2026-09-27,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,R_T,0.834,0.505,1.28
+results-v3.0.0,2026-09-27,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,cases,53,,
+results-v3.0.0,2026-09-27,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,deaths,18,,
+results-v3.0.0,2026-09-27,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,R_T,0.412,0.234,0.683
+results-v3.0.0,2026-09-27,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,cases,559,,
+results-v3.0.0,2026-09-27,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,deaths,355,,
+results-v3.0.0,2026-09-27,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,R_T,0.721,0.498,0.977
+results-v3.0.0,2026-09-27,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,cases,1,,
+results-v3.0.0,2026-09-27,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,deaths,0,,
+results-v3.0.0,2026-09-27,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,R_T,0.629,0.357,1.081
+results-v3.0.0,2026-09-27,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,cases,33,,
+results-v3.0.0,2026-09-27,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,deaths,20,,
+results-v3.0.0,2026-09-27,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,R_T,0.659,0.442,0.917
+results-v3.0.0,2026-09-27,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,cases,21,,
+results-v3.0.0,2026-09-27,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,deaths,11,,
+results-v3.0.0,2026-09-27,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,R_T,0.881,0.511,1.456
+results-v3.0.0,2026-09-27,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,cases,31,,
+results-v3.0.0,2026-09-27,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,deaths,11,,
+results-v3.0.0,2026-09-27,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,R_T,0.621,0.406,0.883
+results-v3.0.0,2026-09-27,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,cases,13,,
+results-v3.0.0,2026-09-27,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,deaths,5,,
+results-v3.0.0,2026-09-27,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,R_T,0.648,0.442,0.91
+results-v3.0.0,2026-09-27,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,cases,28,,
+results-v3.0.0,2026-09-27,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,deaths,9,,
+results-v3.0.0,2026-09-27,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,R_T,0.45,0.24,0.795
+results-v3.0.0,2026-09-27,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,cases,122,,
+results-v3.0.0,2026-09-27,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,deaths,66,,
+results-v3.0.0,2026-09-27,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,R_T,0.74,0.505,1.003
+results-v3.0.0,2026-09-27,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,cases,12,,
+results-v3.0.0,2026-09-27,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,deaths,2,,
+results-v3.0.0,2026-09-27,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,R_T,0.701,0.476,0.965
+results-v3.0.0,2026-09-27,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,cases,26,,
+results-v3.0.0,2026-09-27,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,deaths,14,,
+results-v3.0.0,2026-09-27,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,R_T,0.65,0.44,0.915
+results-v3.0.0,2026-09-27,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,cases,29,,
+results-v3.0.0,2026-09-27,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,deaths,8,,
+results-v3.0.0,2026-09-27,sud_kivu.miti_murhesa,Miti-Murhesa,sud_kivu,Other provinces,cases,3,,
+results-v3.0.0,2026-09-27,sud_kivu.miti_murhesa,Miti-Murhesa,sud_kivu,Other provinces,deaths,1,,
+results-v3.0.0,2026-09-27,sud_ubangi.bulu,Bulu,sud_ubangi,Other provinces,cases,2,,
+results-v3.0.0,2026-09-27,sud_ubangi.bulu,Bulu,sud_ubangi,Other provinces,deaths,1,,
+results-v3.0.0,2026-09-27,tshopo.bafwasende,Bafwasende,tshopo,Other provinces,R_T,1.07,0.769,1.425
+results-v3.0.0,2026-09-27,tshopo.bafwasende,Bafwasende,tshopo,Other provinces,cases,7,,
+results-v3.0.0,2026-09-27,tshopo.bafwasende,Bafwasende,tshopo,Other provinces,deaths,1,,
+results-v3.0.0,2026-09-27,tshopo.kabondo,Kabondo,tshopo,Other provinces,R_T,1.082,0.78,1.452
+results-v3.0.0,2026-09-27,tshopo.kabondo,Kabondo,tshopo,Other provinces,cases,5,,
+results-v3.0.0,2026-09-27,tshopo.kabondo,Kabondo,tshopo,Other provinces,deaths,1,,
+results-v3.0.0,2026-09-27,tshopo.lubunga,Lubunga,tshopo,Other provinces,cases,1,,
+results-v3.0.0,2026-09-27,tshopo.lubunga,Lubunga,tshopo,Other provinces,deaths,0,,
+results-v3.0.0,2026-09-27,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,R_T,1.116,0.79,1.491
+results-v3.0.0,2026-09-27,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,cases,23,,
+results-v3.0.0,2026-09-27,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,deaths,10,,
+results-v3.0.0,2026-09-27,tshopo.mangobo,Mangobo,tshopo,Other provinces,R_T,1.109,0.787,1.478
+results-v3.0.0,2026-09-27,tshopo.mangobo,Mangobo,tshopo,Other provinces,cases,5,,
+results-v3.0.0,2026-09-27,tshopo.mangobo,Mangobo,tshopo,Other provinces,deaths,3,,
+results-v3.0.0,2026-09-27,tshopo.tshopo,Tshopo,tshopo,Other provinces,cases,1,,
+results-v3.0.0,2026-09-27,tshopo.tshopo,Tshopo,tshopo,Other provinces,deaths,0,,
+results-v3.0.0,2026-09-27,tshopo.wanie_rukula,Wanie-Rukula,tshopo,Other provinces,cases,1,,
+results-v3.0.0,2026-09-27,tshopo.wanie_rukula,Wanie-Rukula,tshopo,Other provinces,deaths,1,,
+results-2968,2026-10-02,bas_uele.buta,Buta,bas_uele,Other provinces,cases,1,,
+results-2968,2026-10-02,bas_uele.buta,Buta,bas_uele,Other provinces,deaths,1,,
+results-2968,2026-10-02,bas_uele.ganga,Ganga,bas_uele,Other provinces,cases,3,,
+results-2968,2026-10-02,bas_uele.ganga,Ganga,bas_uele,Other provinces,deaths,2,,
+results-2968,2026-10-02,bas_uele.viadana,Viadana,bas_uele,Other provinces,cases,6,,
+results-2968,2026-10-02,bas_uele.viadana,Viadana,bas_uele,Other provinces,deaths,1,,
+results-2968,2026-10-02,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,R_T,0.892,0.553,1.312
+results-2968,2026-10-02,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,cases,41,,
+results-2968,2026-10-02,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,deaths,17,,
+results-2968,2026-10-02,haut_uele.dungu,Dungu,haut_uele,Haut-Uele,cases,1,,
+results-2968,2026-10-02,haut_uele.dungu,Dungu,haut_uele,Haut-Uele,deaths,1,,
+results-2968,2026-10-02,haut_uele.gombari,Gombari,haut_uele,Haut-Uele,cases,3,,
+results-2968,2026-10-02,haut_uele.gombari,Gombari,haut_uele,Haut-Uele,deaths,1,,
+results-2968,2026-10-02,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,R_T,0.62,0.319,1.081
+results-2968,2026-10-02,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,cases,102,,
+results-2968,2026-10-02,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,deaths,44,,
+results-2968,2026-10-02,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,R_T,0.925,0.576,1.297
+results-2968,2026-10-02,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,cases,87,,
+results-2968,2026-10-02,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,deaths,40,,
+results-2968,2026-10-02,haut_uele.rungu,Rungu,haut_uele,Haut-Uele,cases,4,,
+results-2968,2026-10-02,haut_uele.rungu,Rungu,haut_uele,Haut-Uele,deaths,1,,
+results-2968,2026-10-02,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,R_T,0.893,0.521,1.34
+results-2968,2026-10-02,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,cases,114,,
+results-2968,2026-10-02,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,deaths,42,,
+results-2968,2026-10-02,ituri.adja,Adja,ituri,Ituri,cases,11,,
+results-2968,2026-10-02,ituri.adja,Adja,ituri,Ituri,deaths,1,,
+results-2968,2026-10-02,ituri.ariwara,Ariwara,ituri,Ituri,R_T,0.766,0.511,1.047
+results-2968,2026-10-02,ituri.ariwara,Ariwara,ituri,Ituri,cases,8,,
+results-2968,2026-10-02,ituri.ariwara,Ariwara,ituri,Ituri,deaths,2,,
+results-2968,2026-10-02,ituri.aru,Aru,ituri,Ituri,R_T,0.763,0.505,1.038
+results-2968,2026-10-02,ituri.aru,Aru,ituri,Ituri,cases,8,,
+results-2968,2026-10-02,ituri.aru,Aru,ituri,Ituri,deaths,6,,
+results-2968,2026-10-02,ituri.aungba,Aungba,ituri,Ituri,R_T,0.752,0.493,1.028
+results-2968,2026-10-02,ituri.aungba,Aungba,ituri,Ituri,cases,12,,
+results-2968,2026-10-02,ituri.aungba,Aungba,ituri,Ituri,deaths,5,,
+results-2968,2026-10-02,ituri.bambu,Bambu,ituri,Ituri,R_T,0.569,0.235,1.221
+results-2968,2026-10-02,ituri.bambu,Bambu,ituri,Ituri,cases,203,,
+results-2968,2026-10-02,ituri.bambu,Bambu,ituri,Ituri,deaths,46,,
+results-2968,2026-10-02,ituri.boga,Boga,ituri,Ituri,R_T,0.731,0.473,1.002
+results-2968,2026-10-02,ituri.boga,Boga,ituri,Ituri,cases,2,,
+results-2968,2026-10-02,ituri.boga,Boga,ituri,Ituri,deaths,2,,
+results-2968,2026-10-02,ituri.bunia,Bunia,ituri,Ituri,R_T,0.708,0.297,1.233
+results-2968,2026-10-02,ituri.bunia,Bunia,ituri,Ituri,cases,1759,,
+results-2968,2026-10-02,ituri.bunia,Bunia,ituri,Ituri,deaths,574,,
+results-2968,2026-10-02,ituri.damas,Damas,ituri,Ituri,R_T,0.535,0.251,1.159
+results-2968,2026-10-02,ituri.damas,Damas,ituri,Ituri,cases,40,,
+results-2968,2026-10-02,ituri.damas,Damas,ituri,Ituri,deaths,9,,
+results-2968,2026-10-02,ituri.drodro,Drodro,ituri,Ituri,R_T,0.704,0.442,0.989
+results-2968,2026-10-02,ituri.drodro,Drodro,ituri,Ituri,cases,15,,
+results-2968,2026-10-02,ituri.drodro,Drodro,ituri,Ituri,deaths,7,,
+results-2968,2026-10-02,ituri.fataki,Fataki,ituri,Ituri,R_T,0.568,0.287,1.144
+results-2968,2026-10-02,ituri.fataki,Fataki,ituri,Ituri,cases,82,,
+results-2968,2026-10-02,ituri.fataki,Fataki,ituri,Ituri,deaths,31,,
+results-2968,2026-10-02,ituri.gety,Gety,ituri,Ituri,R_T,0.735,0.478,1.011
+results-2968,2026-10-02,ituri.gety,Gety,ituri,Ituri,cases,7,,
+results-2968,2026-10-02,ituri.gety,Gety,ituri,Ituri,deaths,3,,
+results-2968,2026-10-02,ituri.kambala,Kambala,ituri,Ituri,R_T,0.746,0.481,1.028
+results-2968,2026-10-02,ituri.kambala,Kambala,ituri,Ituri,cases,2,,
+results-2968,2026-10-02,ituri.kambala,Kambala,ituri,Ituri,deaths,0,,
+results-2968,2026-10-02,ituri.kilo,Kilo,ituri,Ituri,R_T,0.711,0.324,1.452
+results-2968,2026-10-02,ituri.kilo,Kilo,ituri,Ituri,cases,37,,
+results-2968,2026-10-02,ituri.kilo,Kilo,ituri,Ituri,deaths,12,,
+results-2968,2026-10-02,ituri.komanda,Komanda,ituri,Ituri,R_T,0.534,0.2,1.282
+results-2968,2026-10-02,ituri.komanda,Komanda,ituri,Ituri,cases,173,,
+results-2968,2026-10-02,ituri.komanda,Komanda,ituri,Ituri,deaths,106,,
+results-2968,2026-10-02,ituri.lita,Lita,ituri,Ituri,R_T,0.592,0.272,1.183
+results-2968,2026-10-02,ituri.lita,Lita,ituri,Ituri,cases,289,,
+results-2968,2026-10-02,ituri.lita,Lita,ituri,Ituri,deaths,145,,
+results-2968,2026-10-02,ituri.logo,Logo,ituri,Ituri,R_T,0.729,0.468,0.993
+results-2968,2026-10-02,ituri.logo,Logo,ituri,Ituri,cases,13,,
+results-2968,2026-10-02,ituri.logo,Logo,ituri,Ituri,deaths,5,,
+results-2968,2026-10-02,ituri.lolwa,Lolwa,ituri,Ituri,R_T,0.553,0.216,1.363
+results-2968,2026-10-02,ituri.lolwa,Lolwa,ituri,Ituri,cases,34,,
+results-2968,2026-10-02,ituri.lolwa,Lolwa,ituri,Ituri,deaths,9,,
+results-2968,2026-10-02,ituri.mahagi,Mahagi,ituri,Ituri,R_T,0.767,0.505,1.048
+results-2968,2026-10-02,ituri.mahagi,Mahagi,ituri,Ituri,cases,4,,
+results-2968,2026-10-02,ituri.mahagi,Mahagi,ituri,Ituri,deaths,1,,
+results-2968,2026-10-02,ituri.mambasa,Mambasa,ituri,Ituri,R_T,0.893,0.308,2.164
+results-2968,2026-10-02,ituri.mambasa,Mambasa,ituri,Ituri,cases,32,,
+results-2968,2026-10-02,ituri.mambasa,Mambasa,ituri,Ituri,deaths,12,,
+results-2968,2026-10-02,ituri.mandima,Mandima,ituri,Ituri,R_T,1.041,0.428,1.732
+results-2968,2026-10-02,ituri.mandima,Mandima,ituri,Ituri,cases,156,,
+results-2968,2026-10-02,ituri.mandima,Mandima,ituri,Ituri,deaths,79,,
+results-2968,2026-10-02,ituri.mangala,Mangala,ituri,Ituri,R_T,0.512,0.204,1.232
+results-2968,2026-10-02,ituri.mangala,Mangala,ituri,Ituri,cases,362,,
+results-2968,2026-10-02,ituri.mangala,Mangala,ituri,Ituri,deaths,156,,
+results-2968,2026-10-02,ituri.mongbwalu,Mongbwalu,ituri,Ituri,R_T,0.455,0.147,1.162
+results-2968,2026-10-02,ituri.mongbwalu,Mongbwalu,ituri,Ituri,cases,706,,
+results-2968,2026-10-02,ituri.mongbwalu,Mongbwalu,ituri,Ituri,deaths,333,,
+results-2968,2026-10-02,ituri.nia_nia,Nia-Nia,ituri,Ituri,R_T,0.643,0.221,1.543
+results-2968,2026-10-02,ituri.nia_nia,Nia-Nia,ituri,Ituri,cases,309,,
+results-2968,2026-10-02,ituri.nia_nia,Nia-Nia,ituri,Ituri,deaths,173,,
+results-2968,2026-10-02,ituri.nizi,Nizi,ituri,Ituri,R_T,0.6,0.23,1.228
+results-2968,2026-10-02,ituri.nizi,Nizi,ituri,Ituri,cases,784,,
+results-2968,2026-10-02,ituri.nizi,Nizi,ituri,Ituri,deaths,281,,
+results-2968,2026-10-02,ituri.nyankunde,Nyankunde,ituri,Ituri,R_T,0.783,0.35,1.694
+results-2968,2026-10-02,ituri.nyankunde,Nyankunde,ituri,Ituri,cases,130,,
+results-2968,2026-10-02,ituri.nyankunde,Nyankunde,ituri,Ituri,deaths,37,,
+results-2968,2026-10-02,ituri.rimba,Rimba,ituri,Ituri,R_T,0.751,0.489,1.028
+results-2968,2026-10-02,ituri.rimba,Rimba,ituri,Ituri,cases,12,,
+results-2968,2026-10-02,ituri.rimba,Rimba,ituri,Ituri,deaths,4,,
+results-2968,2026-10-02,ituri.rwampara,Rwampara,ituri,Ituri,R_T,0.867,0.353,1.553
+results-2968,2026-10-02,ituri.rwampara,Rwampara,ituri,Ituri,cases,1104,,
+results-2968,2026-10-02,ituri.rwampara,Rwampara,ituri,Ituri,deaths,376,,
+results-2968,2026-10-02,ituri.tchomia,Tchomia,ituri,Ituri,R_T,0.553,0.258,1.187
+results-2968,2026-10-02,ituri.tchomia,Tchomia,ituri,Ituri,cases,76,,
+results-2968,2026-10-02,ituri.tchomia,Tchomia,ituri,Ituri,deaths,25,,
+results-2968,2026-10-02,nord_kivu.alimbongo,Alimbongo,nord_kivu,Nord-Kivu,R_T,0.965,0.678,1.323
+results-2968,2026-10-02,nord_kivu.alimbongo,Alimbongo,nord_kivu,Nord-Kivu,cases,4,,
+results-2968,2026-10-02,nord_kivu.alimbongo,Alimbongo,nord_kivu,Nord-Kivu,deaths,2,,
+results-2968,2026-10-02,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,R_T,0.928,0.602,1.297
+results-2968,2026-10-02,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,cases,376,,
+results-2968,2026-10-02,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,deaths,252,,
+results-2968,2026-10-02,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,R_T,0.921,0.635,1.274
+results-2968,2026-10-02,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,cases,19,,
+results-2968,2026-10-02,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,deaths,7,,
+results-2968,2026-10-02,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,R_T,0.777,0.452,1.295
+results-2968,2026-10-02,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,cases,272,,
+results-2968,2026-10-02,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,deaths,174,,
+results-2968,2026-10-02,nord_kivu.goma,Goma,nord_kivu,Nord-Kivu,cases,1,,
+results-2968,2026-10-02,nord_kivu.goma,Goma,nord_kivu,Nord-Kivu,deaths,0,,
+results-2968,2026-10-02,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,R_T,1.027,0.629,1.604
+results-2968,2026-10-02,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,cases,59,,
+results-2968,2026-10-02,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,deaths,21,,
+results-2968,2026-10-02,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,R_T,0.719,0.425,1.174
+results-2968,2026-10-02,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,cases,579,,
+results-2968,2026-10-02,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,deaths,362,,
+results-2968,2026-10-02,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,R_T,0.97,0.678,1.322
+results-2968,2026-10-02,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,cases,3,,
+results-2968,2026-10-02,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,deaths,2,,
+results-2968,2026-10-02,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,R_T,0.847,0.507,1.397
+results-2968,2026-10-02,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,cases,34,,
+results-2968,2026-10-02,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,deaths,20,,
+results-2968,2026-10-02,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,R_T,0.934,0.646,1.29
+results-2968,2026-10-02,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,cases,22,,
+results-2968,2026-10-02,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,deaths,11,,
+results-2968,2026-10-02,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,R_T,1.153,0.693,1.845
+results-2968,2026-10-02,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,cases,41,,
+results-2968,2026-10-02,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,deaths,15,,
+results-2968,2026-10-02,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,R_T,0.892,0.607,1.24
+results-2968,2026-10-02,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,cases,13,,
+results-2968,2026-10-02,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,deaths,5,,
+results-2968,2026-10-02,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,R_T,0.936,0.519,1.637
+results-2968,2026-10-02,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,cases,31,,
+results-2968,2026-10-02,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,deaths,11,,
+results-2968,2026-10-02,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,R_T,0.752,0.401,1.372
+results-2968,2026-10-02,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,cases,127,,
+results-2968,2026-10-02,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,deaths,68,,
+results-2968,2026-10-02,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,R_T,0.969,0.675,1.321
+results-2968,2026-10-02,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,cases,15,,
+results-2968,2026-10-02,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,deaths,3,,
+results-2968,2026-10-02,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,R_T,0.941,0.648,1.279
+results-2968,2026-10-02,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,cases,29,,
+results-2968,2026-10-02,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,deaths,16,,
+results-2968,2026-10-02,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,R_T,0.968,0.603,1.553
+results-2968,2026-10-02,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,cases,32,,
+results-2968,2026-10-02,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,deaths,10,,
+results-2968,2026-10-02,sud_kivu.miti_murhesa,Miti-Murhesa,sud_kivu,Other provinces,cases,3,,
+results-2968,2026-10-02,sud_kivu.miti_murhesa,Miti-Murhesa,sud_kivu,Other provinces,deaths,1,,
+results-2968,2026-10-02,sud_ubangi.bulu,Bulu,sud_ubangi,Other provinces,cases,2,,
+results-2968,2026-10-02,sud_ubangi.bulu,Bulu,sud_ubangi,Other provinces,deaths,1,,
+results-2968,2026-10-02,tshopo.bafwasende,Bafwasende,tshopo,Other provinces,cases,7,,
+results-2968,2026-10-02,tshopo.bafwasende,Bafwasende,tshopo,Other provinces,deaths,1,,
+results-2968,2026-10-02,tshopo.kabondo,Kabondo,tshopo,Other provinces,cases,5,,
+results-2968,2026-10-02,tshopo.kabondo,Kabondo,tshopo,Other provinces,deaths,1,,
+results-2968,2026-10-02,tshopo.lubunga,Lubunga,tshopo,Other provinces,cases,1,,
+results-2968,2026-10-02,tshopo.lubunga,Lubunga,tshopo,Other provinces,deaths,0,,
+results-2968,2026-10-02,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,R_T,1.029,0.744,1.337
+results-2968,2026-10-02,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,cases,27,,
+results-2968,2026-10-02,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,deaths,10,,
+results-2968,2026-10-02,tshopo.mangobo,Mangobo,tshopo,Other provinces,R_T,1.037,0.75,1.339
+results-2968,2026-10-02,tshopo.mangobo,Mangobo,tshopo,Other provinces,cases,6,,
+results-2968,2026-10-02,tshopo.mangobo,Mangobo,tshopo,Other provinces,deaths,3,,
+results-2968,2026-10-02,tshopo.tshopo,Tshopo,tshopo,Other provinces,cases,1,,
+results-2968,2026-10-02,tshopo.tshopo,Tshopo,tshopo,Other provinces,deaths,0,,
+results-2968,2026-10-02,tshopo.wanie_rukula,Wanie-Rukula,tshopo,Other provinces,cases,1,,
+results-2968,2026-10-02,tshopo.wanie_rukula,Wanie-Rukula,tshopo,Other provinces,deaths,1,,
+results-3000,2026-10-06,bas_uele.buta,Buta,bas_uele,Other provinces,cases,1,,
+results-3000,2026-10-06,bas_uele.buta,Buta,bas_uele,Other provinces,deaths,1,,
+results-3000,2026-10-06,bas_uele.ganga,Ganga,bas_uele,Other provinces,cases,3,,
+results-3000,2026-10-06,bas_uele.ganga,Ganga,bas_uele,Other provinces,deaths,2,,
+results-3000,2026-10-06,bas_uele.viadana,Viadana,bas_uele,Other provinces,cases,6,,
+results-3000,2026-10-06,bas_uele.viadana,Viadana,bas_uele,Other provinces,deaths,1,,
+results-3000,2026-10-06,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,R_T,0.838,0.468,1.415
+results-3000,2026-10-06,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,cases,43,,
+results-3000,2026-10-06,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,deaths,19,,
+results-3000,2026-10-06,haut_uele.dungu,Dungu,haut_uele,Haut-Uele,cases,1,,
+results-3000,2026-10-06,haut_uele.dungu,Dungu,haut_uele,Haut-Uele,deaths,1,,
+results-3000,2026-10-06,haut_uele.gombari,Gombari,haut_uele,Haut-Uele,cases,3,,
+results-3000,2026-10-06,haut_uele.gombari,Gombari,haut_uele,Haut-Uele,deaths,1,,
+results-3000,2026-10-06,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,R_T,0.563,0.263,1.22
+results-3000,2026-10-06,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,cases,102,,
+results-3000,2026-10-06,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,deaths,44,,
+results-3000,2026-10-06,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,R_T,0.809,0.421,1.373
+results-3000,2026-10-06,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,cases,92,,
+results-3000,2026-10-06,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,deaths,43,,
+results-3000,2026-10-06,haut_uele.rungu,Rungu,haut_uele,Haut-Uele,cases,4,,
+results-3000,2026-10-06,haut_uele.rungu,Rungu,haut_uele,Haut-Uele,deaths,2,,
+results-3000,2026-10-06,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,R_T,0.819,0.444,1.424
+results-3000,2026-10-06,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,cases,119,,
+results-3000,2026-10-06,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,deaths,43,,
+results-3000,2026-10-06,ituri.adja,Adja,ituri,Ituri,cases,12,,
+results-3000,2026-10-06,ituri.adja,Adja,ituri,Ituri,deaths,1,,
+results-3000,2026-10-06,ituri.ariwara,Ariwara,ituri,Ituri,R_T,0.818,0.497,1.226
+results-3000,2026-10-06,ituri.ariwara,Ariwara,ituri,Ituri,cases,8,,
+results-3000,2026-10-06,ituri.ariwara,Ariwara,ituri,Ituri,deaths,2,,
+results-3000,2026-10-06,ituri.aru,Aru,ituri,Ituri,R_T,0.814,0.495,1.217
+results-3000,2026-10-06,ituri.aru,Aru,ituri,Ituri,cases,8,,
+results-3000,2026-10-06,ituri.aru,Aru,ituri,Ituri,deaths,6,,
+results-3000,2026-10-06,ituri.aungba,Aungba,ituri,Ituri,R_T,0.801,0.49,1.203
+results-3000,2026-10-06,ituri.aungba,Aungba,ituri,Ituri,cases,12,,
+results-3000,2026-10-06,ituri.aungba,Aungba,ituri,Ituri,deaths,5,,
+results-3000,2026-10-06,ituri.bambu,Bambu,ituri,Ituri,R_T,0.698,0.276,1.632
+results-3000,2026-10-06,ituri.bambu,Bambu,ituri,Ituri,cases,210,,
+results-3000,2026-10-06,ituri.bambu,Bambu,ituri,Ituri,deaths,47,,
+results-3000,2026-10-06,ituri.boga,Boga,ituri,Ituri,R_T,0.783,0.477,1.173
+results-3000,2026-10-06,ituri.boga,Boga,ituri,Ituri,cases,2,,
+results-3000,2026-10-06,ituri.boga,Boga,ituri,Ituri,deaths,2,,
+results-3000,2026-10-06,ituri.bunia,Bunia,ituri,Ituri,R_T,0.72,0.279,1.399
+results-3000,2026-10-06,ituri.bunia,Bunia,ituri,Ituri,cases,1790,,
+results-3000,2026-10-06,ituri.bunia,Bunia,ituri,Ituri,deaths,594,,
+results-3000,2026-10-06,ituri.damas,Damas,ituri,Ituri,R_T,0.658,0.278,1.547
+results-3000,2026-10-06,ituri.damas,Damas,ituri,Ituri,cases,40,,
+results-3000,2026-10-06,ituri.damas,Damas,ituri,Ituri,deaths,9,,
+results-3000,2026-10-06,ituri.drodro,Drodro,ituri,Ituri,R_T,0.756,0.44,1.146
+results-3000,2026-10-06,ituri.drodro,Drodro,ituri,Ituri,cases,15,,
+results-3000,2026-10-06,ituri.drodro,Drodro,ituri,Ituri,deaths,7,,
+results-3000,2026-10-06,ituri.fataki,Fataki,ituri,Ituri,R_T,0.707,0.307,1.639
+results-3000,2026-10-06,ituri.fataki,Fataki,ituri,Ituri,cases,84,,
+results-3000,2026-10-06,ituri.fataki,Fataki,ituri,Ituri,deaths,31,,
+results-3000,2026-10-06,ituri.gety,Gety,ituri,Ituri,R_T,0.776,0.465,1.165
+results-3000,2026-10-06,ituri.gety,Gety,ituri,Ituri,cases,9,,
+results-3000,2026-10-06,ituri.gety,Gety,ituri,Ituri,deaths,5,,
+results-3000,2026-10-06,ituri.kambala,Kambala,ituri,Ituri,R_T,0.795,0.479,1.192
+results-3000,2026-10-06,ituri.kambala,Kambala,ituri,Ituri,cases,2,,
+results-3000,2026-10-06,ituri.kambala,Kambala,ituri,Ituri,deaths,0,,
+results-3000,2026-10-06,ituri.kilo,Kilo,ituri,Ituri,R_T,0.791,0.339,1.778
+results-3000,2026-10-06,ituri.kilo,Kilo,ituri,Ituri,cases,38,,
+results-3000,2026-10-06,ituri.kilo,Kilo,ituri,Ituri,deaths,12,,
+results-3000,2026-10-06,ituri.komanda,Komanda,ituri,Ituri,R_T,0.517,0.185,1.332
+results-3000,2026-10-06,ituri.komanda,Komanda,ituri,Ituri,cases,176,,
+results-3000,2026-10-06,ituri.komanda,Komanda,ituri,Ituri,deaths,107,,
+results-3000,2026-10-06,ituri.lita,Lita,ituri,Ituri,R_T,0.639,0.232,1.423
+results-3000,2026-10-06,ituri.lita,Lita,ituri,Ituri,cases,295,,
+results-3000,2026-10-06,ituri.lita,Lita,ituri,Ituri,deaths,148,,
+results-3000,2026-10-06,ituri.logo,Logo,ituri,Ituri,R_T,0.777,0.463,1.171
+results-3000,2026-10-06,ituri.logo,Logo,ituri,Ituri,cases,14,,
+results-3000,2026-10-06,ituri.logo,Logo,ituri,Ituri,deaths,6,,
+results-3000,2026-10-06,ituri.lolwa,Lolwa,ituri,Ituri,R_T,0.616,0.231,1.675
+results-3000,2026-10-06,ituri.lolwa,Lolwa,ituri,Ituri,cases,35,,
+results-3000,2026-10-06,ituri.lolwa,Lolwa,ituri,Ituri,deaths,9,,
+results-3000,2026-10-06,ituri.mahagi,Mahagi,ituri,Ituri,R_T,0.815,0.497,1.227
+results-3000,2026-10-06,ituri.mahagi,Mahagi,ituri,Ituri,cases,4,,
+results-3000,2026-10-06,ituri.mahagi,Mahagi,ituri,Ituri,deaths,1,,
+results-3000,2026-10-06,ituri.mambasa,Mambasa,ituri,Ituri,R_T,1.094,0.37,2.703
+results-3000,2026-10-06,ituri.mambasa,Mambasa,ituri,Ituri,cases,41,,
+results-3000,2026-10-06,ituri.mambasa,Mambasa,ituri,Ituri,deaths,17,,
+results-3000,2026-10-06,ituri.mandima,Mandima,ituri,Ituri,R_T,0.988,0.348,1.877
+results-3000,2026-10-06,ituri.mandima,Mandima,ituri,Ituri,cases,198,,
+results-3000,2026-10-06,ituri.mandima,Mandima,ituri,Ituri,deaths,98,,
+results-3000,2026-10-06,ituri.mangala,Mangala,ituri,Ituri,R_T,0.609,0.215,1.456
+results-3000,2026-10-06,ituri.mangala,Mangala,ituri,Ituri,cases,366,,
+results-3000,2026-10-06,ituri.mangala,Mangala,ituri,Ituri,deaths,157,,
+results-3000,2026-10-06,ituri.mongbwalu,Mongbwalu,ituri,Ituri,R_T,0.509,0.167,1.33
+results-3000,2026-10-06,ituri.mongbwalu,Mongbwalu,ituri,Ituri,cases,710,,
+results-3000,2026-10-06,ituri.mongbwalu,Mongbwalu,ituri,Ituri,deaths,337,,
+results-3000,2026-10-06,ituri.nia_nia,Nia-Nia,ituri,Ituri,R_T,0.518,0.161,1.527
+results-3000,2026-10-06,ituri.nia_nia,Nia-Nia,ituri,Ituri,cases,314,,
+results-3000,2026-10-06,ituri.nia_nia,Nia-Nia,ituri,Ituri,deaths,175,,
+results-3000,2026-10-06,ituri.nizi,Nizi,ituri,Ituri,R_T,0.697,0.261,1.601
+results-3000,2026-10-06,ituri.nizi,Nizi,ituri,Ituri,cases,792,,
+results-3000,2026-10-06,ituri.nizi,Nizi,ituri,Ituri,deaths,286,,
+results-3000,2026-10-06,ituri.nyankunde,Nyankunde,ituri,Ituri,R_T,0.737,0.317,1.779
+results-3000,2026-10-06,ituri.nyankunde,Nyankunde,ituri,Ituri,cases,130,,
+results-3000,2026-10-06,ituri.nyankunde,Nyankunde,ituri,Ituri,deaths,37,,
+results-3000,2026-10-06,ituri.rimba,Rimba,ituri,Ituri,R_T,0.798,0.48,1.206
+results-3000,2026-10-06,ituri.rimba,Rimba,ituri,Ituri,cases,14,,
+results-3000,2026-10-06,ituri.rimba,Rimba,ituri,Ituri,deaths,5,,
+results-3000,2026-10-06,ituri.rwampara,Rwampara,ituri,Ituri,R_T,0.784,0.302,1.606
+results-3000,2026-10-06,ituri.rwampara,Rwampara,ituri,Ituri,cases,1118,,
+results-3000,2026-10-06,ituri.rwampara,Rwampara,ituri,Ituri,deaths,385,,
+results-3000,2026-10-06,ituri.tchomia,Tchomia,ituri,Ituri,R_T,0.596,0.247,1.389
+results-3000,2026-10-06,ituri.tchomia,Tchomia,ituri,Ituri,cases,76,,
+results-3000,2026-10-06,ituri.tchomia,Tchomia,ituri,Ituri,deaths,25,,
+results-3000,2026-10-06,nord_kivu.alimbongo,Alimbongo,nord_kivu,Nord-Kivu,R_T,1.206,0.775,1.801
+results-3000,2026-10-06,nord_kivu.alimbongo,Alimbongo,nord_kivu,Nord-Kivu,cases,5,,
+results-3000,2026-10-06,nord_kivu.alimbongo,Alimbongo,nord_kivu,Nord-Kivu,deaths,3,,
+results-3000,2026-10-06,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,R_T,1.031,0.58,1.684
+results-3000,2026-10-06,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,cases,409,,
+results-3000,2026-10-06,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,deaths,268,,
+results-3000,2026-10-06,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,R_T,1.168,0.747,1.762
+results-3000,2026-10-06,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,cases,23,,
+results-3000,2026-10-06,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,deaths,7,,
+results-3000,2026-10-06,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,R_T,1.09,0.621,1.796
+results-3000,2026-10-06,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,cases,286,,
+results-3000,2026-10-06,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,deaths,180,,
+results-3000,2026-10-06,nord_kivu.goma,Goma,nord_kivu,Nord-Kivu,cases,1,,
+results-3000,2026-10-06,nord_kivu.goma,Goma,nord_kivu,Nord-Kivu,deaths,0,,
+results-3000,2026-10-06,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,R_T,1.184,0.682,1.942
+results-3000,2026-10-06,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,cases,63,,
+results-3000,2026-10-06,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,deaths,22,,
+results-3000,2026-10-06,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,R_T,1.037,0.586,1.728
+results-3000,2026-10-06,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,cases,608,,
+results-3000,2026-10-06,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,deaths,373,,
+results-3000,2026-10-06,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,R_T,1.212,0.78,1.81
+results-3000,2026-10-06,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,cases,3,,
+results-3000,2026-10-06,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,deaths,2,,
+results-3000,2026-10-06,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,R_T,1.136,0.605,1.988
+results-3000,2026-10-06,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,cases,37,,
+results-3000,2026-10-06,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,deaths,20,,
+results-3000,2026-10-06,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,R_T,1.185,0.761,1.772
+results-3000,2026-10-06,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,cases,23,,
+results-3000,2026-10-06,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,deaths,11,,
+results-3000,2026-10-06,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,R_T,1.36,0.749,2.344
+results-3000,2026-10-06,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,cases,51,,
+results-3000,2026-10-06,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,deaths,20,,
+results-3000,2026-10-06,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,R_T,1.136,0.727,1.707
+results-3000,2026-10-06,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,cases,13,,
+results-3000,2026-10-06,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,deaths,5,,
+results-3000,2026-10-06,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,R_T,1.212,0.648,2.249
+results-3000,2026-10-06,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,cases,34,,
+results-3000,2026-10-06,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,deaths,11,,
+results-3000,2026-10-06,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,R_T,1.081,0.555,2.017
+results-3000,2026-10-06,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,cases,140,,
+results-3000,2026-10-06,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,deaths,69,,
+results-3000,2026-10-06,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,R_T,1.199,0.771,1.793
+results-3000,2026-10-06,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,cases,20,,
+results-3000,2026-10-06,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,deaths,4,,
+results-3000,2026-10-06,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,R_T,1.201,0.619,2.209
+results-3000,2026-10-06,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,cases,34,,
+results-3000,2026-10-06,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,deaths,16,,
+results-3000,2026-10-06,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,R_T,1.154,0.645,2.007
+results-3000,2026-10-06,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,cases,35,,
+results-3000,2026-10-06,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,deaths,10,,
+results-3000,2026-10-06,sud_kivu.miti_murhesa,Miti-Murhesa,sud_kivu,Other provinces,cases,3,,
+results-3000,2026-10-06,sud_kivu.miti_murhesa,Miti-Murhesa,sud_kivu,Other provinces,deaths,1,,
+results-3000,2026-10-06,sud_ubangi.bulu,Bulu,sud_ubangi,Other provinces,cases,2,,
+results-3000,2026-10-06,sud_ubangi.bulu,Bulu,sud_ubangi,Other provinces,deaths,1,,
+results-3000,2026-10-06,tshopo.bafwasende,Bafwasende,tshopo,Other provinces,cases,7,,
+results-3000,2026-10-06,tshopo.bafwasende,Bafwasende,tshopo,Other provinces,deaths,1,,
+results-3000,2026-10-06,tshopo.kabondo,Kabondo,tshopo,Other provinces,cases,5,,
+results-3000,2026-10-06,tshopo.kabondo,Kabondo,tshopo,Other provinces,deaths,1,,
+results-3000,2026-10-06,tshopo.lubunga,Lubunga,tshopo,Other provinces,cases,1,,
+results-3000,2026-10-06,tshopo.lubunga,Lubunga,tshopo,Other provinces,deaths,0,,
+results-3000,2026-10-06,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,R_T,1.063,0.698,1.539
+results-3000,2026-10-06,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,cases,27,,
+results-3000,2026-10-06,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,deaths,11,,
+results-3000,2026-10-06,tshopo.mangobo,Mangobo,tshopo,Other provinces,R_T,1.076,0.704,1.558
+results-3000,2026-10-06,tshopo.mangobo,Mangobo,tshopo,Other provinces,cases,8,,
+results-3000,2026-10-06,tshopo.mangobo,Mangobo,tshopo,Other provinces,deaths,4,,
+results-3000,2026-10-06,tshopo.tshopo,Tshopo,tshopo,Other provinces,cases,2,,
+results-3000,2026-10-06,tshopo.tshopo,Tshopo,tshopo,Other provinces,deaths,0,,
+results-3000,2026-10-06,tshopo.wanie_rukula,Wanie-Rukula,tshopo,Other provinces,cases,1,,
+results-3000,2026-10-06,tshopo.wanie_rukula,Wanie-Rukula,tshopo,Other provinces,deaths,1,,
+results-3086,2026-10-10,bas_uele.buta,Buta,bas_uele,Other provinces,cases,1,,
+results-3086,2026-10-10,bas_uele.buta,Buta,bas_uele,Other provinces,deaths,1,,
+results-3086,2026-10-10,bas_uele.ganga,Ganga,bas_uele,Other provinces,cases,5,,
+results-3086,2026-10-10,bas_uele.ganga,Ganga,bas_uele,Other provinces,deaths,2,,
+results-3086,2026-10-10,bas_uele.viadana,Viadana,bas_uele,Other provinces,cases,6,,
+results-3086,2026-10-10,bas_uele.viadana,Viadana,bas_uele,Other provinces,deaths,1,,
+results-3086,2026-10-10,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,R_T,0.925,0.58,1.43
+results-3086,2026-10-10,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,cases,44,,
+results-3086,2026-10-10,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,deaths,19,,
+results-3086,2026-10-10,haut_uele.dungu,Dungu,haut_uele,Haut-Uele,cases,1,,
+results-3086,2026-10-10,haut_uele.dungu,Dungu,haut_uele,Haut-Uele,deaths,1,,
+results-3086,2026-10-10,haut_uele.gombari,Gombari,haut_uele,Haut-Uele,cases,3,,
+results-3086,2026-10-10,haut_uele.gombari,Gombari,haut_uele,Haut-Uele,deaths,1,,
+results-3086,2026-10-10,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,R_T,0.599,0.337,1.117
+results-3086,2026-10-10,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,cases,102,,
+results-3086,2026-10-10,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,deaths,44,,
+results-3086,2026-10-10,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,R_T,0.882,0.491,1.304
+results-3086,2026-10-10,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,cases,98,,
+results-3086,2026-10-10,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,deaths,47,,
+results-3086,2026-10-10,haut_uele.rungu,Rungu,haut_uele,Haut-Uele,cases,4,,
+results-3086,2026-10-10,haut_uele.rungu,Rungu,haut_uele,Haut-Uele,deaths,2,,
+results-3086,2026-10-10,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,R_T,1.01,0.616,1.465
+results-3086,2026-10-10,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,cases,127,,
+results-3086,2026-10-10,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,deaths,45,,
+results-3086,2026-10-10,ituri.adja,Adja,ituri,Ituri,cases,12,,
+results-3086,2026-10-10,ituri.adja,Adja,ituri,Ituri,deaths,1,,
+results-3086,2026-10-10,ituri.ariwara,Ariwara,ituri,Ituri,R_T,0.923,0.65,1.227
+results-3086,2026-10-10,ituri.ariwara,Ariwara,ituri,Ituri,cases,8,,
+results-3086,2026-10-10,ituri.ariwara,Ariwara,ituri,Ituri,deaths,2,,
+results-3086,2026-10-10,ituri.aru,Aru,ituri,Ituri,R_T,0.917,0.642,1.213
+results-3086,2026-10-10,ituri.aru,Aru,ituri,Ituri,cases,9,,
+results-3086,2026-10-10,ituri.aru,Aru,ituri,Ituri,deaths,6,,
+results-3086,2026-10-10,ituri.aungba,Aungba,ituri,Ituri,R_T,0.907,0.621,1.202
+results-3086,2026-10-10,ituri.aungba,Aungba,ituri,Ituri,cases,12,,
+results-3086,2026-10-10,ituri.aungba,Aungba,ituri,Ituri,deaths,5,,
+results-3086,2026-10-10,ituri.bambu,Bambu,ituri,Ituri,R_T,0.806,0.334,1.667
+results-3086,2026-10-10,ituri.bambu,Bambu,ituri,Ituri,cases,214,,
+results-3086,2026-10-10,ituri.bambu,Bambu,ituri,Ituri,deaths,47,,
+results-3086,2026-10-10,ituri.boga,Boga,ituri,Ituri,R_T,0.883,0.602,1.177
+results-3086,2026-10-10,ituri.boga,Boga,ituri,Ituri,cases,2,,
+results-3086,2026-10-10,ituri.boga,Boga,ituri,Ituri,deaths,2,,
+results-3086,2026-10-10,ituri.bunia,Bunia,ituri,Ituri,R_T,0.776,0.301,1.406
+results-3086,2026-10-10,ituri.bunia,Bunia,ituri,Ituri,cases,1812,,
+results-3086,2026-10-10,ituri.bunia,Bunia,ituri,Ituri,deaths,604,,
+results-3086,2026-10-10,ituri.damas,Damas,ituri,Ituri,R_T,0.745,0.399,1.452
+results-3086,2026-10-10,ituri.damas,Damas,ituri,Ituri,cases,40,,
+results-3086,2026-10-10,ituri.damas,Damas,ituri,Ituri,deaths,9,,
+results-3086,2026-10-10,ituri.drodro,Drodro,ituri,Ituri,R_T,0.848,0.532,1.143
+results-3086,2026-10-10,ituri.drodro,Drodro,ituri,Ituri,cases,15,,
+results-3086,2026-10-10,ituri.drodro,Drodro,ituri,Ituri,deaths,7,,
+results-3086,2026-10-10,ituri.fataki,Fataki,ituri,Ituri,R_T,0.781,0.405,1.628
+results-3086,2026-10-10,ituri.fataki,Fataki,ituri,Ituri,cases,84,,
+results-3086,2026-10-10,ituri.fataki,Fataki,ituri,Ituri,deaths,31,,
+results-3086,2026-10-10,ituri.gety,Gety,ituri,Ituri,R_T,0.874,0.579,1.17
+results-3086,2026-10-10,ituri.gety,Gety,ituri,Ituri,cases,9,,
+results-3086,2026-10-10,ituri.gety,Gety,ituri,Ituri,deaths,5,,
+results-3086,2026-10-10,ituri.kambala,Kambala,ituri,Ituri,R_T,0.89,0.614,1.187
+results-3086,2026-10-10,ituri.kambala,Kambala,ituri,Ituri,cases,2,,
+results-3086,2026-10-10,ituri.kambala,Kambala,ituri,Ituri,deaths,0,,
+results-3086,2026-10-10,ituri.kilo,Kilo,ituri,Ituri,R_T,0.883,0.411,1.822
+results-3086,2026-10-10,ituri.kilo,Kilo,ituri,Ituri,cases,38,,
+results-3086,2026-10-10,ituri.kilo,Kilo,ituri,Ituri,deaths,12,,
+results-3086,2026-10-10,ituri.komanda,Komanda,ituri,Ituri,R_T,0.476,0.21,1.167
+results-3086,2026-10-10,ituri.komanda,Komanda,ituri,Ituri,cases,178,,
+results-3086,2026-10-10,ituri.komanda,Komanda,ituri,Ituri,deaths,107,,
+results-3086,2026-10-10,ituri.lita,Lita,ituri,Ituri,R_T,0.727,0.285,1.469
+results-3086,2026-10-10,ituri.lita,Lita,ituri,Ituri,cases,298,,
+results-3086,2026-10-10,ituri.lita,Lita,ituri,Ituri,deaths,151,,
+results-3086,2026-10-10,ituri.logo,Logo,ituri,Ituri,R_T,0.87,0.572,1.164
+results-3086,2026-10-10,ituri.logo,Logo,ituri,Ituri,cases,14,,
+results-3086,2026-10-10,ituri.logo,Logo,ituri,Ituri,deaths,7,,
+results-3086,2026-10-10,ituri.lolwa,Lolwa,ituri,Ituri,R_T,0.592,0.272,1.401
+results-3086,2026-10-10,ituri.lolwa,Lolwa,ituri,Ituri,cases,35,,
+results-3086,2026-10-10,ituri.lolwa,Lolwa,ituri,Ituri,deaths,9,,
+results-3086,2026-10-10,ituri.mahagi,Mahagi,ituri,Ituri,R_T,0.919,0.635,1.212
+results-3086,2026-10-10,ituri.mahagi,Mahagi,ituri,Ituri,cases,4,,
+results-3086,2026-10-10,ituri.mahagi,Mahagi,ituri,Ituri,deaths,1,,
+results-3086,2026-10-10,ituri.mambasa,Mambasa,ituri,Ituri,R_T,0.801,0.299,2.092
+results-3086,2026-10-10,ituri.mambasa,Mambasa,ituri,Ituri,cases,41,,
+results-3086,2026-10-10,ituri.mambasa,Mambasa,ituri,Ituri,deaths,17,,
+results-3086,2026-10-10,ituri.mandima,Mandima,ituri,Ituri,R_T,1.194,0.526,1.775
+results-3086,2026-10-10,ituri.mandima,Mandima,ituri,Ituri,cases,240,,
+results-3086,2026-10-10,ituri.mandima,Mandima,ituri,Ituri,deaths,124,,
+results-3086,2026-10-10,ituri.mangala,Mangala,ituri,Ituri,R_T,0.643,0.242,1.419
+results-3086,2026-10-10,ituri.mangala,Mangala,ituri,Ituri,cases,369,,
+results-3086,2026-10-10,ituri.mangala,Mangala,ituri,Ituri,deaths,160,,
+results-3086,2026-10-10,ituri.mongbwalu,Mongbwalu,ituri,Ituri,R_T,0.511,0.187,1.353
+results-3086,2026-10-10,ituri.mongbwalu,Mongbwalu,ituri,Ituri,cases,712,,
+results-3086,2026-10-10,ituri.mongbwalu,Mongbwalu,ituri,Ituri,deaths,341,,
+results-3086,2026-10-10,ituri.nia_nia,Nia-Nia,ituri,Ituri,R_T,0.684,0.214,1.858
+results-3086,2026-10-10,ituri.nia_nia,Nia-Nia,ituri,Ituri,cases,324,,
+results-3086,2026-10-10,ituri.nia_nia,Nia-Nia,ituri,Ituri,deaths,181,,
+results-3086,2026-10-10,ituri.nizi,Nizi,ituri,Ituri,R_T,0.917,0.367,1.782
+results-3086,2026-10-10,ituri.nizi,Nizi,ituri,Ituri,cases,809,,
+results-3086,2026-10-10,ituri.nizi,Nizi,ituri,Ituri,deaths,290,,
+results-3086,2026-10-10,ituri.nyankunde,Nyankunde,ituri,Ituri,R_T,0.88,0.392,1.982
+results-3086,2026-10-10,ituri.nyankunde,Nyankunde,ituri,Ituri,cases,133,,
+results-3086,2026-10-10,ituri.nyankunde,Nyankunde,ituri,Ituri,deaths,39,,
+results-3086,2026-10-10,ituri.rimba,Rimba,ituri,Ituri,R_T,0.892,0.594,1.185
+results-3086,2026-10-10,ituri.rimba,Rimba,ituri,Ituri,cases,18,,
+results-3086,2026-10-10,ituri.rimba,Rimba,ituri,Ituri,deaths,5,,
+results-3086,2026-10-10,ituri.rwampara,Rwampara,ituri,Ituri,R_T,0.871,0.338,1.648
+results-3086,2026-10-10,ituri.rwampara,Rwampara,ituri,Ituri,cases,1131,,
+results-3086,2026-10-10,ituri.rwampara,Rwampara,ituri,Ituri,deaths,393,,
+results-3086,2026-10-10,ituri.tchomia,Tchomia,ituri,Ituri,R_T,0.683,0.326,1.405
+results-3086,2026-10-10,ituri.tchomia,Tchomia,ituri,Ituri,cases,76,,
+results-3086,2026-10-10,ituri.tchomia,Tchomia,ituri,Ituri,deaths,25,,
+results-3086,2026-10-10,nord_kivu.alimbongo,Alimbongo,nord_kivu,Nord-Kivu,R_T,1.248,0.96,1.602
+results-3086,2026-10-10,nord_kivu.alimbongo,Alimbongo,nord_kivu,Nord-Kivu,cases,5,,
+results-3086,2026-10-10,nord_kivu.alimbongo,Alimbongo,nord_kivu,Nord-Kivu,deaths,3,,
+results-3086,2026-10-10,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,R_T,1.142,0.778,1.534
+results-3086,2026-10-10,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,cases,442,,
+results-3086,2026-10-10,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,deaths,298,,
+results-3086,2026-10-10,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,R_T,1.205,0.919,1.559
+results-3086,2026-10-10,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,cases,23,,
+results-3086,2026-10-10,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,deaths,7,,
+results-3086,2026-10-10,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,R_T,1.1,0.706,1.641
+results-3086,2026-10-10,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,cases,297,,
+results-3086,2026-10-10,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,deaths,185,,
+results-3086,2026-10-10,nord_kivu.goma,Goma,nord_kivu,Nord-Kivu,cases,1,,
+results-3086,2026-10-10,nord_kivu.goma,Goma,nord_kivu,Nord-Kivu,deaths,0,,
+results-3086,2026-10-10,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,R_T,1.253,0.84,1.809
+results-3086,2026-10-10,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,cases,68,,
+results-3086,2026-10-10,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,deaths,26,,
+results-3086,2026-10-10,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,R_T,1.035,0.658,1.54
+results-3086,2026-10-10,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,cases,623,,
+results-3086,2026-10-10,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,deaths,379,,
+results-3086,2026-10-10,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,R_T,1.251,0.961,1.611
+results-3086,2026-10-10,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,cases,3,,
+results-3086,2026-10-10,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,deaths,2,,
+results-3086,2026-10-10,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,R_T,1.096,0.701,1.73
+results-3086,2026-10-10,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,cases,37,,
+results-3086,2026-10-10,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,deaths,20,,
+results-3086,2026-10-10,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,R_T,1.216,0.932,1.571
+results-3086,2026-10-10,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,cases,28,,
+results-3086,2026-10-10,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,deaths,12,,
+results-3086,2026-10-10,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,R_T,1.453,0.914,2.177
+results-3086,2026-10-10,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,cases,62,,
+results-3086,2026-10-10,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,deaths,21,,
+results-3086,2026-10-10,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,R_T,1.167,0.885,1.513
+results-3086,2026-10-10,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,cases,14,,
+results-3086,2026-10-10,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,deaths,5,,
+results-3086,2026-10-10,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,R_T,1.196,0.717,1.967
+results-3086,2026-10-10,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,cases,36,,
+results-3086,2026-10-10,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,deaths,12,,
+results-3086,2026-10-10,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,R_T,1.042,0.626,1.742
+results-3086,2026-10-10,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,cases,143,,
+results-3086,2026-10-10,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,deaths,69,,
+results-3086,2026-10-10,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,R_T,1.241,0.955,1.594
+results-3086,2026-10-10,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,cases,23,,
+results-3086,2026-10-10,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,deaths,4,,
+results-3086,2026-10-10,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,R_T,1.319,0.829,2.097
+results-3086,2026-10-10,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,cases,39,,
+results-3086,2026-10-10,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,deaths,19,,
+results-3086,2026-10-10,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,R_T,1.237,0.791,1.887
+results-3086,2026-10-10,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,cases,39,,
+results-3086,2026-10-10,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,deaths,13,,
+results-3086,2026-10-10,sud_kivu.miti_murhesa,Miti-Murhesa,sud_kivu,Other provinces,cases,3,,
+results-3086,2026-10-10,sud_kivu.miti_murhesa,Miti-Murhesa,sud_kivu,Other provinces,deaths,1,,
+results-3086,2026-10-10,sud_ubangi.bulu,Bulu,sud_ubangi,Other provinces,cases,2,,
+results-3086,2026-10-10,sud_ubangi.bulu,Bulu,sud_ubangi,Other provinces,deaths,1,,
+results-3086,2026-10-10,tshopo.bafwasende,Bafwasende,tshopo,Other provinces,cases,7,,
+results-3086,2026-10-10,tshopo.bafwasende,Bafwasende,tshopo,Other provinces,deaths,1,,
+results-3086,2026-10-10,tshopo.kabondo,Kabondo,tshopo,Other provinces,R_T,1.325,1.019,1.655
+results-3086,2026-10-10,tshopo.kabondo,Kabondo,tshopo,Other provinces,cases,6,,
+results-3086,2026-10-10,tshopo.kabondo,Kabondo,tshopo,Other provinces,deaths,1,,
+results-3086,2026-10-10,tshopo.lubunga,Lubunga,tshopo,Other provinces,cases,1,,
+results-3086,2026-10-10,tshopo.lubunga,Lubunga,tshopo,Other provinces,deaths,0,,
+results-3086,2026-10-10,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,R_T,1.313,1.002,1.644
+results-3086,2026-10-10,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,cases,32,,
+results-3086,2026-10-10,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Other provinces,deaths,12,,
+results-3086,2026-10-10,tshopo.mangobo,Mangobo,tshopo,Other provinces,R_T,1.322,1.009,1.665
+results-3086,2026-10-10,tshopo.mangobo,Mangobo,tshopo,Other provinces,cases,10,,
+results-3086,2026-10-10,tshopo.mangobo,Mangobo,tshopo,Other provinces,deaths,7,,
+results-3086,2026-10-10,tshopo.tshopo,Tshopo,tshopo,Other provinces,cases,2,,
+results-3086,2026-10-10,tshopo.tshopo,Tshopo,tshopo,Other provinces,deaths,0,,
+results-3086,2026-10-10,tshopo.wanie_rukula,Wanie-Rukula,tshopo,Other provinces,cases,1,,
+results-3086,2026-10-10,tshopo.wanie_rukula,Wanie-Rukula,tshopo,Other provinces,deaths,1,,
+results-3169,2026-10-20,bas_uele.buta,Buta,bas_uele,Bas-Uele,cases,1,,
+results-3169,2026-10-20,bas_uele.buta,Buta,bas_uele,Bas-Uele,deaths,1,,
+results-3169,2026-10-20,bas_uele.ganga,Ganga,bas_uele,Bas-Uele,R_T,1.095,0.881,1.331
+results-3169,2026-10-20,bas_uele.ganga,Ganga,bas_uele,Bas-Uele,cases,5,,
+results-3169,2026-10-20,bas_uele.ganga,Ganga,bas_uele,Bas-Uele,deaths,2,,
+results-3169,2026-10-20,bas_uele.viadana,Viadana,bas_uele,Bas-Uele,R_T,1.067,0.879,1.276
+results-3169,2026-10-20,bas_uele.viadana,Viadana,bas_uele,Bas-Uele,cases,6,,
+results-3169,2026-10-20,bas_uele.viadana,Viadana,bas_uele,Bas-Uele,deaths,1,,
+results-3169,2026-10-20,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,R_T,1.051,0.636,1.646
+results-3169,2026-10-20,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,cases,45,,
+results-3169,2026-10-20,haut_uele.boma_mangbetu,Boma Mangbetu,haut_uele,Haut-Uele,deaths,19,,
+results-3169,2026-10-20,haut_uele.dungu,Dungu,haut_uele,Haut-Uele,cases,1,,
+results-3169,2026-10-20,haut_uele.dungu,Dungu,haut_uele,Haut-Uele,deaths,1,,
+results-3169,2026-10-20,haut_uele.gombari,Gombari,haut_uele,Haut-Uele,cases,3,,
+results-3169,2026-10-20,haut_uele.gombari,Gombari,haut_uele,Haut-Uele,deaths,1,,
+results-3169,2026-10-20,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,R_T,0.956,0.483,1.829
+results-3169,2026-10-20,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,cases,108,,
+results-3169,2026-10-20,haut_uele.isiro,Isiro,haut_uele,Haut-Uele,deaths,48,,
+results-3169,2026-10-20,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,R_T,0.925,0.509,1.504
+results-3169,2026-10-20,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,cases,106,,
+results-3169,2026-10-20,haut_uele.pawa,Pawa,haut_uele,Haut-Uele,deaths,60,,
+results-3169,2026-10-20,haut_uele.rungu,Rungu,haut_uele,Haut-Uele,R_T,0.944,0.6,1.394
+results-3169,2026-10-20,haut_uele.rungu,Rungu,haut_uele,Haut-Uele,cases,6,,
+results-3169,2026-10-20,haut_uele.rungu,Rungu,haut_uele,Haut-Uele,deaths,3,,
+results-3169,2026-10-20,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,R_T,1.015,0.589,1.608
+results-3169,2026-10-20,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,cases,152,,
+results-3169,2026-10-20,haut_uele.wamba,Wamba,haut_uele,Haut-Uele,deaths,51,,
+results-3169,2026-10-20,ituri.adja,Adja,ituri,Ituri,R_T,0.974,0.579,1.459
+results-3169,2026-10-20,ituri.adja,Adja,ituri,Ituri,cases,11,,
+results-3169,2026-10-20,ituri.adja,Adja,ituri,Ituri,deaths,1,,
+results-3169,2026-10-20,ituri.ariwara,Ariwara,ituri,Ituri,R_T,0.98,0.594,1.455
+results-3169,2026-10-20,ituri.ariwara,Ariwara,ituri,Ituri,cases,8,,
+results-3169,2026-10-20,ituri.ariwara,Ariwara,ituri,Ituri,deaths,2,,
+results-3169,2026-10-20,ituri.aru,Aru,ituri,Ituri,R_T,0.993,0.611,1.462
+results-3169,2026-10-20,ituri.aru,Aru,ituri,Ituri,cases,15,,
+results-3169,2026-10-20,ituri.aru,Aru,ituri,Ituri,deaths,6,,
+results-3169,2026-10-20,ituri.aungba,Aungba,ituri,Ituri,R_T,0.955,0.572,1.434
+results-3169,2026-10-20,ituri.aungba,Aungba,ituri,Ituri,cases,12,,
+results-3169,2026-10-20,ituri.aungba,Aungba,ituri,Ituri,deaths,5,,
+results-3169,2026-10-20,ituri.bambu,Bambu,ituri,Ituri,R_T,0.864,0.38,1.849
+results-3169,2026-10-20,ituri.bambu,Bambu,ituri,Ituri,cases,216,,
+results-3169,2026-10-20,ituri.bambu,Bambu,ituri,Ituri,deaths,48,,
+results-3169,2026-10-20,ituri.boga,Boga,ituri,Ituri,R_T,1.019,0.65,1.488
+results-3169,2026-10-20,ituri.boga,Boga,ituri,Ituri,cases,2,,
+results-3169,2026-10-20,ituri.boga,Boga,ituri,Ituri,deaths,2,,
+results-3169,2026-10-20,ituri.bunia,Bunia,ituri,Ituri,R_T,0.913,0.343,1.662
+results-3169,2026-10-20,ituri.bunia,Bunia,ituri,Ituri,cases,1914,,
+results-3169,2026-10-20,ituri.bunia,Bunia,ituri,Ituri,deaths,643,,
+results-3169,2026-10-20,ituri.damas,Damas,ituri,Ituri,R_T,0.989,0.398,2.251
+results-3169,2026-10-20,ituri.damas,Damas,ituri,Ituri,cases,41,,
+results-3169,2026-10-20,ituri.damas,Damas,ituri,Ituri,deaths,10,,
+results-3169,2026-10-20,ituri.drodro,Drodro,ituri,Ituri,R_T,0.913,0.538,1.38
+results-3169,2026-10-20,ituri.drodro,Drodro,ituri,Ituri,cases,15,,
+results-3169,2026-10-20,ituri.drodro,Drodro,ituri,Ituri,deaths,7,,
+results-3169,2026-10-20,ituri.fataki,Fataki,ituri,Ituri,R_T,0.885,0.343,2.131
+results-3169,2026-10-20,ituri.fataki,Fataki,ituri,Ituri,cases,84,,
+results-3169,2026-10-20,ituri.fataki,Fataki,ituri,Ituri,deaths,31,,
+results-3169,2026-10-20,ituri.gety,Gety,ituri,Ituri,R_T,1.037,0.674,1.484
+results-3169,2026-10-20,ituri.gety,Gety,ituri,Ituri,cases,11,,
+results-3169,2026-10-20,ituri.gety,Gety,ituri,Ituri,deaths,7,,
+results-3169,2026-10-20,ituri.kambala,Kambala,ituri,Ituri,R_T,0.947,0.571,1.411
+results-3169,2026-10-20,ituri.kambala,Kambala,ituri,Ituri,cases,2,,
+results-3169,2026-10-20,ituri.kambala,Kambala,ituri,Ituri,deaths,0,,
+results-3169,2026-10-20,ituri.kilo,Kilo,ituri,Ituri,R_T,0.994,0.491,1.924
+results-3169,2026-10-20,ituri.kilo,Kilo,ituri,Ituri,cases,38,,
+results-3169,2026-10-20,ituri.kilo,Kilo,ituri,Ituri,deaths,12,,
+results-3169,2026-10-20,ituri.komanda,Komanda,ituri,Ituri,R_T,0.96,0.415,2.028
+results-3169,2026-10-20,ituri.komanda,Komanda,ituri,Ituri,cases,191,,
+results-3169,2026-10-20,ituri.komanda,Komanda,ituri,Ituri,deaths,116,,
+results-3169,2026-10-20,ituri.lita,Lita,ituri,Ituri,R_T,0.91,0.317,1.918
+results-3169,2026-10-20,ituri.lita,Lita,ituri,Ituri,cases,315,,
+results-3169,2026-10-20,ituri.lita,Lita,ituri,Ituri,deaths,158,,
+results-3169,2026-10-20,ituri.logo,Logo,ituri,Ituri,R_T,0.987,0.6,1.449
+results-3169,2026-10-20,ituri.logo,Logo,ituri,Ituri,cases,14,,
+results-3169,2026-10-20,ituri.logo,Logo,ituri,Ituri,deaths,9,,
+results-3169,2026-10-20,ituri.lolwa,Lolwa,ituri,Ituri,R_T,1.035,0.454,2.264
+results-3169,2026-10-20,ituri.lolwa,Lolwa,ituri,Ituri,cases,36,,
+results-3169,2026-10-20,ituri.lolwa,Lolwa,ituri,Ituri,deaths,9,,
+results-3169,2026-10-20,ituri.mahagi,Mahagi,ituri,Ituri,R_T,0.974,0.588,1.456
+results-3169,2026-10-20,ituri.mahagi,Mahagi,ituri,Ituri,cases,4,,
+results-3169,2026-10-20,ituri.mahagi,Mahagi,ituri,Ituri,deaths,1,,
+results-3169,2026-10-20,ituri.mambasa,Mambasa,ituri,Ituri,R_T,1.066,0.393,2.452
+results-3169,2026-10-20,ituri.mambasa,Mambasa,ituri,Ituri,cases,76,,
+results-3169,2026-10-20,ituri.mambasa,Mambasa,ituri,Ituri,deaths,33,,
+results-3169,2026-10-20,ituri.mandima,Mandima,ituri,Ituri,R_T,0.937,0.328,1.714
+results-3169,2026-10-20,ituri.mandima,Mandima,ituri,Ituri,cases,362,,
+results-3169,2026-10-20,ituri.mandima,Mandima,ituri,Ituri,deaths,191,,
+results-3169,2026-10-20,ituri.mangala,Mangala,ituri,Ituri,R_T,0.792,0.312,1.945
+results-3169,2026-10-20,ituri.mangala,Mangala,ituri,Ituri,cases,382,,
+results-3169,2026-10-20,ituri.mangala,Mangala,ituri,Ituri,deaths,165,,
+results-3169,2026-10-20,ituri.mongbwalu,Mongbwalu,ituri,Ituri,R_T,0.764,0.265,1.949
+results-3169,2026-10-20,ituri.mongbwalu,Mongbwalu,ituri,Ituri,cases,717,,
+results-3169,2026-10-20,ituri.mongbwalu,Mongbwalu,ituri,Ituri,deaths,346,,
+results-3169,2026-10-20,ituri.nia_nia,Nia-Nia,ituri,Ituri,R_T,0.716,0.222,2.032
+results-3169,2026-10-20,ituri.nia_nia,Nia-Nia,ituri,Ituri,cases,334,,
+results-3169,2026-10-20,ituri.nia_nia,Nia-Nia,ituri,Ituri,deaths,193,,
+results-3169,2026-10-20,ituri.nizi,Nizi,ituri,Ituri,R_T,0.82,0.291,1.855
+results-3169,2026-10-20,ituri.nizi,Nizi,ituri,Ituri,cases,832,,
+results-3169,2026-10-20,ituri.nizi,Nizi,ituri,Ituri,deaths,303,,
+results-3169,2026-10-20,ituri.nyankunde,Nyankunde,ituri,Ituri,R_T,1.05,0.518,2.072
+results-3169,2026-10-20,ituri.nyankunde,Nyankunde,ituri,Ituri,cases,134,,
+results-3169,2026-10-20,ituri.nyankunde,Nyankunde,ituri,Ituri,deaths,41,,
+results-3169,2026-10-20,ituri.rimba,Rimba,ituri,Ituri,R_T,0.979,0.6,1.447
+results-3169,2026-10-20,ituri.rimba,Rimba,ituri,Ituri,cases,19,,
+results-3169,2026-10-20,ituri.rimba,Rimba,ituri,Ituri,deaths,5,,
+results-3169,2026-10-20,ituri.rwampara,Rwampara,ituri,Ituri,R_T,0.936,0.384,1.81
+results-3169,2026-10-20,ituri.rwampara,Rwampara,ituri,Ituri,cases,1173,,
+results-3169,2026-10-20,ituri.rwampara,Rwampara,ituri,Ituri,deaths,409,,
+results-3169,2026-10-20,ituri.tchomia,Tchomia,ituri,Ituri,R_T,1.012,0.467,2.1
+results-3169,2026-10-20,ituri.tchomia,Tchomia,ituri,Ituri,cases,82,,
+results-3169,2026-10-20,ituri.tchomia,Tchomia,ituri,Ituri,deaths,25,,
+results-3169,2026-10-20,nord_kivu.alimbongo,Alimbongo,nord_kivu,Nord-Kivu,cases,5,,
+results-3169,2026-10-20,nord_kivu.alimbongo,Alimbongo,nord_kivu,Nord-Kivu,deaths,3,,
+results-3169,2026-10-20,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,R_T,1.046,0.705,1.504
+results-3169,2026-10-20,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,cases,553,,
+results-3169,2026-10-20,nord_kivu.beni,Beni,nord_kivu,Nord-Kivu,deaths,365,,
+results-3169,2026-10-20,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,R_T,1.005,0.689,1.425
+results-3169,2026-10-20,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,cases,24,,
+results-3169,2026-10-20,nord_kivu.biena,Biena,nord_kivu,Nord-Kivu,deaths,8,,
+results-3169,2026-10-20,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,R_T,0.974,0.558,1.629
+results-3169,2026-10-20,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,cases,319,,
+results-3169,2026-10-20,nord_kivu.butembo,Butembo,nord_kivu,Nord-Kivu,deaths,190,,
+results-3169,2026-10-20,nord_kivu.goma,Goma,nord_kivu,Nord-Kivu,cases,1,,
+results-3169,2026-10-20,nord_kivu.goma,Goma,nord_kivu,Nord-Kivu,deaths,0,,
+results-3169,2026-10-20,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,R_T,1.061,0.668,1.662
+results-3169,2026-10-20,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,cases,81,,
+results-3169,2026-10-20,nord_kivu.kalunguta,Kalunguta,nord_kivu,Nord-Kivu,deaths,31,,
+results-3169,2026-10-20,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,R_T,0.956,0.554,1.567
+results-3169,2026-10-20,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,cases,648,,
+results-3169,2026-10-20,nord_kivu.katwa,Katwa,nord_kivu,Nord-Kivu,deaths,395,,
+results-3169,2026-10-20,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,cases,3,,
+results-3169,2026-10-20,nord_kivu.kayna,Kayna,nord_kivu,Nord-Kivu,deaths,2,,
+results-3169,2026-10-20,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,R_T,1.01,0.58,1.745
+results-3169,2026-10-20,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,cases,44,,
+results-3169,2026-10-20,nord_kivu.kyondo,Kyondo,nord_kivu,Nord-Kivu,deaths,21,,
+results-3169,2026-10-20,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,R_T,0.918,0.397,1.877
+results-3169,2026-10-20,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,cases,36,,
+results-3169,2026-10-20,nord_kivu.lubero,Lubero,nord_kivu,Nord-Kivu,deaths,14,,
+results-3169,2026-10-20,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,R_T,1.053,0.58,1.859
+results-3169,2026-10-20,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,cases,83,,
+results-3169,2026-10-20,nord_kivu.mabalako,Mabalako,nord_kivu,Nord-Kivu,deaths,31,,
+results-3169,2026-10-20,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,R_T,1.005,0.701,1.401
+results-3169,2026-10-20,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,cases,16,,
+results-3169,2026-10-20,nord_kivu.manguredjipa,Manguredjipa,nord_kivu,Nord-Kivu,deaths,5,,
+results-3169,2026-10-20,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,R_T,0.903,0.462,1.718
+results-3169,2026-10-20,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,cases,39,,
+results-3169,2026-10-20,nord_kivu.masereka,Masereka,nord_kivu,Nord-Kivu,deaths,13,,
+results-3169,2026-10-20,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,R_T,0.934,0.463,1.746
+results-3169,2026-10-20,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,cases,154,,
+results-3169,2026-10-20,nord_kivu.musienene,Musienene,nord_kivu,Nord-Kivu,deaths,72,,
+results-3169,2026-10-20,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,R_T,1.062,0.602,1.916
+results-3169,2026-10-20,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,cases,31,,
+results-3169,2026-10-20,nord_kivu.mutwanga,Mutwanga,nord_kivu,Nord-Kivu,deaths,9,,
+results-3169,2026-10-20,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,R_T,1.066,0.611,1.881
+results-3169,2026-10-20,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,cases,54,,
+results-3169,2026-10-20,nord_kivu.oicha,Oicha,nord_kivu,Nord-Kivu,deaths,24,,
+results-3169,2026-10-20,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,R_T,0.994,0.573,1.616
+results-3169,2026-10-20,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,cases,55,,
+results-3169,2026-10-20,nord_kivu.vuhovi,Vuhovi,nord_kivu,Nord-Kivu,deaths,16,,
+results-3169,2026-10-20,nord_ubangi.wapinda,Wapinda,nord_ubangi,Nord-Ubangi,cases,3,,
+results-3169,2026-10-20,nord_ubangi.wapinda,Wapinda,nord_ubangi,Nord-Ubangi,deaths,1,,
+results-3169,2026-10-20,sud_kivu.miti_murhesa,Miti-Murhesa,sud_kivu,Sud-Kivu,cases,3,,
+results-3169,2026-10-20,sud_kivu.miti_murhesa,Miti-Murhesa,sud_kivu,Sud-Kivu,deaths,1,,
+results-3169,2026-10-20,sud_ubangi.bulu,Bulu,sud_ubangi,Sud-Ubangi,cases,2,,
+results-3169,2026-10-20,sud_ubangi.bulu,Bulu,sud_ubangi,Sud-Ubangi,deaths,1,,
+results-3169,2026-10-20,tshopo.bafwasende,Bafwasende,tshopo,Tshopo,R_T,1.162,0.832,1.564
+results-3169,2026-10-20,tshopo.bafwasende,Bafwasende,tshopo,Tshopo,cases,18,,
+results-3169,2026-10-20,tshopo.bafwasende,Bafwasende,tshopo,Tshopo,deaths,3,,
+results-3169,2026-10-20,tshopo.kabondo,Kabondo,tshopo,Tshopo,R_T,1.2,0.84,1.618
+results-3169,2026-10-20,tshopo.kabondo,Kabondo,tshopo,Tshopo,cases,10,,
+results-3169,2026-10-20,tshopo.kabondo,Kabondo,tshopo,Tshopo,deaths,2,,
+results-3169,2026-10-20,tshopo.lubunga,Lubunga,tshopo,Tshopo,cases,1,,
+results-3169,2026-10-20,tshopo.lubunga,Lubunga,tshopo,Tshopo,deaths,0,,
+results-3169,2026-10-20,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Tshopo,R_T,1.217,0.852,1.648
+results-3169,2026-10-20,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Tshopo,cases,33,,
+results-3169,2026-10-20,tshopo.makiso_kisangani,Makiso-Kisangani,tshopo,Tshopo,deaths,14,,
+results-3169,2026-10-20,tshopo.mangobo,Mangobo,tshopo,Tshopo,R_T,1.252,0.869,1.699
+results-3169,2026-10-20,tshopo.mangobo,Mangobo,tshopo,Tshopo,cases,10,,
+results-3169,2026-10-20,tshopo.mangobo,Mangobo,tshopo,Tshopo,deaths,7,,
+results-3169,2026-10-20,tshopo.tshopo,Tshopo,tshopo,Tshopo,cases,3,,
+results-3169,2026-10-20,tshopo.tshopo,Tshopo,tshopo,Tshopo,deaths,0,,
+results-3169,2026-10-20,tshopo.wanie_rukula,Wanie-Rukula,tshopo,Tshopo,cases,1,,
+results-3169,2026-10-20,tshopo.wanie_rukula,Wanie-Rukula,tshopo,Tshopo,deaths,1,,

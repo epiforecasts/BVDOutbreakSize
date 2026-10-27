@@ -80,6 +80,8 @@ end
     )
     @test length(written) >= 4  # guards against a silent regex miss
     @test joinpath("province", "forecast_overlay.csv") in written
+    @test joinpath("province", "released_estimates.csv") in written
+    @test joinpath("zone", "released_estimates.csv") in written
     for f in written
         @test _is_excluded(f, FIT_DATA_EXCLUDE)
     end
@@ -294,6 +296,26 @@ end
     )
     @test groups["joint"] == ["joint", "sens_no_patches"]
     @test "frozen_validation" in groups["frozen"]
+    ## Each May cut-off carries its confirmed and confirmed-deaths
+    ## single-stream fits beside the frozen joint, in the same CI group, and
+    ## each builds its own stream's model from the observations frozen at
+    ## that cut-off.
+    spec_of(id) = specs[findfirst(s -> s.id == id, specs)]
+    for c in default_frozen_cutoffs(), sid in FROZEN_CUTOFF_STREAM_FITS
+        @test "frozen_$(c)_$sid" in groups["frozen"]
+        @test spec_of("frozen_$(c)_$sid").kind === :frozen
+    end
+    c = first(default_frozen_cutoffs())
+    frozen_n = freeze_observations(c).n
+    @test frozen_n < obs.n
+    for (sid, f) in (
+            ("confirmed", BVDOutbreakSize.confirmed_only_model),
+            ("confirmed_deaths", BVDOutbreakSize.confirmed_deaths_only_model),
+        )
+        m = spec_of("frozen_$(c)_$sid").model()
+        @test m.f === f
+        @test m.args.n == frozen_n
+    end
     @test all(startswith("sens_"), groups["sensitivity"])
 end
 

@@ -492,7 +492,7 @@ end
 
 export province_map_summary, province_zone_values, plot_province_map,
     province_map_estimates, rt_quantile_table, weekly_count_table,
-    cases_rt_table, reported_level_table
+    weekly_quantile_table, cases_rt_table, reported_level_table
 
 """
 $(TYPEDSIGNATURES)
@@ -742,13 +742,67 @@ function weekly_count_table(
         areas::AbstractVector; cutoff::Date, n::Integer, weeks::Integer = 8
     )
     rows = NamedTuple[]
-    isempty(days) && return DataFrame(area = String[], date = Date[], count = Int[])
-    for (i, area) in enumerate(areas), k in (weeks - 1):-1:0
-        hi = n - 7k
-        lo = hi - 7
-        lo < days[1] && continue
-        c = sum(increments[i, v] for v in eachindex(days) if lo < days[v] <= hi; init = 0)
+    for (i, area) in enumerate(areas), (hi, vs) in _weekly_windows(days, n, weeks)
+        c = sum(increments[i, v] for v in vs; init = 0)
         push!(rows, (; area = String(area), date = cutoff - Day(n - hi), count = c))
+    end
+    isempty(rows) && return DataFrame(area = String[], date = Date[], count = Int[])
+    return DataFrame(rows)
+end
+
+## The `weeks` seven-day windows ending at grid day `n`, oldest first, as
+## each window's last day and the indices of the vintages in `days` it
+## holds. A window that starts before the first vintage is left out.
+function _weekly_windows(days::AbstractVector{<:Integer}, n::Integer, weeks::Integer)
+    isempty(days) && return Tuple{Int, Vector{Int}}[]
+    return [
+        (hi, findall(d -> hi - 7 < d <= hi, days))
+            for hi in (n - 7 * (weeks - 1)):7:n if hi - 7 >= days[1]
+    ]
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Posterior predictive quantiles of the counts in [`weekly_count_table`](@ref),
+binned into the same windows: `area`, `date` (the window's last day),
+`median` and the 90% and 50% interval bounds. `replicates` holds one
+`(ndraws × vintages)` matrix of replicated increments per area, named by
+`areas`, on the vintages in `days`.
+"""
+function weekly_quantile_table(
+        days::AbstractVector{<:Integer},
+        replicates::AbstractVector{<:AbstractMatrix}, areas::AbstractVector;
+        cutoff::Date, n::Integer, weeks::Integer = 8, digits::Integer = 1
+    )
+    length(replicates) == length(areas) || throw(
+        ArgumentError(
+            "weekly_quantile_table: $(length(replicates)) replicate matrices " *
+                "for $(length(areas)) areas."
+        )
+    )
+    all(m -> size(m, 2) == length(days), replicates) || throw(
+        ArgumentError(
+            "weekly_quantile_table: every replicate matrix needs one column " *
+                "per vintage ($(length(days)))."
+        )
+    )
+    rows = NamedTuple[]
+    windows = _weekly_windows(days, n, weeks)
+    isempty(windows) && return DataFrame(
+        area = String[], date = Date[], median = Float64[], lower_90 = Float64[],
+        upper_90 = Float64[], lower_50 = Float64[], upper_50 = Float64[]
+    )
+    for (m, area) in zip(replicates, areas), (hi, vs) in windows
+        v = vec(sum(m[:, vs]; dims = 2))
+        q(pr) = round(quantile(v, pr); digits)
+        push!(
+            rows, (;
+                area = String(area), date = cutoff - Day(n - hi),
+                median = q(0.5), lower_90 = q(0.05), upper_90 = q(0.95),
+                lower_50 = q(0.25), upper_50 = q(0.75),
+            )
+        )
     end
     return DataFrame(rows)
 end

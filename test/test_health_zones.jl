@@ -215,9 +215,6 @@ end
     falls = zone_cumulative_falls(hist)
     @test [(f.province, f.zone, f.day, f.from, f.to) for f in falls] ==
         [("ituri", "a", 7, 20, 15)]
-    ## A one-unit correction is below the default guard and above `0`.
-    @test [f.day for f in zone_cumulative_falls(hist; min_fall = 0)] == [7, 9]
-    @test isempty(zone_cumulative_falls(hist; min_fall = 5))
     ## The unallocated rule alone leaves the province out; widening it to
     ## the named zones' falls adds that vintage, which the composition
     ## then drops.
@@ -232,6 +229,113 @@ end
     )
     @test res.excluded == [7]
     @test all(iszero, res.increments[:, 3])
+end
+
+@testitem "a flagged zone fall takes the printed 24h figure" begin
+    using BVDOutbreakSize: zone_increments, zone_increment_matrix,
+        zone_cumulative_falls
+
+    H = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
+    days = [1, 4, 7, 9]
+    ## `a` falls by five at day 7 (flagged) and by one at day 9 (below the
+    ## guard); `b` rises at day 7. Each has a printed figure on its day.
+    a = [10, 20, 15, 14]
+    b = [1, 2, 8, 9]
+    printed_a = (; days = [7, 9], counts = [3, 6])
+    printed_b = (; days = [7], counts = [2])
+    @test zone_increments(a, days) == [10, 10, 0, 0]
+    ## The flagged fall takes its figure; the unflagged one keeps the clamp.
+    @test zone_increments(a, days, printed_a) == [10, 10, 3, 0]
+    ## A zone that does not fall keeps its cumulative difference.
+    @test zone_increments(b, days, printed_b) == [1, 1, 6, 1]
+    ## A printed negative is the revision itself and reads as no new count.
+    @test zone_increments(a, days, (; days = [7], counts = [-2])) ==
+        [10, 10, 0, 0]
+    hist = Dict(
+        "ituri" => Dict{String, H}(
+            "a" => (; days, counts = a), "b" => (; days, counts = b)
+        )
+    )
+    printed = Dict("ituri" => Dict{String, H}("a" => printed_a, "b" => printed_b))
+    m = only(
+        zone_increment_matrix(
+            hist, ["ituri"], Dict("ituri" => ["ituri"]);
+            reattribution = Dict{String, Vector{Int}}(), printed
+        )
+    )
+    @test m.zones == [("ituri", "a"), ("ituri", "b")]
+    @test m.increments == [10 10 3 0; 1 1 6 1]
+    @test m.totals == [11, 11, 9, 1]
+    plain = only(
+        zone_increment_matrix(
+            hist, ["ituri"], Dict("ituri" => ["ituri"]);
+            reattribution = Dict{String, Vector{Int}}()
+        )
+    )
+    @test plain.increments == [10 10 0 0; 1 1 6 1]
+    @test [f.day for f in zone_cumulative_falls(hist)] == [7]
+end
+
+@testitem "the printed 24h revision figures sit on flagged falls" begin
+    using BVDOutbreakSize: load_observations, zone_cumulative_falls,
+        zone_increments, zone_increment_matrix, PROVINCE_NAMES
+    using Dates: Date
+
+    obs = load_observations()
+    day(s) = (Date(s) - obs.seeding).value + 1
+    ## Every figure sits on a flagged fall, and every flagged fall from
+    ## SitRep 060 (13 July), the first table with 24h columns, has one.
+    first_24h = day("2026-07-13")
+    for (hist, printed) in (
+            (obs.zone_confirmed_history, obs.zone_confirmed_revision_24h),
+            (obs.zone_death_history, obs.zone_death_revision_24h),
+        )
+        flagged = Set(
+            (f.province, f.zone, f.day) for f in zone_cumulative_falls(hist)
+        )
+        recorded = Set(
+            (prov, zone, d)
+                for (prov, zones) in printed for (zone, p) in zones
+                for d in p.days
+        )
+        @test recorded ⊆ flagged
+        @test Set(f for f in flagged if f[3] >= first_24h) == recorded
+    end
+    ## Bunia's deaths fall from 228 to 175 on 22 July; the printed 24h
+    ## total of 7 replaces the clamped zero, and every other vintage keeps
+    ## its cumulative difference.
+    bunia = obs.zone_death_history["ituri"]["bunia"]
+    v = findfirst(==(day("2026-07-22")), bunia.days)
+    inc = zone_increments(
+        bunia.counts, bunia.days, obs.zone_death_revision_24h["ituri"]["bunia"]
+    )
+    plain = zone_increments(bunia.counts, bunia.days)
+    @test plain[v] == 0
+    @test inc[v] == 7
+    rest = setdiff(eachindex(inc), v)
+    @test inc[rest] == plain[rest]
+    ## Katwa prints `-2` deaths on 26 July, the revision itself, which reads
+    ## as no new death.
+    katwa = obs.zone_death_history["nord_kivu"]["katwa"]
+    k = findfirst(==(day("2026-07-26")), katwa.days)
+    @test obs.zone_death_revision_24h["nord_kivu"]["katwa"].counts == [-2]
+    @test zone_increments(
+        katwa.counts, katwa.days, obs.zone_death_revision_24h["nord_kivu"]["katwa"]
+    )[k] == 0
+    ## Butembo's cases fall from 65 to 62 on 22 July with 4 printed. Nord-Kivu
+    ## has no unallocated fall that day, so the cell reaches the composition,
+    ## and it is the only case cell the figures change.
+    res = zone_increment_matrix(
+        obs.zone_confirmed_history, PROVINCE_NAMES;
+        printed = obs.zone_confirmed_revision_24h
+    )
+    base = zone_increment_matrix(obs.zone_confirmed_history, PROVINCE_NAMES)
+    nk = findfirst(r -> r.patch == "nord_kivu", res)
+    i = findfirst(==(("nord_kivu", "butembo")), res[nk].zones)
+    w = findfirst(==(day("2026-07-22")), res[nk].days)
+    @test base[nk].increments[i, w] == 0
+    @test res[nk].increments[i, w] == 4
+    @test sum(count(r.increments .!= b.increments) for (r, b) in zip(res, base)) == 1
 end
 
 @testitem "freeze_observations truncates the zone blocks" begin

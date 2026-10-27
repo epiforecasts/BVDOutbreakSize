@@ -50,6 +50,13 @@ repos:
         additional_dependencies: ['pyyaml']
         pass_filenames: false
         files: '^\.github/(workflows/(docs|test)\.yml|workflows/codecoverage\.yaml|actions/changed-paths/)'
+    # Needs Node on the PATH, which the GitHub runners and the docs build have.
+    -   id: zone-map-timeline
+        name: Dashboard map date logic tests
+        entry: node --test docs/test/zone_map_timeline.test.js
+        language: system
+        pass_filenames: false
+        files: '^docs/(src/public/zone_map/|test/)'
 #####
 # Secrets
 -   repo: https://github.com/Yelp/detect-secrets
@@ -58,3 +65,14 @@ repos:
     -   id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
         exclude: '.*/Manifest\.toml$'
+#####
+# Docs theme
+-   repo: local
+    hooks:
+    # Needs Node on the PATH, which the GitHub runners and the docs build have.
+    -   id: docs-table-sort
+        name: Docs large-table sort and parse tests
+        entry: node --test docs/test/table_sort.test.mjs
+        language: system
+        pass_filenames: false
+        files: '^docs/(src/\.vitepress/theme/table-sort\.mjs|test/table_sort\.test\.mjs)$'
