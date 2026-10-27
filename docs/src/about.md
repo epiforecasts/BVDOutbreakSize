@@ -2,11 +2,16 @@
 
 ## Authors
 
-Sam Abbott, Kath Sherratt, Samuel Brand and Sebastian Funk.
+Sam Abbott and Sebastian Funk.
 
 The model code and analysis were drafted by a language model, then reviewed and revised under human oversight.
 The named authors are responsible for that oversight.
 The [limitations](limitations.md) set out what that means for the work.
+
+## Acknowledgements
+
+Kath Sherratt and Samuel Brand were authors of versions 1.0.0 to 3.0.0.
+We thank them for their contributions to those versions and their review of them.
 
 ## Funding
 
@@ -37,12 +42,13 @@ It is a work in progress, has not been peer reviewed and will change.
 The repository carries a `CITATION.cff` with the current metadata, and each release is archived with a DOI.
 
 ```
-Abbott, S., Sherratt, K., Brand, S. and Funk, S.
+Abbott, S. and Funk, S.
 BVDOutbreakSize: estimating the current size of the 2026 DRC Bundibugyo
 virus outbreak. https://doi.org/10.5281/zenodo.20312758
 ```
 
 The DOI above resolves to the latest release.
+Please also cite the INSP situation reports and the WHO situation reports and Disease Outbreak News, which supply the data.
 The [news](news.md) page records what changed in each one.
 
 ## Reuse
