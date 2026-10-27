@@ -198,7 +198,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
-- The dashboard map's detail draws the posterior predictive of the weekly confirmed cases and deaths over the observed bars, on by default with a toggle, and a new fit metric shades each area by where its latest week's count falls in that predictive (#PRNUM).
+- The dashboard map's detail draws the posterior predictive of the weekly confirmed cases and deaths over the observed bars, on by default with a toggle, and a new fit metric shades each area by where its latest week's count falls in that predictive (#1173).
   The province and national predictive is the joint's, split by the fitted province shares as the province in-sample page scores it.
   The zone predictive is the zone composition's for the cases, which splits each patch's observed count across its zones.
   The zones carry no deaths predictive, since the model drops the reattributed death vintages that the observed series keeps.
