@@ -18,6 +18,12 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Model
 
+- The health-zone stage's shared quantity draws the weekly patch infections independently of the importation intensities and the delays, so a pull of the zone compositions on the delays no longer moves every province's level (#1122).
+  The zone likelihood scores compositions within each province, which see the delays through the timing of the shares but not a province's level.
+  With the two blocks correlated as the joint posterior correlates them, the zone stage's daily infections summed over zones ran 8 to 13% below the joint's in each of the last ten weeks, and 10 to 15% in every province over the last fortnight.
+  Each block keeps the joint posterior within it, so each draw still carries the joint's uncertainty in the delays and the patch trajectories.
+  The zone in-sample page reports the zone stage's infections against the joint's by province over the last four weeks.
+  Fitted zone values change.
 - The onset-to-admission Gamma scale prior is `LogNormal(log(3.694), 0.32)` at the onset-to-report, onset-to-detection and onset-to-death delays, and fitted values change (#1087).
 - Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
   SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.

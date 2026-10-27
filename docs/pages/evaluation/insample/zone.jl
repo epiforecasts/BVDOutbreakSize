@@ -205,6 +205,41 @@ MarkdownTable(zone_calibration_table) #hide
 #md # </figure>
 #md # ```
 
+# ## Province levels
+#
+# The zone model scores compositions within each province, so it should leave each province's infections where the joint model put them.
+# The table sets the zone infections summed over each province against the joint model's infections there, as the posterior mean over each of the last four weeks to the cut-off.
+# A ratio away from one says the zone stage has moved a province's level, which no zone count measures.
+
+#md # ```@raw html
+#md # <details><summary>Zone stage against joint infections by province</summary>
+#md # ```
+
+## The zone stage's patch infections against the joint's draws they were
+## melded from, per week and province.
+zone_level_table = let tbl = zone_patch_level_check(
+        chn_local, zone_inputs, chn_joint
+    )
+    tbl[!, "Zone stage"] = round.(tbl[!, "Zone stage"]; digits = 0)
+    tbl[!, "Joint"] = round.(tbl[!, "Joint"]; digits = 0)
+    tbl[!, "Ratio"] = round.(tbl[!, "Ratio"]; digits = 3)
+    tbl
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # <figure class="bvd-figure">
+#md # ```
+
+MarkdownTable(zone_level_table) #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Posterior mean infections in each week ending on the date shown, from the zone stage summed over the province's zones and from the joint model, and their ratio.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ## [Change over the past week](@id zone-change-past-week)
 #
 # The comparison reads each zone's reproduction number on the frozen cut-off day from the frozen and live fits, alongside the live estimate at the current cut-off.
@@ -509,6 +544,26 @@ evaluation_insample_zone_summary = let
                 )
         ),
     ]
+    ## The province whose zone-stage level sits furthest from the joint's
+    ## over the last fortnight.
+    recent = filter(
+        r -> r["Province"] != "All provinces" &&
+            r["Week ending"] >= maximum(zone_level_table[!, "Week ending"]) -
+            Day(7),
+        zone_level_table
+    )
+    if size(recent, 1) > 0
+        far = recent[argmax(abs.(recent[!, "Ratio"] .- 1)), :]
+        push!(
+            overall, string(
+                "- **Province levels:** over the last two weeks the zone ",
+                "stage's infections are within ",
+                fmt(100 * abs(far["Ratio"] - 1)),
+                "% of the joint model's in every province, the furthest ",
+                "being ", far["Province"], "."
+            )
+        )
+    end
     ## One row per province and composition.
     rows = Dict(r["Stream"] => r for r in eachrow(zone_calibration_table))
     cells = [
