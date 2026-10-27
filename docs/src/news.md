@@ -316,6 +316,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 - Each release archives the health-zone forecast draws as `zone_forecast.csv` (#982).
 - `scripts/score_releases.jl` scores each release's zone forecast zone by zone into `data/zone/` (#983).
 - A release whose zone scoring fails is counted in the scoring log (#986).
+- `scripts/bench_province_composition.jl` times the province composition's stick-breaking against the closed-form Dirichlet-multinomial the health-zone composition uses, and shows that the two agree only at two patches (#1146).
+  With eight patches the closed form is a different distribution, so replacing the stick-breaking would need a refit.
+  Fitted values do not change.
 - Each release carries all five tables the dashboard map reads, adding the zone time series and the province and national estimates and time series to the zone estimates it already carried (#1114).
   `scripts/archive_dashboard.jl` collects them from the newest release of each of the last 14 data cut-offs, and the deploy from `main` stages them under `zone_map/archive/` with an index, leaving them out of pull request previews and `site.zip`.
   Releases from before this change do not carry the tables and are left out.
