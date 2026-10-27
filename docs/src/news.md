@@ -204,6 +204,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- The spatial hyperparameter pair plot against the prior moves from the province estimates to the province in-sample checks, where it replaces a pair plot of every province's reproduction number and case total.
 - Tables with more than ten body rows are compact, scroll inside a box with a sticky header, and have a row filter and sortable columns.
   Sorting is numeric where a column holds numbers, by the first number in a cell such as "1.2 (0.8–1.9)" or "12%".
   Smaller tables, and every table without JavaScript, render as before.
