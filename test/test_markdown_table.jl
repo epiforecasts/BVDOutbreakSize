@@ -79,3 +79,34 @@ end
         sprint(show, MIME("text/markdown"), msg)
     )
 end
+
+@testitem "join_names lists names for a summary bullet" begin
+    using BVDOutbreakSize: join_names
+
+    @test join_names(String[]) == ""
+    @test join_names(["a"]) == "a"
+    @test join_names(["a", "b"]) == "a and b"
+    @test join_names(["a", "b", "c"]) == "a, b and c"
+    ## A name that carries its own comma switches the separator.
+    @test join_names(["Cases, Ituri", "Deaths, Ituri", "Cases, Tshopo"]) ==
+        "Cases, Ituri; Deaths, Ituri and Cases, Tshopo"
+end
+
+@testitem "an unscored cell reads as the missing text" begin
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: markdown_table, finite_round
+
+    @test finite_round(0.123456) == 0.12
+    @test ismissing(finite_round(NaN))
+    @test ismissing(finite_round(Inf))
+    @test ismissing(finite_round(missing))
+
+    df = DataFrame("Bias" => finite_round.([0.123456, NaN]))
+    lines = split(strip(markdown_table(df; missing_text = "n/a")), "\n")
+    ## The column stays numeric, so it is still right-aligned.
+    @test lines[2] == "| ---: |"
+    @test lines[3] == "| 0.12 |"
+    @test lines[4] == "| n/a |"
+    ## Blank by default.
+    @test split(strip(markdown_table(df)), "\n")[4] == "|  |"
+end

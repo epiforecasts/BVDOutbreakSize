@@ -172,19 +172,51 @@ function _md_align(col)
 end
 
 """
+    markdown_table(df::DataFrame; missing_text = "") -> String
+
 GitHub-flavoured markdown table for a `DataFrame`, one header row from the
 column names and one body row per data row. Used to persist a rendered table
 to disk so a static page can embed it without re-running the fit, and by
-[`MarkdownTable`](@ref) to put a table on a Literate page.
+[`MarkdownTable`](@ref) to put a table on a Literate page. A `missing` cell
+prints as `missing_text`, blank by default.
 """
-function markdown_table(df::DataFrame)
+function markdown_table(df::DataFrame; missing_text::AbstractString = "")
     cols = names(df)
     header = "| " * join(cols, " | ") * " |"
     sep = "| " * join((_md_align(df[!, c]) for c in cols), " | ") * " |"
+    cell(x) = ismissing(x) ? missing_text : _md_cell(x)
     rows = map(eachrow(df)) do row
-        "| " * join((_md_cell(row[c]) for c in cols), " | ") * " |"
+        "| " * join((cell(row[c]) for c in cols), " | ") * " |"
     end
     return join(vcat(header, sep, rows), "\n") * "\n"
+end
+
+"""
+    finite_round(x; digits = 2) -> Union{Missing, Float64}
+
+`x` rounded to `digits` decimals for a summary table, or `missing` when `x`
+is `missing`, `NaN` or infinite, so an unscored value prints as the table's
+`missing_text` in [`markdown_table`](@ref) rather than as `NaN`.
+"""
+function finite_round(x; digits::Integer = 2)
+    return ismissing(x) || !isfinite(x) ? missing :
+        round(Float64(x); digits)
+end
+
+"""
+    join_names(names) -> String
+
+The names as one phrase for a summary bullet: `"a"`, `"a and b"`,
+`"a, b and c"`. When any name itself contains a comma, as the province
+stream names do (`"Confirmed cases, Ituri"`), the names are separated by
+`"; "` instead of `", "`, so `"a, x; b, y and c, z"`. An empty list gives
+an empty string.
+"""
+function join_names(v::AbstractVector)
+    isempty(v) && return ""
+    strs = string.(v)
+    sep = any(contains(","), strs) ? "; " : ", "
+    return join(strs, sep, " and ")
 end
 
 """

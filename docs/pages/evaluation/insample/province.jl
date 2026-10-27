@@ -1,6 +1,6 @@
 # # Province in-sample checks
 #
-# This page checks whether the joint model reproduces the per-province data it was fitted to, and refits it as a single population to check the spatial structure.
+# This page checks whether the joint model reproduces the per-province data it was fitted to, follows each province's published estimates across releases, and refits it as a single population to check the spatial structure.
 # The national checks are on the [national in-sample checks](@ref "In-sample checks") page.
 
 #md # ```@raw html
@@ -28,6 +28,8 @@ posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]));
 #
 # Whether each province's cases and deaths are reproduced, from the checks below.
 # Bias and coverage are defined as on the [national in-sample checks](@ref "In-sample checks") page, with coverage of the 90% predictive interval.
+# The split columns score each province's share at the observed national total, and the count columns score its counts once the national total is predicted as well.
+# A check that was not scored reads n/a.
 
 #md # ```@eval
 #md # using Markdown, BVDOutbreakSize
@@ -91,41 +93,33 @@ prior_case_ppc_fig #hide
 
 prior_death_ppc_fig #hide
 
+# ### Spatial hyperparameters against their prior
+#
+# Whether the data move the province model's spatial hyperparameters away from their prior.
+
 #md # ```@raw html
-#md # <details><summary>Province prior and posterior pair plot</summary>
+#md # <details><summary>Spatial hyperparameter pair plot</summary>
 #md # ```
 
-## Per-province entries of a vector deterministic, one draw vector each,
-## keyed `<name>_<patch>` so they can sit side by side in one table.
-function _patch_columns(chn, key::Symbol, name::AbstractString; f = identity)
-    draws = [collect(v) for v in vec(collect(chn[key]))]
-    return [
-        Symbol(name, "_", p) => Float64[f(d[p]) for d in draws]
-            for p in 1:N_PATCHES
-    ]
-end
-_province_pair_draws(chn) = NamedTuple(
-    vcat(
-        _patch_columns(chn, :R_T_patch, "R_T"),
-        _patch_columns(chn, :C_T_patch, "log10_C_T"; f = x -> log10(x + 1))
-    )
-)
-_province_pair_labels = Dict(
-    Symbol(name, "_", p) => string(label, ", ", PROVINCE_LABELS[p])
-        for p in 1:N_PATCHES
-        for (name, label) in (("R_T", "R_T"), ("log10_C_T", "log10 C_T"))
-)
-province_pair_fig = plot_pair(
-    _province_pair_draws(chn_joint);
-    prior = _province_pair_draws(prior_patch_chn),
-    labels = _province_pair_labels
+spatial_pair_fig = plot_pair(
+    chn_joint, spatial_params;
+    prior = prior_patch_chn, labels = spatial_labels
 );
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
-province_pair_fig #hide
+spatial_pair_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Joint posterior of the spatial hyperparameters, with the prior overlaid.
+#md # The province reproduction numbers and case totals are derived from these and are in the [province estimates](@ref "Province estimates").
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ## [Province compositions](@id province-compositions)
 #
@@ -365,6 +359,16 @@ MarkdownTable(province_count_calibration_table) #hide
 #md # <details><summary>Province posterior correlation heatmap</summary>
 #md # ```
 
+## Per-province entries of a vector deterministic, one draw vector each,
+## keyed `<name>_<patch>` so they can sit side by side in one table.
+function _patch_columns(chn, key::Symbol, name::AbstractString; f = identity)
+    draws = [collect(v) for v in vec(collect(chn[key]))]
+    return [
+        Symbol(name, "_", p) => Float64[f(d[p]) for d in draws]
+            for p in 1:N_PATCHES
+    ]
+end
+
 ## LaTeX label for one province's entry of a quantity. Spaces in a province
 ## name need escaping inside `\mathrm`.
 _province_tex(sym, p) = string(
@@ -424,6 +428,120 @@ province_pairs_fig = plot_stream_pairs(province_totals, province_observed);
 #md # ```
 
 province_pairs_fig #hide
+
+# ## Estimate evolution across releases
+#
+# How each province's estimates have moved as releases accrued, read from the estimates each release published at its own cut-off.
+# Releases began publishing per-province estimates recently, so each panel fills in as releases accumulate.
+
+#md # ```@raw html
+#md # <details><summary>Load the per-province estimates of each release</summary>
+#md # ```
+
+## Written by `scripts/score_releases.jl` from each release's
+## `province_estimates.csv`, one row per release, province and quantity. A
+## missing file reads as an empty table, which the figures report as nothing
+## collected.
+province_release_df = _release_data(
+    joinpath("province", "released_estimates.csv"),
+    (;
+        release = String, date = Date, area = String, patch = String,
+        pooled = Int, quantity = String, median = Float64, lo90 = Float64,
+        hi90 = Float64,
+    )
+)
+## One panel per province, the patches first in their usual order. A
+## province pooled into a shared patch is marked, since it carries its
+## patch's reproduction number and case-fatality ratio.
+_release_provinces = unique(vcat(PROVINCE_NAMES, province_release_df.area))
+_release_pooled = Set(
+    r.area for r in eachrow(province_release_df)
+        if coalesce(r.pooled, 0) == 1
+)
+_release_titles = Dict(
+    a => string(
+        get(Dict(zip(PROVINCE_NAMES, PROVINCE_LABELS)), a, a),
+        a in _release_pooled ? " (pooled)" : ""
+    ) for a in _release_provinces
+)
+_province_release_groups(q) = area_evolution_groups(
+    province_release_df, q;
+    areas = _release_provinces, labels = _release_titles
+)
+_no_release_note = "No releases scored yet. This fills in as releases accumulate."
+province_rt_release_fig = plot_evolution_by_group(
+    _province_release_groups("R_T");
+    ylabel = "Reproduction number",
+    title = "Province reproduction number by release",
+    released_label = "Released estimate", marks_label = "median, 90% bar",
+    refline = 1.0, ymax = 3.0, ncols = 4,
+    empty_note = _no_release_note
+);
+province_cases_release_fig = plot_evolution_by_group(
+    _province_release_groups("cases");
+    ylabel = "Confirmed cases",
+    title = "Province confirmed cases by release",
+    released_label = "Reported by the release cut-off", marks_label = "",
+    shared_yrange = false, ncols = 4, empty_note = _no_release_note
+);
+province_cfr_release_fig = plot_evolution_by_group(
+    _province_release_groups("CFR");
+    ylabel = "Case-fatality ratio",
+    title = "Province case-fatality ratio by release",
+    released_label = "Released estimate", marks_label = "median, 90% bar",
+    ymax = 1.0, ncols = 4,
+    empty_note = _no_release_note
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ### Reproduction number by release
+
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
+province_rt_release_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Each province's reproduction number at the cut-off of each release, as a median with its 90% interval bar.
+#md # The axis is fixed at three, and an interval past it is clamped and marked with an open triangle.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
+# ### Confirmed cases by release
+
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
+province_cases_release_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # The confirmed cases each province had reported by the cut-off of each release, each panel on its own scale.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
+# ### Case-fatality ratio by release
+
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
+province_cfr_release_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Each province's case-fatality ratio at each release, as a median with its 90% interval bar.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ## Province sensitivity to assumptions
 #
@@ -716,7 +834,7 @@ evaluation_insample_province_summary = let
     fitted = filter(r -> isfinite(r["Bias"]), province_calibration_table)
     worst = first(
         sort(fitted, "Bias"; by = abs, rev = true), min(3, size(fitted, 1))
-    )
+    )[!, "Stream"]
     function coverage_bullet(heading, tbl, scale)
         low = first(sort(tbl, "90% coverage"), min(1, size(tbl, 1)))
         return string(
@@ -731,18 +849,12 @@ evaluation_insample_province_summary = let
         )
     end
     overall = [
-        string(
-            "- **Least well reproduced:** ",
-            join(
-                [
-                    string(
-                        r["Stream"], " (bias ", fmt(r["Bias"]),
-                        ", 90% coverage ", fmt(r["90% coverage"]), ")"
-                    )
-                        for r in eachrow(worst)
-                ], "; "
-            ), "."
-        ),
+        isempty(worst) ? nothing :
+            string(
+                "- **Least well reproduced:** ", join_names(worst),
+                length(worst) == 1 ? " has" : " have",
+                " the largest absolute bias in the province split."
+            ),
         coverage_bullet("Coverage", fitted, ""),
         coverage_bullet(
             "Count-scale coverage",
@@ -752,36 +864,38 @@ evaluation_insample_province_summary = let
             ""
         ),
     ]
+    ## One row per province and stream, the split and the count checks
+    ## side by side. A check that was not scored reads n/a.
     rows(tbl) = Dict(r["Stream"] => r for r in eachrow(tbl))
     cal = rows(province_calibration_table)
     count_cal = rows(province_count_calibration_table)
-    function calibration(tbl, kind, p, label)
-        r = get(tbl, string(kind, ", ", PROVINCE_LABELS[p]), nothing)
-        r === nothing && return string("- ", label, ": not scored.")
-        return string(
-            "- ", label, ": bias ", fmt(r["Bias"]), " and 90% coverage ",
-            fmt(r["90% coverage"]), " over ", r["Vintages"], " vintages."
-        )
-    end
-    detail = [
-        join(
-            [
-                string("**", PROVINCE_LABELS[p], "**"), "",
-                calibration(cal, "Confirmed cases", p, "Confirmed cases"),
-                calibration(cal, "Confirmed deaths", p, "Confirmed deaths"),
-                calibration(
-                    count_cal, "Confirmed cases", p,
-                    "Confirmed cases as counts"
-                ),
-                calibration(
-                    count_cal, "Confirmed deaths", p,
-                    "Confirmed deaths as counts"
-                ),
-            ], "\n"
-        )
-            for p in 1:N_PATCHES
+    cells = [
+        (PROVINCE_LABELS[p], kind) for p in 1:N_PATCHES
+            for kind in ("Confirmed cases", "Confirmed deaths")
     ]
-    join(vcat([join(overall, "\n")], detail), "\n\n")
+    value(tbl, label, kind, col) = let r = get(
+            tbl, string(kind, ", ", label), nothing
+        )
+        r === nothing ? missing : finite_round(r[col])
+    end
+    column(tbl, col) = Union{Missing, Float64}[
+        value(tbl, label, kind, col) for (label, kind) in cells
+    ]
+    table = DataFrame(
+        "Province" => first.(cells),
+        "Stream" => last.(cells),
+        "Bias (split)" => column(cal, "Bias"),
+        "90% coverage (split)" => column(cal, "90% coverage"),
+        "Bias (counts)" => column(count_cal, "Bias"),
+        "90% coverage (counts)" => column(count_cal, "90% coverage"),
+    )
+    join(
+        [
+            join(filter(!isnothing, overall), "\n"),
+            markdown_table(table; missing_text = "n/a"),
+        ],
+        "\n\n"
+    )
 end
 dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"
