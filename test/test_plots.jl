@@ -524,6 +524,45 @@ end
     @test marker_y > 0.9 * cap
 end
 
+@testitem "plot_forecast_overlay wraps streams into ncol columns" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: plot_forecast_overlay
+    using DataFrames: DataFrame
+    using Dates: Date, Day
+    ## Seven zones at one horizon: the default stacks them in one column,
+    ## and `ncol = 3` wraps them into three columns of three rows.
+    md = Date(2026, 6, 21)
+    rows = [
+        (;
+            stream = "zone $(z)", made_date = md, horizon = 7,
+            target_date = md + Day(7), fit = "joint", observed = 2.0,
+            median = 2.0, lo90 = 1.0, hi90 = 4.0,
+        )
+            for z in 1:7
+    ]
+    panel_axes(fig) = [
+        x for x in fig.content if x isa CairoMakie.Makie.Axis
+    ]
+    ## Grid positions through `gridcontent`, which GridLayoutBase exports.
+    span(ax) = CairoMakie.Makie.GridLayoutBase.gridcontent(ax).span
+    grid_cols(fig) = sort(unique(span(ax).cols for ax in panel_axes(fig)))
+    grid_rows(fig) = sort(unique(span(ax).rows for ax in panel_axes(fig)))
+    stacked = plot_forecast_overlay(DataFrame(rows))
+    @test length(grid_cols(stacked)) == 1
+    @test length(grid_rows(stacked)) == 7
+    wrapped = plot_forecast_overlay(DataFrame(rows); ncol = 3)
+    @test length(panel_axes(wrapped)) == 7
+    @test length(grid_cols(wrapped)) == 3
+    @test length(grid_rows(wrapped)) == 3
+    ## Each panel is titled with its zone, and only the lowest panel in
+    ## each column carries the date axis label.
+    @test sort([ax.title[] for ax in panel_axes(wrapped)]) ==
+        ["zone $(z)" for z in 1:7]
+    @test count(ax -> ax.xlabel[] != "", panel_axes(wrapped)) == 3
+    @test_throws ArgumentError plot_forecast_overlay(DataFrame(rows); ncol = 0)
+end
+
 @testitem "plot_forecast_overlay tick density scales with made dates" setup = [
     HeadlessMakie,
 ] begin

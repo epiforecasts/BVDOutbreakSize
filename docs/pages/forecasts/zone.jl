@@ -2,7 +2,7 @@
 #
 # This page splits the one-week-ahead confirmed-case forecast across the health zones, as defined in the [health-zone model](@ref "Health-zone model") Methods section.
 # The national forecast is on the [forecasts](@ref "Forecasts") page and the split by province on the [province forecasts](@ref "Province forecasts") page.
-# How these forecasts have scored against what each zone went on to report is in the [forecast by health zone](@ref "Forecast by health zone") evaluation.
+# How these forecasts have scored against what each zone went on to report is in the [forecast by health zone across releases](@ref "Forecast by health zone across releases") evaluation.
 # The zone estimates behind the split are on the [health-zone estimates](@ref "Health-zone estimates") page.
 
 #md # ```@raw html
@@ -189,54 +189,6 @@ end
 
 #md # ```@raw html
 #md # </details>
-#md # ```
-
-# ## Past zone forecasts against what was observed
-#
-# Each release archives its zone forecast, and later releases score it in the [forecast by health zone across releases](@ref "Forecast by health zone across releases") evaluation.
-
-#md # ```@raw html
-#md # <details><summary>Load the archived zone forecasts and their outcomes</summary>
-#md # ```
-
-## Written by `scripts/score_releases.jl` from each release's
-## `zone_forecast.csv`, in the national overlay's schema. A missing file
-## reads as an empty table, which the figure reports as nothing scored.
-zone_overlay_df = _release_data(
-    joinpath("zone", "forecast_overlay.csv"),
-    (;
-        release = String, made_date = Date, stream = String, horizon = Int,
-        target_date = Date, fit = String, observed = Float64,
-        median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
-        hi60 = Float64, lo90 = Float64, hi90 = Float64,
-    )
-)
-zone_past_keys = zone_inputs.zone_keys[
-    first(sortperm([median(v) for v in zone_fc_draws.zones]; rev = true), 10),
-]
-zone_past_fig = plot_forecast_overlay(
-    zone_score_rows(
-        scored_overlay(zone_overlay_df), zone_past_keys,
-        zone_inputs.zone_labels[indexin(zone_past_keys, zone_inputs.zone_keys)]
-    );
-    empty_message = "No zone forecast has been scored yet. Scores appear " *
-        "from the first release that archives the zone forecast onwards."
-);
-
-#md # ```@raw html
-#md # </details>
-#md # <figure class="bvd-figure">
-#md # ```
-
-zone_past_fig #hide
-
-#md # ```@raw html
-#md # <figcaption>
-#md # Past forecasts for the ten zones with the largest forecasts in this build, by the cut-off each was made from.
-#md # Each shows its median and 90% predictive interval beside the persistence baseline and the count the zone went on to report.
-#md # A week is left out when the zone tables carry no vintage on its last day, when it holds a harmonisation-break day, or when its province moved unallocated cases into named zones during it.
-#md # </figcaption>
-#md # </figure>
 #md # ```
 
 # ## Archiving the zone forecast

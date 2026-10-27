@@ -2,7 +2,7 @@
 #
 # This page gives the one-week-ahead forecast for each province from the joint model, as defined in the [province forecast](@ref "Province forecast") Methods section.
 # The national forecast is on the [forecasts](@ref "Forecasts") page.
-# How these forecasts have scored against what each province went on to report is in the [forecast by province](@ref "Forecast by province") evaluation.
+# How these forecasts have scored against what each province went on to report is in the [forecast by province across releases](@ref "Forecast by province across releases") evaluation.
 # How well the model reproduces each province's share is on the [in-sample checks](@ref province-compositions) page.
 
 #md # ```@raw html
@@ -215,46 +215,6 @@ forecast_province_fig(7) #hide
 
 forecast_province_fig(8) #hide
 
-# ## Past forecasts against what was observed
-
-#md # ```@raw html
-#md # <details><summary>Load the archived province forecasts and their outcomes</summary>
-#md # ```
-
-## Written by `scripts/score_releases.jl` from each release's
-## `province_forecast.csv`, in the national overlay's schema. A missing
-## file reads as an empty table, which the figure reports as nothing scored.
-province_overlay_df = _release_data(
-    joinpath("province", "forecast_overlay.csv"),
-    (;
-        release = String, made_date = Date, stream = String, horizon = Int,
-        target_date = Date, fit = String, observed = Float64,
-        median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
-        hi60 = Float64, lo90 = Float64, hi90 = Float64,
-    )
-)
-province_overlay_fig = plot_forecast_overlay(
-    scored_overlay(province_overlay_df);
-    empty_message = "No projection forecast has been scored yet. " *
-        "This fills in as releases accumulate."
-);
-
-#md # ```@raw html
-#md # </details>
-#md # <figure class="bvd-figure">
-#md # ```
-
-province_overlay_fig #hide
-
-#md # ```@raw html
-#md # <figcaption>
-#md # Past province forecasts by the cut-off each was made from, one panel per stream and horizon, filling in as releases accumulate.
-#md # Each shows its median and 90% predictive interval beside the persistence baseline and the count the province went on to report.
-#md # A window holding a harmonisation-break day is left out, because that day's backfill is published for the country and not by province.
-#md # </figcaption>
-#md # </figure>
-#md # ```
-
 # ## Saving province map assets
 #
 # The [dashboard](@ref "Dashboard") map's province layer and its detail column read the per-province and national estimates and time series written here.
@@ -341,8 +301,9 @@ CSV.write(
         n = obs.n, national_care..., national_care_forecast...
     )
 );
-## The daily reproduction number and the weekly confirmed cases and deaths
-## of each patch and of the country, keyed by the patch label, and the
+## The daily reproduction number, the weekly confirmed cases and deaths and
+## their posterior predictive, of each patch and of the country, keyed by
+## the patch label, and the
 ## reported patients in isolation and beds over the same eight weeks, keyed
 ## by source province.
 province_ts_rt_args = (;
@@ -371,6 +332,31 @@ function province_weekly(inc, national)
         )
     )
 end
+## The joint's posterior predictive of the same weekly counts, binned into
+## the same windows (see `joint_count_replicates` in `docs/pages/_setup.jl`).
+## The country is left out, with a warning, when its replicates sit on
+## other vintage days than its observed series over those weeks, since they
+## would then be binned differently.
+function province_weekly_fit(stream::Symbol, inc, national_days)
+    r = getproperty(joint_count_replicates(), stream)
+    as_matrix(reps) = permutedims(reduce(hcat, reps))
+    t = weekly_quantile_table(
+        inc.days, [as_matrix(p.replicates) for p in r.panels],
+        PROVINCE_LABELS[1:N_PATCHES]; cutoff = obs.cutoff, n = obs.n
+    )
+    recent(d) = filter(>(obs.n - 7 * 8), d)
+    if recent(r.national_days) != recent(national_days)
+        @warn "National $(stream) fit left out of the province time series: " *
+            "its replicates and observed counts are on different vintage days" replicated = recent(r.national_days) observed = recent(national_days)
+        return t
+    end
+    return vcat(
+        t, weekly_quantile_table(
+            r.national_days, [as_matrix(r.national)], ["National"];
+            cutoff = obs.cutoff, n = obs.n
+        )
+    )
+end
 ## Tag a long table with the series it holds.
 _with_series(t, s) = (t[!, :series] .= s; t)
 CSV.write(
@@ -395,6 +381,16 @@ CSV.write(
         _with_series(
             province_weekly(province_ts_deaths, obs.confirmed_deaths_history),
             "deaths"
+        ),
+        _with_series(
+            province_weekly_fit(
+                :cases, province_ts_inc, obs.confirmed_history.days
+            ), "cases_fit"
+        ),
+        _with_series(
+            province_weekly_fit(
+                :deaths, province_ts_deaths, obs.confirmed_deaths_history.days
+            ), "deaths_fit"
         ),
         _with_series(
             reported_level_table(
