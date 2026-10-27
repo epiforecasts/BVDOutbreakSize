@@ -1,6 +1,6 @@
 # # Province in-sample checks
 #
-# This page checks whether the joint model reproduces the per-province data it was fitted to, and refits it as a single population to check the spatial structure.
+# This page checks whether the joint model reproduces the per-province data it was fitted to, follows each province's published estimates across releases, and refits it as a single population to check the spatial structure.
 # The national checks are on the [national in-sample checks](@ref "In-sample checks") page.
 
 #md # ```@raw html
@@ -426,6 +426,120 @@ province_pairs_fig = plot_stream_pairs(province_totals, province_observed);
 #md # ```
 
 province_pairs_fig #hide
+
+# ## Estimate evolution across releases
+#
+# How each province's estimates have moved as releases accrued, read from the estimates each release published at its own cut-off.
+# Releases began publishing per-province estimates recently, so each panel fills in as releases accumulate.
+
+#md # ```@raw html
+#md # <details><summary>Load the per-province estimates of each release</summary>
+#md # ```
+
+## Written by `scripts/score_releases.jl` from each release's
+## `province_estimates.csv`, one row per release, province and quantity. A
+## missing file reads as an empty table, which the figures report as nothing
+## collected.
+province_release_df = _release_data(
+    joinpath("province", "released_estimates.csv"),
+    (;
+        release = String, date = Date, area = String, patch = String,
+        pooled = Int, quantity = String, median = Float64, lo90 = Float64,
+        hi90 = Float64,
+    )
+)
+## One panel per province, the patches first in their usual order. A
+## province pooled into a shared patch is marked, since it carries its
+## patch's reproduction number and case-fatality ratio.
+_release_provinces = unique(vcat(PROVINCE_NAMES, province_release_df.area))
+_release_pooled = Set(
+    r.area for r in eachrow(province_release_df)
+        if coalesce(r.pooled, 0) == 1
+)
+_release_titles = Dict(
+    a => string(
+        get(Dict(zip(PROVINCE_NAMES, PROVINCE_LABELS)), a, a),
+        a in _release_pooled ? " (pooled)" : ""
+    ) for a in _release_provinces
+)
+_province_release_groups(q) = area_evolution_groups(
+    province_release_df, q;
+    areas = _release_provinces, labels = _release_titles
+)
+_no_release_note = "No releases scored yet. This fills in as releases accumulate."
+province_rt_release_fig = plot_evolution_by_group(
+    _province_release_groups("R_T");
+    ylabel = "Reproduction number",
+    title = "Province reproduction number by release",
+    released_label = "Released estimate", marks_label = "median, 90% bar",
+    refline = 1.0, ymax = 3.0, ncols = 4,
+    empty_note = _no_release_note
+);
+province_cases_release_fig = plot_evolution_by_group(
+    _province_release_groups("cases");
+    ylabel = "Confirmed cases",
+    title = "Province confirmed cases by release",
+    released_label = "Reported by the release cut-off", marks_label = "",
+    shared_yrange = false, ncols = 4, empty_note = _no_release_note
+);
+province_cfr_release_fig = plot_evolution_by_group(
+    _province_release_groups("CFR");
+    ylabel = "Case-fatality ratio",
+    title = "Province case-fatality ratio by release",
+    released_label = "Released estimate", marks_label = "median, 90% bar",
+    ymax = 1.0, ncols = 4,
+    empty_note = _no_release_note
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ### Reproduction number by release
+
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
+province_rt_release_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Each province's reproduction number at the cut-off of each release, as a median with its 90% interval bar.
+#md # The axis is fixed at three, and an interval past it is clamped and marked with an open triangle.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
+# ### Confirmed cases by release
+
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
+province_cases_release_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # The confirmed cases each province had reported by the cut-off of each release, each panel on its own scale.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
+# ### Case-fatality ratio by release
+
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
+province_cfr_release_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Each province's case-fatality ratio at each release, as a median with its 90% interval bar.
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ## Province sensitivity to assumptions
 #

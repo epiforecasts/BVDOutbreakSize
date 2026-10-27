@@ -437,6 +437,55 @@ end
     @test shared_joint.limits[][2] == shared_exports.limits[][2]
 end
 
+@testitem "area_evolution_groups builds one group per area" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: area_evolution_groups, plot_evolution_by_group
+    using DataFrames: DataFrame
+    using Dates: Date
+
+    df = DataFrame(
+        date = [Date(2026, 10, 20), Date(2026, 10, 6), Date(2026, 10, 20)],
+        area = ["ituri", "ituri", "ituri"],
+        quantity = ["R_T", "R_T", "cases"],
+        median = [1.1, 1.4, 7040.0],
+        lo90 = [0.7, 0.9, missing], hi90 = [1.5, 2.0, missing]
+    )
+    groups = area_evolution_groups(
+        df, "R_T"; areas = ["ituri", "tshopo"],
+        labels = Dict("ituri" => "Ituri")
+    )
+    ## Areas in the order asked for, the label defaulting to the key, and an
+    ## area with no rows kept as an empty group.
+    @test first.(groups) == ["Ituri", "tshopo"]
+    @test isempty(last(groups[2]))
+    ## Rows sorted by date, the 30% and 60% bounds absent.
+    rt = last(groups[1])
+    @test first.(rt) == ["2026-10-06", "2026-10-20"]
+    @test rt[1][7:8] == (0.9, 2.0)
+    @test all(isnan, rt[1][3:6])
+    ## A count with no interval takes its median as both bounds.
+    cases = only(last(only(area_evolution_groups(df, "cases"; areas = ["ituri"]))))
+    @test cases[7:8] == (7040.0, 7040.0)
+
+    ## The marks' legend note follows `marks_label`, and an empty one drops it.
+    legend_labels(fig) = [
+        e.label[] for x in fig.content if x isa CairoMakie.Makie.Legend
+            for g in x.entrygroups[] for e in last(g)
+    ]
+    fig = plot_evolution_by_group(groups; marks_label = "median, 90% bar")
+    @test legend_labels(fig) == ["Released estimate (per release) (median, 90% bar)"]
+    fig = plot_evolution_by_group(
+        area_evolution_groups(df, "cases"; areas = ["ituri"]);
+        released_label = "Reported", marks_label = ""
+    )
+    @test legend_labels(fig) == ["Reported"]
+    ## No rows at all gives the note figure.
+    @test plot_evolution_by_group(
+        area_evolution_groups(df[1:0, :], "R_T"; areas = ["ituri"])
+    ) isa CairoMakie.Makie.Figure
+end
+
 @testitem "plot_forecast_overlay empty and filled" setup = [HeadlessMakie] begin
     using BVDOutbreakSize: plot_forecast_overlay
     using DataFrames: DataFrame
