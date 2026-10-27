@@ -2,7 +2,7 @@
 #
 # This page gives the one-week-ahead forecast for each province from the joint model, as defined in the [province forecast](@ref "Province forecast") Methods section.
 # The national forecast is on the [forecasts](@ref "Forecasts") page.
-# How these forecasts have scored against what each province went on to report is in the [forecast by province](@ref "Forecast by province") evaluation.
+# How these forecasts have scored against what each province went on to report is in the [forecast by province across releases](@ref "Forecast by province across releases") evaluation.
 # How well the model reproduces each province's share is on the [in-sample checks](@ref province-compositions) page.
 
 #md # ```@raw html
@@ -214,46 +214,6 @@ forecast_province_fig(7) #hide
 # ### Nord-Ubangi
 
 forecast_province_fig(8) #hide
-
-# ## Past forecasts against what was observed
-
-#md # ```@raw html
-#md # <details><summary>Load the archived province forecasts and their outcomes</summary>
-#md # ```
-
-## Written by `scripts/score_releases.jl` from each release's
-## `province_forecast.csv`, in the national overlay's schema. A missing
-## file reads as an empty table, which the figure reports as nothing scored.
-province_overlay_df = _release_data(
-    joinpath("province", "forecast_overlay.csv"),
-    (;
-        release = String, made_date = Date, stream = String, horizon = Int,
-        target_date = Date, fit = String, observed = Float64,
-        median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
-        hi60 = Float64, lo90 = Float64, hi90 = Float64,
-    )
-)
-province_overlay_fig = plot_forecast_overlay(
-    scored_overlay(province_overlay_df);
-    empty_message = "No projection forecast has been scored yet. " *
-        "This fills in as releases accumulate."
-);
-
-#md # ```@raw html
-#md # </details>
-#md # <figure class="bvd-figure">
-#md # ```
-
-province_overlay_fig #hide
-
-#md # ```@raw html
-#md # <figcaption>
-#md # Past province forecasts by the cut-off each was made from, one panel per stream and horizon, filling in as releases accumulate.
-#md # Each shows its median and 90% predictive interval beside the persistence baseline and the count the province went on to report.
-#md # A window holding a harmonisation-break day is left out, because that day's backfill is published for the country and not by province.
-#md # </figcaption>
-#md # </figure>
-#md # ```
 
 # ## Saving province map assets
 #

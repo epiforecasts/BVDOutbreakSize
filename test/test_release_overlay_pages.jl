@@ -63,3 +63,33 @@ end
         @test get(flags, id, false)
     end
 end
+
+## Past forecasts against what was observed are scored on the forecast
+## evaluation pages only, so no forecast page reads the archived forecast
+## overlays or carries its own copy of the figure.
+@testitem "report pages: past forecasts sit on the evaluation pages" tags = [
+    :quality,
+] begin
+    using BVDOutbreakSize
+    pages = joinpath(pkgdir(BVDOutbreakSize), "docs", "pages")
+    readers = String[]
+    for (dir, _, files) in walkdir(pages), f in files
+        endswith(f, ".jl") || continue
+        path = joinpath(dir, f)
+        any(
+            l -> !occursin(r"^\h*#", l) &&
+                occursin("forecast_overlay.csv", l),
+            eachline(path)
+        ) && push!(readers, replace(relpath(path, pages), '\\' => '/'))
+    end
+    @test !isempty(readers)
+    @test all(startswith("evaluation/forecast/"), readers)
+    for f in readdir(joinpath(pages, "forecasts"); join = true)
+        endswith(f, ".jl") || continue
+        @test !any(
+            l -> startswith(l, "# ## Past") &&
+                occursin("against what was observed", l),
+            eachline(f)
+        )
+    end
+end

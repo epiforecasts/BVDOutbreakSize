@@ -198,6 +198,9 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- Past province and health-zone forecasts against what was observed are shown only on the forecast evaluation pages, not also on the forecast pages.
+  Each forecast page links to its evaluation section instead.
+- The past province and health-zone forecasts are drawn as a grid of three columns, one panel per province stream or zone, rather than a single column.
 - The province and health-zone estimates report point prevalence at the cut-off: the people infected but not yet symptomatic and the people with symptoms who have not yet been detected, per 100,000 residents.
   A figure ranks the areas by the rate in the community.
   Each posterior draw gives its own prevalence from its daily infections and delays, and the methods give the calculation.
