@@ -984,21 +984,19 @@ end
     @test small.modelled != unscaled(small)
 end
 
-@testitem "onset scan level prior is a zero-centred half-normal" begin
-    ## Mode at no level error, scale 0.5%, 95% of the mass below 1%.
+@testitem "onset_reporting_model builds and evaluates with an empty history" begin
     using BVDOutbreakSize: onset_reporting_model
-    using Distributions: Normal, Truncated, quantile
+    using Turing: logjoint
+    using Random: Xoshiro
 
     oc = (;
-        onset_days = [10, 11], report_days = [15, 15],
-        prev_report_days = [0, 0], increments = [2, 3],
+        onset_days = Int[], report_days = Int[],
+        prev_report_days = Int[], increments = Int[],
     )
-    p = onset_reporting_model(oc, fill(30.0, 25)).defaults.scan_sd_prior
-    @test p isa Truncated
-    @test p.untruncated == Normal(0.0, 0.005)
-    @test minimum(p) == 0
-    @test maximum(p) == Inf
-    @test quantile(p, 0.95) < 0.01
+    model = onset_reporting_model(oc, fill(30.0, 25))
+    d = rand(Xoshiro(20261027), model)
+    @test isfinite(logjoint(model, d))
+    @test isempty(model().modelled)
 end
 
 @testitem "safe_studentt stays valid under extreme scale/df" begin

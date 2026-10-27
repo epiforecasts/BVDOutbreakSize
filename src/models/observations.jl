@@ -4119,13 +4119,10 @@ negative measured increments score as large-but-plausible residuals rather
 than breaking a count likelihood.
 
 Returns `(; increments, modelled, scan_level, scales, logit_h0, γ,
-grid_start, grid_end, alpha, τ, σ_scan, η0, σ_h0, σ_γ, β, σ_a, ρ, ν)` with
-`modelled` the per-cell increment means the likelihood scores (each
-figure's scan level applied), `scan_level` the per-figure multipliers, `scales` the per-cell observation
-scales it scores them with, `grid_end` the report-date grid day the
-calendar walk was built up to
-(`max(report_days)`, or `grid_start` when the history is empty), and the
-hyperparameters re-exposed at this level for the pairs-plot summary.
+grid_start, grid_end, alpha, τ, σ_scan, η0, σ_h0, σ_γ, β, σ_a, ρ, ν)`.
+`modelled` is the per-cell increment means the likelihood scores, with each
+figure's scan level applied. `scales` is the per-cell observation scales and
+`scan_level` the per-figure multipliers.
 """
 @model function onset_reporting_model(
         onset_curve_history, onsets::AbstractVector;

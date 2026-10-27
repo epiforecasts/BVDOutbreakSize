@@ -255,12 +255,12 @@ drawn with the Student-t the scored cells take. Its variance is the one
 fitted read SD `τ`, plus each figure's scan level error on its total,
 `σ_scan² (then² + now²)`, with `then` and `now` the two figures' totals.
 `σ_scan` is the scan level SD fitted by [`onset_reporting_model`](@ref).
-The fitted `z_scan` of the last scored figure is not reused, so the
-forecast's level error is independent of the fit. The increment is drawn on the whole figure, not per onset date, since the
-figure's total is the quantity the forecast is scored on. The split of each
-increment into reports of onsets up to the cut-off (`backfill`) and after it
-(`future`) is tracked, with the total the triangle should already have
-printed by the cut-off.
+The forecast's level error is drawn independently of the fit. The increment
+is drawn on the whole figure, not per onset date, since the figure's total
+is the quantity the forecast is scored on. The split of each increment into
+reports of onsets up to the cut-off (`backfill`) and after it (`future`) is
+tracked, with the total the triangle should already have printed by the
+cut-off.
 """
 @model function onset_forecast_model(onsets, state, n, vintages)
     past = onsets[1:n]
