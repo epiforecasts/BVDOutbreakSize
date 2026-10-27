@@ -198,7 +198,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
-- The dashboard map has a date slider on the reproduction-number metrics that recolours the zones or provinces by the daily reproduction number on that date, with a play button that steps it a week at a time (#PRNUM).
+- The dashboard map has a date slider on the reproduction-number metrics that recolours the zones or provinces by the daily reproduction number on that date, with a play button that steps it a week at a time (#1168).
   It starts at the cut-off, where the map is unchanged, and before it the chance-R-above-one metric shows the median reproduction number, since the daily series carry no probability.
   The detail charts show the last 4 or 8 weeks or the whole series, 8 weeks by default, with the reproduction number's axis fitted to the period shown and a rule on the map's date.
   The model and the fitted values do not change.
