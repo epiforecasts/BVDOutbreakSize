@@ -97,8 +97,6 @@ end
         θ = rand(Xoshiro(seed), m)
         @test haskey(θ, @varname(log_Rt_knots))
         @test !haskey(θ, @varname(z))
-        ## No response term: the walk alone sets Rt.
-        @test !haskey(θ, @varname(intervention_effect))
         s = returned(m, θ)
         @test log.(s.Rt[days[2:end]]) ≈ θ[@varname(log_Rt_knots)]
         @test s.log_R ≈ log.(s.Rt[days])

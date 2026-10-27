@@ -202,9 +202,6 @@ The knots after the first are sampled as `log_Rt_knots`, the log-`R_t` on
 each knot day, in centred form ([`RandomWalkVector`](@ref)). The data pin
 the level on each knot day, which is the sampled coordinate.
 
-The walk carries every change in transmission, the response included;
-there is no separate response term.
-
 The walk base `log_R0` is not sampled here. It is passed in, derived
 forward from the sampled growth rate `r` and the generation interval
 through Euler–Lotka (`R0 = r_to_R0(r, g)` in [`infection_model`](@ref)),
@@ -217,9 +214,9 @@ which clamps to `R0` before its first knot.
 
 The random-walk step SD prior is a half-normal SD 0.1, so the weekly
 log-`R_t` is unlikely to change by more than about 20% (two SD ≈ 0.2) from
-one week to the next, and `sigma_rw = 0` is a constant `R_t`. The walk
-starts at `rt_start`, so every knot sits in the observed window rather than
-drifting over the unobserved pre-report stretch.
+one week to the next. The walk starts at `rt_start`, so every knot sits in
+the observed window rather than drifting over the unobserved pre-report
+stretch.
 
 With `forecast` a [`ForecastHorizon`](@ref) the walk runs past `n` on
 knots a week apart ([`future_knot_days`](@ref)), with standard-normal
@@ -1992,29 +1989,21 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    `n_patches - 1` sum-to-zero directions ([`sum_to_zero_basis`](@ref)),
     ##    which gives the distribution of `n_patches` independent
     ##    `N(0, σ_ε²)` draws with their mean subtracted, with no direction
-    ##    the likelihood cannot see. There is no change at detection: a
-    ##    fitted step there would trade against the provinces' own `R_t`
-    ##    walks, which see the same arrivals, so any change in what a
-    ##    province receives comes through the walks and the sender's
-    ##    incidence.
+    ##    the likelihood cannot see.
     ε_matrix = zeros(Tp, n_patches, ng)
     if coupled
         ε_bar ~ importation_epsilon_prior
         σ_ε ~ importation_sd_prior
         z_ε ~ product_distribution(fill(Normal(0, 1), n_patches - 1))
         log_ε_dev = sum_to_zero(sum_to_zero_factor(basis, σ_ε), z_ε)
-        @inbounds for q in 1:n_patches
-            ## Capped at one: the origin cannot send away more than it
-            ## generates. The prior sits four orders of magnitude below
-            ## the cap, so this binds only in the far tail.
-            lvl = min(ε_bar * exp(log_ε_dev[q]), one(Tp))
-            for t in 1:ng
-                ε_matrix[q, t] = lvl
-            end
-        end
+        ## Capped at one: the origin cannot send away more than it
+        ## generates. The prior sits four orders of magnitude below the
+        ## cap, so this binds only in the far tail.
+        ε_patch = min.(ε_bar .* exp.(log_ε_dev), one(Tp))
+        ε_matrix = repeat(ε_patch; outer = (1, ng))
         importation_epsilon := ε_bar
         importation_epsilon_sd := σ_ε
-        importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
+        importation_epsilon_patch := ε_patch
         ## The log flows `log K + W` have a multivariate normal prior whose
         ## mean is the log gravity kernel, so gravity is the prior and `W` is
         ## the data's departure from it. `W = L ζ` is non-centred on the
