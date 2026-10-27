@@ -1424,4 +1424,4 @@ end
 #
 # The full analysis code, data and model definitions are in the [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize) repository.
 # Issues, corrections and suggestions are welcome there.
-# Maintained by Sam Abbott, Kath Sherratt, Samuel Brand and Sebastian Funk.
+# Maintained by Sam Abbott and Sebastian Funk.
