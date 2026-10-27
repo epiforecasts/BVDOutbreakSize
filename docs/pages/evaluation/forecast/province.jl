@@ -23,7 +23,7 @@ chn_joint = load_fit("joint");
 
 # ## Summary
 #
-# The overall bullets come first, then a short block per province, from the scores below.
+# The overall bullets come first, then a table of each province's scores, from the sections below.
 
 #md # ```@eval
 #md # using Markdown, BVDOutbreakSize
@@ -422,8 +422,6 @@ evaluation_province_overlay_fig #hide
 ## tables built further down, so they are written here and read back when
 ## the site is assembled.
 evaluation_forecast_province_summary = let
-    fmt(x) = ismissing(x) || !isfinite(x) ? "n/a" :
-        string(round(x; digits = 2))
     overview = forecast_score_overview(province_scores_df)
     ## The archive labels each province stream `<stream> [<province name>]`.
     function scored(p)
@@ -459,24 +457,34 @@ evaluation_forecast_province_summary = let
             ),
         ]
     end
-    function detail(p)
-        sc = scored(p)
-        bullets = [
-            string(
-                "- ", replace(r.stream, sc.tag => ""), ": relative skill ",
-                fmt(r.rel_to_baseline), ", 90% coverage ",
-                fmt(r.coverage_90), " over ", r.n, " forecasts."
-            )
-                for r in eachrow(sc.rows)
-        ]
-        isempty(bullets) && (bullets = ["- No scored forecast yet."])
-        return join(
-            vcat([string("**", PROVINCE_LABELS[p], "**"), ""], bullets), "\n"
-        )
-    end
+    unscored = [PROVINCE_LABELS[p] for p in 1:N_PATCHES if p ∉ with_scores]
+    isempty(with_scores) || isempty(unscored) || push!(
+        overall,
+        string("- **Not scored yet:** ", join(unscored, ", "), ".")
+    )
+    ## One row per province and stream.
+    table = reduce(
+        vcat,
+        [
+            let sc = scored(p)
+                DataFrame(
+                    "Province" => fill(PROVINCE_LABELS[p], size(sc.rows, 1)),
+                    "Stream" => replace.(sc.rows.stream, sc.tag => ""),
+                    "Relative skill" =>
+                        round.(sc.rows.rel_to_baseline; digits = 2),
+                    "90% coverage" => round.(sc.rows.coverage_90; digits = 2),
+                    "Forecasts" => sc.rows.n,
+                )
+            end
+                for p in with_scores
+        ];
+        init = DataFrame()
+    )
     join(
-        vcat([join(overall, "\n")], [detail(p) for p in 1:N_PATCHES]),
-        "\n\n"
+        vcat(
+            [join(overall, "\n")],
+            size(table, 1) == 0 ? String[] : [markdown_table(table)]
+        ), "\n\n"
     )
 end
 dashboard_dir = joinpath(

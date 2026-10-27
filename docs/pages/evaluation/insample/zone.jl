@@ -27,7 +27,7 @@ frozen_local = load_fit("local_frozen_validation");
 
 # ## Summary
 #
-# The overall bullets come first, then a block per province, from the calibration below.
+# The bullets come from the [zone composition calibration](@ref "Zone composition calibration") table, which gives each province's own bias and coverage.
 # Bias and coverage are defined as on the [national in-sample checks](@ref "In-sample checks") page, with a nominal coverage of 0.9.
 
 #md # ```@eval
@@ -401,21 +401,20 @@ evaluation_insample_zone_summary = let
     )
     worst = first(
         sort(fitted, "Bias"; by = abs, rev = true), min(3, size(fitted, 1))
-    )
+    )[!, "Stream"]
     low = first(sort(fitted, "90% coverage"), min(1, size(fitted, 1)))
+    ## Semicolons separate the names when a name carries its own comma.
+    listed(v) = let sep = any(contains(","), v) ? "; " : ", "
+        length(v) <= 1 ? join(v) :
+            join(v, sep, sep == "; " && length(v) > 2 ? "; and " : " and ")
+    end
     overall = [
-        string(
-            "- **Least well reproduced:** ",
-            join(
-                [
-                    string(
-                        r["Stream"], " (bias ", fmt(r["Bias"]),
-                        ", 90% coverage ", fmt(r["90% coverage"]), ")"
-                    )
-                        for r in eachrow(worst)
-                ], "; "
-            ), "."
-        ),
+        isempty(worst) ? nothing :
+            string(
+                "- **Least well reproduced:** ", listed(worst),
+                length(worst) == 1 ? " has" : " have",
+                " the largest absolute bias."
+            ),
         string(
             "- **Coverage:** ", count(>=(0.8), fitted[!, "90% coverage"]),
             " of ", size(fitted, 1),
@@ -427,27 +426,9 @@ evaluation_insample_zone_summary = let
                 )
         ),
     ]
-    rows(tbl) = Dict(r["Stream"] => r for r in eachrow(tbl))
-    cal = rows(zone_calibration_table)
-    function calibration(p, what, label)
-        r = get(cal, string(PROVINCE_LABELS[p], " (", what, ")"), nothing)
-        r === nothing && return string("- ", label, ": not scored.")
-        return string(
-            "- ", label, ": bias ", fmt(r["Bias"]), " and 90% coverage ",
-            fmt(r["90% coverage"]), " over ", r["Vintages"], " cells."
-        )
-    end
-    detail = [
-        join(
-            [
-                string("**", PROVINCE_LABELS[p], "**"), "",
-                calibration(p, "cases", "Confirmed cases"),
-                calibration(p, "deaths", "Confirmed deaths"),
-            ], "\n"
-        )
-            for p in 1:N_PATCHES
-    ]
-    join(vcat([join(overall, "\n")], detail), "\n\n")
+    ## Each province's own rows are in the calibration table further down,
+    ## so they are not repeated here.
+    join(filter(!isnothing, overall), "\n")
 end
 dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"

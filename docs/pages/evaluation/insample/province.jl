@@ -28,6 +28,8 @@ posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]));
 #
 # Whether each province's cases and deaths are reproduced, from the checks below.
 # Bias and coverage are defined as on the [national in-sample checks](@ref "In-sample checks") page, with coverage of the 90% predictive interval.
+# The split columns score each province's share at the observed national total, and the count columns score its counts once the national total is predicted as well.
+# A blank cell is a check that was not scored.
 
 #md # ```@eval
 #md # using Markdown, BVDOutbreakSize
@@ -761,7 +763,12 @@ evaluation_insample_province_summary = let
     fitted = filter(r -> isfinite(r["Bias"]), province_calibration_table)
     worst = first(
         sort(fitted, "Bias"; by = abs, rev = true), min(3, size(fitted, 1))
-    )
+    )[!, "Stream"]
+    ## Semicolons separate the names when a name carries its own comma.
+    listed(v) = let sep = any(contains(","), v) ? "; " : ", "
+        length(v) <= 1 ? join(v) :
+            join(v, sep, sep == "; " && length(v) > 2 ? "; and " : " and ")
+    end
     function coverage_bullet(heading, tbl, scale)
         low = first(sort(tbl, "90% coverage"), min(1, size(tbl, 1)))
         return string(
@@ -776,18 +783,12 @@ evaluation_insample_province_summary = let
         )
     end
     overall = [
-        string(
-            "- **Least well reproduced:** ",
-            join(
-                [
-                    string(
-                        r["Stream"], " (bias ", fmt(r["Bias"]),
-                        ", 90% coverage ", fmt(r["90% coverage"]), ")"
-                    )
-                        for r in eachrow(worst)
-                ], "; "
-            ), "."
-        ),
+        isempty(worst) ? nothing :
+            string(
+                "- **Least well reproduced:** ", listed(worst),
+                length(worst) == 1 ? " has" : " have",
+                " the largest absolute bias in the province split."
+            ),
         coverage_bullet("Coverage", fitted, ""),
         coverage_bullet(
             "Count-scale coverage",
@@ -797,36 +798,35 @@ evaluation_insample_province_summary = let
             ""
         ),
     ]
+    ## One row per province and stream, the split and the count checks
+    ## side by side. A check that was not scored is left blank.
     rows(tbl) = Dict(r["Stream"] => r for r in eachrow(tbl))
     cal = rows(province_calibration_table)
     count_cal = rows(province_count_calibration_table)
-    function calibration(tbl, kind, p, label)
-        r = get(tbl, string(kind, ", ", PROVINCE_LABELS[p]), nothing)
-        r === nothing && return string("- ", label, ": not scored.")
-        return string(
-            "- ", label, ": bias ", fmt(r["Bias"]), " and 90% coverage ",
-            fmt(r["90% coverage"]), " over ", r["Vintages"], " vintages."
-        )
-    end
-    detail = [
-        join(
-            [
-                string("**", PROVINCE_LABELS[p], "**"), "",
-                calibration(cal, "Confirmed cases", p, "Confirmed cases"),
-                calibration(cal, "Confirmed deaths", p, "Confirmed deaths"),
-                calibration(
-                    count_cal, "Confirmed cases", p,
-                    "Confirmed cases as counts"
-                ),
-                calibration(
-                    count_cal, "Confirmed deaths", p,
-                    "Confirmed deaths as counts"
-                ),
-            ], "\n"
-        )
-            for p in 1:N_PATCHES
+    cells = [
+        (PROVINCE_LABELS[p], kind) for p in 1:N_PATCHES
+            for kind in ("Confirmed cases", "Confirmed deaths")
     ]
-    join(vcat([join(overall, "\n")], detail), "\n\n")
+    value(tbl, label, kind, col) = let r = get(
+            tbl, string(kind, ", ", label), nothing
+        )
+        r === nothing || !isfinite(r[col]) ? missing : r[col]
+    end
+    column(tbl, col) = Union{Missing, Float64}[
+        value(tbl, label, kind, col) for (label, kind) in cells
+    ]
+    table = DataFrame(
+        "Province" => first.(cells),
+        "Stream" => last.(cells),
+        "Bias (split)" => column(cal, "Bias"),
+        "90% coverage (split)" => column(cal, "90% coverage"),
+        "Bias (counts)" => column(count_cal, "Bias"),
+        "90% coverage (counts)" => column(count_cal, "90% coverage"),
+    )
+    join(
+        [join(filter(!isnothing, overall), "\n"), markdown_table(table)],
+        "\n\n"
+    )
 end
 dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"

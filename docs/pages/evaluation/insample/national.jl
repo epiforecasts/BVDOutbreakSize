@@ -521,6 +521,7 @@ joint_vintage_incidence_stopped_fig #hide
 # ### Stream calibration
 #
 # Whether each stream's per-vintage predictions are calibrated against the observed counts.
+# The values behind the plot are tabulated in the summary at the top of the page.
 
 stream_calibration_table = stream_calibration(vintage_panels);
 
@@ -535,16 +536,6 @@ stream_calibration_fig = plot_stream_calibration(stream_calibration_table);
 #md # ```
 
 stream_calibration_fig #hide
-
-#md # ```@raw html
-#md # <details><summary>Per-stream calibration table</summary>
-#md # ```
-
-stream_calibration_table #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # ### Exports
 #
@@ -2091,21 +2082,20 @@ dashboard_dir = joinpath(
 )
 mkpath(dashboard_dir)
 
-## The bullets under the summary heading at the top of the page. They read
-## tables built further down, so they are written here and read back when
-## the site is assembled.
+## The bullets and table under the summary heading at the top of the page.
+## They read tables built further down, so they are written here and read
+## back when the site is assembled.
 evaluation_insample_national_summary = let
-    fmt(x) = ismissing(x) || !isfinite(x) ? "n/a" :
-        string(round(x; digits = 2))
     cal = filter(r -> isfinite(r["90% coverage"]), stream_calibration_table)
     n_cov = count(>=(0.8), cal[!, "90% coverage"])
-    calibrated(r) = string(
-        r["Stream"], " (bias ", fmt(r["Bias"]), ", 90% coverage ",
-        fmt(r["90% coverage"]), ")"
-    )
     worst = first(
         sort(cal, "Bias"; by = abs, rev = true), min(3, size(cal, 1))
-    )
+    )[!, "Stream"]
+    ## Semicolons separate the names when a name carries its own comma.
+    listed(v) = let sep = any(contains(","), v) ? "; " : ", "
+        length(v) <= 1 ? join(v) :
+            join(v, sep, sep == "; " && length(v) > 2 ? "; and " : " and ")
+    end
     pred(x, observed) = string(
         "observed ", observed, " against a predictive median of ",
         round(Int, quantile(x, 0.5)), " (90% interval ",
@@ -2117,43 +2107,39 @@ evaluation_insample_national_summary = let
             "- **Streams:** ", n_cov, " of ", size(cal, 1),
             " fitted streams have 90% coverage of at least 0.8."
         ),
-        string(
-            "- **Least well reproduced:** ",
-            join(calibrated.(eachrow(worst)), "; "), "."
-        ),
+        isempty(worst) ? nothing :
+            string(
+                "- **Least well reproduced:** ", listed(worst),
+                length(worst) == 1 ? " has" : " have",
+                " the largest absolute bias."
+            ),
         string(
             "- **Exports:** Uganda exports ",
             pred(pp_exports, obs.exported_cases), ", and export deaths ",
             pred(pp_exports_deaths, obs.exports_deaths), "."
         ),
     ]
-    ## Per stream, split the same way as the posterior predictive checks.
+    ## One row per stream, the streams still reporting first, split the
+    ## same way as the posterior predictive checks.
     reporting = Set(p.title for p in reporting_panels)
-    function block(lead, keep)
-        rows = filter(r -> keep(r["Stream"] in reporting), cal)
-        size(rows, 1) == 0 && return nothing
-        return join(
-            vcat(
-                [string("**", lead, "**"), ""],
-                [
-                    string(
-                        "- ", r["Stream"], ": bias ", fmt(r["Bias"]),
-                        ", 90% coverage ", fmt(r["90% coverage"]), " over ",
-                        r["Vintages"], " vintages."
-                    )
-                        for r in eachrow(rows)
-                ]
-            ), "\n"
-        )
-    end
-    blocks = filter(
-        !isnothing,
-        [
-            block("Streams still reporting", identity),
-            block("Streams no longer reporting", !),
-        ]
+    still = [s in reporting for s in cal[!, "Stream"]]
+    rows = vcat(cal[still, :], cal[.!still, :])
+    table = DataFrame(
+        "Stream" => rows[!, "Stream"],
+        "Still reporting" => [
+            s in reporting ? "yes" : "no" for s in rows[!, "Stream"]
+        ],
+        "Bias" => rows[!, "Bias"],
+        "50% coverage" => rows[!, "50% coverage"],
+        "90% coverage" => rows[!, "90% coverage"],
+        "Vintages" => rows[!, "Vintages"],
     )
-    join(vcat([join(overall, "\n")], blocks), "\n\n")
+    join(
+        vcat(
+            [join(filter(!isnothing, overall), "\n")],
+            size(table, 1) == 0 ? String[] : [markdown_table(table)]
+        ), "\n\n"
+    )
 end
 write(
     joinpath(dashboard_dir, "evaluation_insample_national.md"),

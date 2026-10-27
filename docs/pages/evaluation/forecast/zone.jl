@@ -23,8 +23,9 @@ frozen_local = load_fit("local_frozen_validation");
 
 # ## Summary
 #
-# The overall bullets come first, then a block per province, from the scores below.
-# The log score of the split is higher when the model allocates the week's cases better than the persistence rules.
+# The overall bullets come first, then a table of each province's scores, from the sections below.
+# The split columns give the log score of each rule's allocation of the week's cases, which is higher for a better allocation.
+# The total columns score the zone model's projected provincial total.
 
 #md # ```@eval
 #md # using Markdown, BVDOutbreakSize
@@ -351,8 +352,6 @@ CSV.write(
 ## the scores built further down, so they are written here and read back
 ## when the site is assembled.
 evaluation_forecast_zone_summary = let s = zone_validation_scores
-    fmt(x) = ismissing(x) || (x isa Real && isnan(x)) ? "n/a" :
-        string(round(x; digits = 2))
     if isempty(s)
         string(
             "- **Zone forecasts:** the zone tables end at or before the ",
@@ -379,37 +378,32 @@ evaluation_forecast_zone_summary = let s = zone_validation_scores
                 observed_total, " observed confirmed cases."
             ),
         ]
-        function detail(p)
-            m = rule(p, "zone model")
-            m === nothing && return string("**", p, "**", "\n\n- Not scored.")
-            return join(
-                [
-                    string("**", p, "**"), "",
-                    string(
-                        "- Log score of the split: ", fmt(m.log_score),
-                        ", against ",
-                        fmt(
-                            rule(p, "share persistence") === nothing ?
-                                missing : rule(p, "share persistence").log_score
-                        ),
-                        " for share persistence and ",
-                        fmt(
-                            rule(p, "naive persistence") === nothing ?
-                                missing : rule(p, "naive persistence").log_score
-                        ),
-                        " for naive persistence."
-                    ),
-                    string(
-                        "- Total over ", m.observed,
-                        " observed cases: bias ", fmt(m.bias),
-                        ", within the 90% interval: ",
-                        ismissing(m.coverage_90) ? "n/a" :
-                            string(m.coverage_90), "."
-                    ),
-                ], "\n"
-            )
+        ## One row per province: the split's log score under each rule,
+        ## then the zone model's total.
+        score(p, m) = let r = rule(p, m)
+            r === nothing ? missing : round(r.log_score; digits = 2)
         end
-        join(vcat([join(overall, "\n")], [detail(p) for p in patches]), "\n\n")
+        model(p) = rule(p, "zone model")
+        table = DataFrame(
+            "Province" => patches,
+            "Split, zone model" => [score(p, "zone model") for p in patches],
+            "Split, share persistence" =>
+                [score(p, "share persistence") for p in patches],
+            "Split, naive persistence" =>
+                [score(p, "naive persistence") for p in patches],
+            "Observed cases" => [model(p).observed for p in patches],
+            "Bias of the total" => [
+                ismissing(model(p).bias) ? missing :
+                    round(model(p).bias; digits = 2)
+                    for p in patches
+            ],
+            "Total within 90%" => [
+                ismissing(model(p).coverage_90) ? "" :
+                    model(p).coverage_90 ? "yes" : "no"
+                    for p in patches
+            ],
+        )
+        join([join(overall, "\n"), markdown_table(table)], "\n\n")
     end
 end
 dashboard_dir = joinpath(
