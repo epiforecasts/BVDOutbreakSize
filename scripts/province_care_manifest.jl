@@ -74,10 +74,8 @@ const STALE = Dict(
     ## the day before forward: "les 29 patients hospitalisés de la veille
     ## sont reportés". Flagged for @seabbs on #1141.
     (159, "haut_uele") => "SitRep 158's 29 patients carried forward",
-    ## Haut-Uélé's paragraph repeats SitRep 162's word for word (15
-    ## admissions, 6 sorties, 41 patients for 158 lits at 25,9 %, 68
-    ## accompagnants and 91 PPL), and its challenges say "les données de
-    ## prise en charge ne sont pas remontées". Flagged for @seabbs on #1141.
+    ## Haut-Uélé's paragraph repeats SitRep 162's word for word, and its
+    ## challenges say "les données de prise en charge ne sont pas remontées".
     (163, "haut_uele") => "word-for-word repeat of SitRep 162",
 )
 const ORDER = [

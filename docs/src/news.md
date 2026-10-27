@@ -126,10 +126,6 @@ A major version: the report gains a health-zone level below the provinces, with 
 ### Data
 
 - The model cut-off advances to SitRep 163, 24 October (#1166).
-  Haut-Uélé's care paragraph repeats SitRep 162's word for word and says the day's care data did not arrive, so it is a stale carry-forward and Haut-Uélé has no care entry that day.
-  Tableau 3 prints no figures for Bas-Uélé or Tshopo, so the day's 424 validated suspects are a partial and stay out of the suspected-case stream.
-  SitRep 163 redraws SitRep 160's onset extract, so the onset curve does not add it.
-  `data/onset_dashboard_history.csv` adds the dashboard snapshot of 26 October.
   Fitted values change with the new data.
 - The onset curve gains SitReps 151, 153 and 158, so its latest vintage is 19 October rather than 10 October (#1138, #1148).
   The reader now reads a short bar whose dark dead segment passes as outline, drops a column that carries the next bar's outline height, reads no bar from the band's pink beside the last outline, and lets two agreeing soft columns outvote a middle column under the dashed line.
