@@ -341,8 +341,9 @@ CSV.write(
         n = obs.n, national_care..., national_care_forecast...
     )
 );
-## The daily reproduction number and the weekly confirmed cases and deaths
-## of each patch and of the country, keyed by the patch label, and the
+## The daily reproduction number, the weekly confirmed cases and deaths and
+## their posterior predictive, of each patch and of the country, keyed by
+## the patch label, and the
 ## reported patients in isolation and beds over the same eight weeks, keyed
 ## by source province.
 province_ts_rt_args = (;
@@ -371,6 +372,31 @@ function province_weekly(inc, national)
         )
     )
 end
+## The joint's posterior predictive of the same weekly counts, binned into
+## the same windows (see `joint_count_replicates` in `docs/pages/_setup.jl`).
+## The country is left out, with a warning, when its replicates sit on
+## other vintage days than its observed series over those weeks, since they
+## would then be binned differently.
+function province_weekly_fit(stream::Symbol, inc, national_days)
+    r = getproperty(joint_count_replicates(), stream)
+    as_matrix(reps) = permutedims(reduce(hcat, reps))
+    t = weekly_quantile_table(
+        inc.days, [as_matrix(p.replicates) for p in r.panels],
+        PROVINCE_LABELS[1:N_PATCHES]; cutoff = obs.cutoff, n = obs.n
+    )
+    recent(d) = filter(>(obs.n - 7 * 8), d)
+    if recent(r.national_days) != recent(national_days)
+        @warn "National $(stream) fit left out of the province time series: " *
+            "its replicates and observed counts are on different vintage days" replicated = recent(r.national_days) observed = recent(national_days)
+        return t
+    end
+    return vcat(
+        t, weekly_quantile_table(
+            r.national_days, [as_matrix(r.national)], ["National"];
+            cutoff = obs.cutoff, n = obs.n
+        )
+    )
+end
 ## Tag a long table with the series it holds.
 _with_series(t, s) = (t[!, :series] .= s; t)
 CSV.write(
@@ -395,6 +421,16 @@ CSV.write(
         _with_series(
             province_weekly(province_ts_deaths, obs.confirmed_deaths_history),
             "deaths"
+        ),
+        _with_series(
+            province_weekly_fit(
+                :cases, province_ts_inc, obs.confirmed_history.days
+            ), "cases_fit"
+        ),
+        _with_series(
+            province_weekly_fit(
+                :deaths, province_ts_deaths, obs.confirmed_deaths_history.days
+            ), "deaths_fit"
         ),
         _with_series(
             reported_level_table(
