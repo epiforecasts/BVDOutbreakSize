@@ -114,7 +114,6 @@ spatial_pair_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Joint posterior of the spatial hyperparameters, with the prior overlaid.
-#md # These are the spread, half-life and correlation of the Rt deviations, the spreads of suspected-case detection and case confirmation, the importation intensity, its destination and flow spreads and their correlations, and the spreads of lethality and death confirmation.
 #md # The province reproduction numbers and case totals are derived from these and are in the [province estimates](@ref "Province estimates").
 #md # </figcaption>
 #md # </figure>
