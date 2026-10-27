@@ -22,6 +22,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
+- The onset-to-admission Gamma scale prior is `LogNormal(log(3.694), 0.32)` at the onset-to-report, onset-to-detection and onset-to-death delays, and fitted values change (#1087).
 - Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
   SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.
   Giving Nord-Ubangi, with 2 cases, its own patch while Tshopo, with 59 by 10 October, stayed pooled would have broken the rule the pooling rested on, so Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi become patches too.
@@ -129,6 +130,8 @@ A major version: the report gains a health-zone level below the provinces, with 
   Haut-Uélé's care paragraph that day repeats SitRep 162's and is left out of the province care blocks, so the national bed capacity takes Nord-Kivu's 410 alone.
   `data/onset_dashboard_history.csv` adds the dashboard snapshot of 26 October.
   Fitted values change with the new data.
+- 23 October is an occupancy reclassification break, because Ituri's start-of-day stock implied by its care paragraph falls 96 below the previous report's count while the same balance matched on the seven previous days (#1172).
+  Fitted values change.
 - The onset curve gains SitReps 151, 153 and 158, so its latest vintage is 19 October rather than 10 October (#1138, #1148).
   The reader now reads a short bar whose dark dead segment passes as outline, drops a column that carries the next bar's outline height, reads no bar from the band's pink beside the last outline, and lets two agreeing soft columns outvote a middle column under the dashed line.
   The rebuild adds 8 May to SitReps 133 and 134 and 2 May to SitRep 146, removes a 4 May bar from SitReps 112 and 143 to 145, and moves SitRep 120's 7 September from 17 to 24.
@@ -193,9 +196,41 @@ A major version: the report gains a health-zone level below the provinces, with 
   Dakwa (Bas-Uélé), new at SitRep 147, has no polygon in the Ministry of Health health-zone map, so its case is carried in the Bas-Uélé unallocated row until the zone is mapped.
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
 - `province_admissions_history` block, sparse by province, to SitRep 159 (20 October), and province beds raised to the rate-implied beds where the patients exceed a stale printed count (#958).
+- Where a health zone's cumulative count falls, its increment takes the report's printed 24h figure for that zone rather than the clamped zero (#1161, resolves #750).
+  The figures are read from Tableau 2 on the flagged zone-vintages only: 6 of the 8 case falls and 8 of the 9 death falls, with the three falls of 11 June predating the 24h columns.
+  Only three of those figures are non-zero: Butembo's 4 cases and Bunia's 7 and Bambu's 4 deaths on 22 July.
+  The death composition still leaves out the vintages with a zone fall, so the one change the health-zone fit sees is Butembo's 4 cases in the Nord-Kivu composition on 22 July.
+  Fitted health-zone values change.
 
 ### Report
 
+- Tables with more than ten body rows are compact, scroll inside a box with a sticky header, and have a row filter and sortable columns.
+  Sorting is numeric where a column holds numbers, by the first number in a cell such as "1.2 (0.8–1.9)" or "12%".
+  Smaller tables, and every table without JavaScript, render as before.
+  The site's theme entry extends the DocumenterVitepress default, which the docs build copies from the installed package.
+- The province and health-zone in-sample pages follow each area's estimates across releases, as the national page does (#1174).
+  The province page shows each province's reproduction number, confirmed cases and case-fatality ratio at every release, and the zone page the reproduction number and confirmed cases of the twelve zones with most cases.
+  `scripts/score_releases.jl` collects them from each release's `province_estimates.csv` and `zone_estimates.csv` into `data/province/released_estimates.csv` and `data/zone/released_estimates.csv`, skipping a release without the table.
+  The basename is already excluded from the fit hash, so the fit keys do not change, and neither do the fitted values.
+- The summaries at the top of the in-sample and forecast evaluation pages give their per-stream and per-province scores as a table rather than a bullet per row.
+  The national in-sample table marks which streams are still reporting and replaces the folded calibration table further down that page.
+  A value that was not scored reads n/a.
+- Past province and health-zone forecasts against what was observed are shown only on the forecast evaluation pages, not also on the forecast pages.
+  Each forecast page links to its evaluation section instead.
+- The past province and health-zone forecasts are drawn as a grid of three columns, one panel per province stream or zone, rather than a single column.
+- The dashboard map's detail draws the posterior predictive of the weekly confirmed cases and deaths over the observed bars, on by default with a toggle, and a new fit metric shades each area by where its latest week's count falls in that predictive (#1173).
+  The province and national predictive is the joint's, split by the fitted province shares as the province in-sample page scores it.
+  The zone predictive is the zone composition's for the cases, which splits each patch's observed count across its zones.
+  The zones carry no deaths predictive, since the model drops the reattributed death vintages that the observed series keeps.
+  The model and the fitted values do not change.
+- The dashboard map has a date slider under its title that every metric follows, with a play button that steps it a week at a time (#1168).
+  The reproduction number, the confirmed cases and deaths to date and over the past 7, 14 and 28 days, and the reported treatment-centre figures come from the map's time series on that date.
+  The counts are whole weeks ending on the cut-off's weekday, and the total to date is the cut-off's total less the later weeks.
+  The estimates without a series take the latest saved cut-off on or before the date, or stay at the cut-off when no earlier one is saved.
+  The colour classes are the cut-off's at every date, and at the cut-off the map is unchanged.
+  The detail charts show the last 4 or 8 weeks or the whole series, 8 weeks by default, with the reproduction number's axis fitted to the period shown and a rule on the map's date.
+  The date logic sits in its own script with Node tests that pre-commit runs.
+  The model and the fitted values do not change.
 - The province and health-zone estimates report point prevalence at the cut-off: the people infected but not yet symptomatic and the people with symptoms who have not yet been detected, per 100,000 residents.
   A figure ranks the areas by the rate in the community.
   Each posterior draw gives its own prevalence from its daily infections and delays, and the methods give the calculation.
@@ -265,6 +300,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   Fitted values do not change (resolves #1055).
 - The report pages describe each figure and table in a caption beneath it rather than in the prose above it, and drop prose that repeats the methods, the limitations or another page (#1127).
   Fitted values do not change.
+- The confirmed-cases and confirmed-deaths single-stream models are fitted at each of the three May frozen cut-offs and scored alongside the frozen joint (resolves #513).
+  They are the only streams with truth to score from those cut-offs, so the frozen comparison of the joint against each stream's own model now covers every May cut-off rather than the one-week-back cut-off alone.
+  Existing fitted values do not change.
 
 ### Infrastructure
 

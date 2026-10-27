@@ -240,6 +240,16 @@ Its count falls twice: on 18 June (SitRep 035) from 94 cases and 10 deaths to 17
 Each fall is a reattribution of counts the report had carried as unallocated into named zones, so on those dates the zone rows rise by more than the province (163 zone cases against a province increment of 86 on 18 June, and 374 clamped zone cases against 347 on 22 July).
 The composition model leaves those two Ituri vintages out: `zone_increment_matrix` zeroes the patch's column on any date its unallocated count falls and lists the dates, and since the increments are differences of cumulative counts the next vintage is unaffected.
 
+A named zone's cumulative count can also fall, which `zone_cumulative_falls` reports when the fall is more than one.
+The increment there is clamped to zero, which reads the zone as having no new count that vintage.
+Where the table prints the 24h columns (`Situation du jour (24 h)`, from SitRep 060), the zone's own `Nouv. cas` or `Total décès confirmés` figure that day replaces the clamped zero.
+These figures are recorded only on the flagged zone-vintages, in the sparse blocks `[zone_confirmed_revision_24h]` and `[zone_death_revision_24h]`, one `[block.province.zone]` sub-table each with its own `dates` and `values`.
+They are read with `pdftotext -layout`, and the `source =` string quotes each cell.
+A blank 24h cell is recorded as 0, since the province row's 24h figure is the sum of the printed zone cells.
+A printed negative (Katwa's `-2*` on 26 July, the harmonisation itself) is recorded as printed and read as no new death.
+Every other zone-vintage keeps its cumulative difference, and the vintages the death composition leaves out for a zone fall stay out.
+The three falls on 11 June (SitRep 028) have no 24h column and stay clamped.
+
 Spelling varies between vintages.
 The scanner's alias table resolves `Gethy` to `gety`, `Nai-Nia` (SitRep 030) to `nia_nia`, `MakisoKisangani` (SitRep 064) and the wrapped `Makiso-` / `Kisangani` to `makiso_kisangani`, the wrapped `Boma` / `Mangbetu` to `boma_mangbetu`, `Bambu-mine` to `bambu` and `Mungbwalu` to `mongbwalu`, plus the variants the mirror's `aliases.csv` records from vintages this archive lacks (`Nyakunde`, `Rumba`, `Mongbalu`, `Tchomai`, `Wanierukula`, `Manguripa`).
 Hyphen, space and accent differences need no entry.
@@ -594,6 +604,13 @@ No script tracks mirror-sourced values, so this check is manual.
   The wording appears before with no fraction (SitReps 096, 097, 111, 113 and 147).
   SitRep 160 prints no Haut-Uélé paragraph, and the others sum to 1062 against a tile of 1091, which is kept; the 29 difference equals the 29 Haut-Uélé carried at SitRep 159.
   Haut-Uélé prints 184 lits at SitRep 161 and 158 at SitRep 162, against 169 at SitRep 158, with no centre named as opening or closing.
+- **Occupancy break, SitReps 158 to 163 (19 to 24 October)**: the start-of-day stock is implied from each care paragraph as the end-of-day count less the admissions plus the sorties.
+  23 October (SitRep 162) is in `occupancy_break_dates`, where its numbers are given.
+  SitRep 163 holds Ituri's lower level: `88 nouvelles admissions ... contre 76 sorties ... Ainsi, 422 patients` implies a start of 410 against 397.
+  The 26 July Ituri -104 (SitRep 073) is not a break, since Tableau 6 `Patients au lit (J-1)` then rarely matched the previous Fin J (#489); the care-paragraph balance matched Ituri's previous count on each pair from 16 to 22 October.
+  19 October (SitRep 158, 937 to 1029) is not a break.
+  Of its +92, 58 is the day's admissions less sorties, with Nord-Kivu's `154 nouvelles admissions ... contre 95 sorties` closing exactly against its 450 of 18 October.
+  The remaining +34 comes from Bas-Uélé (+24) and Haut-Uélé (+14), which printed no paragraph at SitRep 157, so it is confounded with the missing 18 October reports and lies above the previous count rather than below it.
 - **Laboratory and recoveries, SitReps 160 and 162**: SitRep 162's page 1 prints 450 samples analysed, while its five laboratory bullets sum to 435 (Ituri 225, Nord-Kivu 179, Haut-Uélé 5, Tshopo 13, Bas-Uélé 13); the province sum enters `tests_analysed_daily_history`.
   The recovered tile rises by 23 at SitRep 160 and 11 at SitRep 162, against 32 and 28 recoveries printed that day; the tile enters `recovered_history`.
 - **SitRep 163 file**: SitRep 163 (`SitRep N°163/MVE-BDBV/24/10/2026`, published 25 October) is a distinct file from SitRep 162.

@@ -3,7 +3,7 @@
 # This page checks whether the health-zone model reproduces the per-zone data it was fitted to.
 # The national checks are on the [national in-sample checks](@ref "In-sample checks") page and the provincial ones on the [province in-sample checks](@ref "Province in-sample checks") page.
 # The zone data enter the model as compositions of their patch's totals, so the checks are on each zone's share of its patch.
-# The last section sets each zone's reproduction number from the current fit against the same fit a week earlier.
+# A later section sets each zone's reproduction number from the current fit against the same fit a week earlier, and the last follows each zone's published estimates across releases.
 
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
@@ -27,7 +27,8 @@ frozen_local = load_fit("local_frozen_validation");
 
 # ## Summary
 #
-# The overall bullets come first, then a block per province, from the calibration below.
+# The overall bullets come first, then a table of each province's bias and coverage, from the [zone composition calibration](@ref "Zone composition calibration") below.
+# A cell is one zone at one vintage, and a composition that was not scored reads n/a.
 # Bias and coverage are defined as on the [national in-sample checks](@ref "In-sample checks") page, with a nominal coverage of 0.9.
 
 #md # ```@eval
@@ -381,6 +382,93 @@ zone_week_rt_fig #hide
 #md # </figure>
 #md # ```
 
+# ## Estimate evolution across releases
+#
+# How the reproduction number and confirmed cases of the twelve zones with most confirmed cases to date have moved as releases accrued, read from the estimates each release published at its own cut-off.
+# A zone that a release did not estimate has no mark for that release.
+
+#md # ```@raw html
+#md # <details><summary>Load the per-zone estimates of each release</summary>
+#md # ```
+
+## Written by `scripts/score_releases.jl` from each release's
+## `zone_estimates.csv`, one row per release, zone and quantity, keyed as
+## `<province>.<zone>` like the zone model. A missing file reads as an empty
+## table, which the figures report as nothing collected.
+zone_release_df = _release_data(
+    joinpath("zone", "released_estimates.csv"),
+    (;
+        release = String, date = Date, area = String, label = String,
+        province = String, patch = String, quantity = String,
+        median = Float64, lo90 = Float64, hi90 = Float64,
+    )
+)
+## The twelve zones with most confirmed cases in the current data, among
+## those any release estimated.
+_release_zones = let keys = Set(zone_release_df.area),
+        order = sortperm(zone_inputs.cumulative; rev = true)
+
+    first(
+        [zone_inputs.zone_keys[z] for z in order if zone_inputs.zone_keys[z] in keys],
+        12
+    )
+end
+_release_zone_titles = Dict(zip(zone_inputs.zone_keys, zone_inputs.zone_labels))
+_zone_release_groups(q) = area_evolution_groups(
+    zone_release_df, q; areas = _release_zones, labels = _release_zone_titles
+)
+_no_zone_release_note = "No releases scored yet. This fills in as releases accumulate."
+zone_rt_release_fig = plot_evolution_by_group(
+    _zone_release_groups("R_T");
+    ylabel = "Reproduction number",
+    title = "Zone reproduction number by release",
+    released_label = "Released estimate", marks_label = "median, 90% bar",
+    refline = 1.0, ymax = 3.0, ncols = 4,
+    empty_note = _no_zone_release_note
+);
+zone_cases_release_fig = plot_evolution_by_group(
+    _zone_release_groups("cases");
+    ylabel = "Confirmed cases",
+    title = "Zone confirmed cases by release",
+    released_label = "Reported by the release cut-off", marks_label = "",
+    shared_yrange = false, ncols = 4, empty_note = _no_zone_release_note
+);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ### Reproduction number by release
+
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
+zone_rt_release_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Each zone's reproduction number at the cut-off of each release, as a median with its 90% interval bar.
+#md # The axis is fixed at three, and an interval past it is clamped and marked with an open triangle.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
+# ### Confirmed cases by release
+
+#md # ```@raw html
+#md # <figure class="bvd-figure">
+#md # ```
+
+zone_cases_release_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # The confirmed cases each zone had reported by the cut-off of each release, each panel on its own scale.
+#md # </figcaption>
+#md # </figure>
+#md # ```
+
 # ## Saving zone in-sample outputs
 
 #md # ```@raw html
@@ -401,21 +489,15 @@ evaluation_insample_zone_summary = let
     )
     worst = first(
         sort(fitted, "Bias"; by = abs, rev = true), min(3, size(fitted, 1))
-    )
+    )[!, "Stream"]
     low = first(sort(fitted, "90% coverage"), min(1, size(fitted, 1)))
     overall = [
-        string(
-            "- **Least well reproduced:** ",
-            join(
-                [
-                    string(
-                        r["Stream"], " (bias ", fmt(r["Bias"]),
-                        ", 90% coverage ", fmt(r["90% coverage"]), ")"
-                    )
-                        for r in eachrow(worst)
-                ], "; "
-            ), "."
-        ),
+        isempty(worst) ? nothing :
+            string(
+                "- **Least well reproduced:** ", join_names(worst),
+                length(worst) == 1 ? " has" : " have",
+                " the largest absolute bias."
+            ),
         string(
             "- **Coverage:** ", count(>=(0.8), fitted[!, "90% coverage"]),
             " of ", size(fitted, 1),
@@ -427,27 +509,34 @@ evaluation_insample_zone_summary = let
                 )
         ),
     ]
-    rows(tbl) = Dict(r["Stream"] => r for r in eachrow(tbl))
-    cal = rows(zone_calibration_table)
-    function calibration(p, what, label)
-        r = get(cal, string(PROVINCE_LABELS[p], " (", what, ")"), nothing)
-        r === nothing && return string("- ", label, ": not scored.")
-        return string(
-            "- ", label, ": bias ", fmt(r["Bias"]), " and 90% coverage ",
-            fmt(r["90% coverage"]), " over ", r["Vintages"], " cells."
-        )
-    end
-    detail = [
-        join(
-            [
-                string("**", PROVINCE_LABELS[p], "**"), "",
-                calibration(p, "cases", "Confirmed cases"),
-                calibration(p, "deaths", "Confirmed deaths"),
-            ], "\n"
-        )
-            for p in 1:N_PATCHES
+    ## One row per province and composition.
+    rows = Dict(r["Stream"] => r for r in eachrow(zone_calibration_table))
+    cells = [
+        (PROVINCE_LABELS[p], what, label) for p in 1:N_PATCHES
+            for (what, label) in
+            (("cases", "Confirmed cases"), ("deaths", "Confirmed deaths"))
     ]
-    join(vcat([join(overall, "\n")], detail), "\n\n")
+    value(label, what, col) = let r = get(
+            rows, string(label, " (", what, ")"), nothing
+        )
+        r === nothing ? missing : r[col]
+    end
+    table = DataFrame(
+        "Province" => [c[1] for c in cells],
+        "Stream" => [c[3] for c in cells],
+        "Bias" => [finite_round(value(c[1], c[2], "Bias")) for c in cells],
+        "90% coverage" => [
+            finite_round(value(c[1], c[2], "90% coverage")) for c in cells
+        ],
+        "Cells" => [value(c[1], c[2], "Vintages") for c in cells],
+    )
+    join(
+        [
+            join(filter(!isnothing, overall), "\n"),
+            markdown_table(table; missing_text = "n/a"),
+        ],
+        "\n\n"
+    )
 end
 dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"

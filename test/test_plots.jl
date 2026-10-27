@@ -437,6 +437,55 @@ end
     @test shared_joint.limits[][2] == shared_exports.limits[][2]
 end
 
+@testitem "area_evolution_groups builds one group per area" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: area_evolution_groups, plot_evolution_by_group
+    using DataFrames: DataFrame
+    using Dates: Date
+
+    df = DataFrame(
+        date = [Date(2026, 10, 20), Date(2026, 10, 6), Date(2026, 10, 20)],
+        area = ["ituri", "ituri", "ituri"],
+        quantity = ["R_T", "R_T", "cases"],
+        median = [1.1, 1.4, 7040.0],
+        lo90 = [0.7, 0.9, missing], hi90 = [1.5, 2.0, missing]
+    )
+    groups = area_evolution_groups(
+        df, "R_T"; areas = ["ituri", "tshopo"],
+        labels = Dict("ituri" => "Ituri")
+    )
+    ## Areas in the order asked for, the label defaulting to the key, and an
+    ## area with no rows kept as an empty group.
+    @test first.(groups) == ["Ituri", "tshopo"]
+    @test isempty(last(groups[2]))
+    ## Rows sorted by date, the 30% and 60% bounds absent.
+    rt = last(groups[1])
+    @test first.(rt) == ["2026-10-06", "2026-10-20"]
+    @test rt[1][7:8] == (0.9, 2.0)
+    @test all(isnan, rt[1][3:6])
+    ## A count with no interval takes its median as both bounds.
+    cases = only(last(only(area_evolution_groups(df, "cases"; areas = ["ituri"]))))
+    @test cases[7:8] == (7040.0, 7040.0)
+
+    ## The marks' legend note follows `marks_label`, and an empty one drops it.
+    legend_labels(fig) = [
+        e.label[] for x in fig.content if x isa CairoMakie.Makie.Legend
+            for g in x.entrygroups[] for e in last(g)
+    ]
+    fig = plot_evolution_by_group(groups; marks_label = "median, 90% bar")
+    @test legend_labels(fig) == ["Released estimate (per release) (median, 90% bar)"]
+    fig = plot_evolution_by_group(
+        area_evolution_groups(df, "cases"; areas = ["ituri"]);
+        released_label = "Reported", marks_label = ""
+    )
+    @test legend_labels(fig) == ["Reported"]
+    ## No rows at all gives the note figure.
+    @test plot_evolution_by_group(
+        area_evolution_groups(df[1:0, :], "R_T"; areas = ["ituri"])
+    ) isa CairoMakie.Makie.Figure
+end
+
 @testitem "plot_forecast_overlay empty and filled" setup = [HeadlessMakie] begin
     using BVDOutbreakSize: plot_forecast_overlay
     using DataFrames: DataFrame
@@ -522,6 +571,45 @@ end
     marker_y = only(unique(last.(marker[1][])))
     @test marker_y < cap
     @test marker_y > 0.9 * cap
+end
+
+@testitem "plot_forecast_overlay wraps streams into ncol columns" setup = [
+    HeadlessMakie,
+] begin
+    using BVDOutbreakSize: plot_forecast_overlay
+    using DataFrames: DataFrame
+    using Dates: Date, Day
+    ## Seven zones at one horizon: the default stacks them in one column,
+    ## and `ncol = 3` wraps them into three columns of three rows.
+    md = Date(2026, 6, 21)
+    rows = [
+        (;
+            stream = "zone $(z)", made_date = md, horizon = 7,
+            target_date = md + Day(7), fit = "joint", observed = 2.0,
+            median = 2.0, lo90 = 1.0, hi90 = 4.0,
+        )
+            for z in 1:7
+    ]
+    panel_axes(fig) = [
+        x for x in fig.content if x isa CairoMakie.Makie.Axis
+    ]
+    ## Grid positions through `gridcontent`, which GridLayoutBase exports.
+    span(ax) = CairoMakie.Makie.GridLayoutBase.gridcontent(ax).span
+    grid_cols(fig) = sort(unique(span(ax).cols for ax in panel_axes(fig)))
+    grid_rows(fig) = sort(unique(span(ax).rows for ax in panel_axes(fig)))
+    stacked = plot_forecast_overlay(DataFrame(rows))
+    @test length(grid_cols(stacked)) == 1
+    @test length(grid_rows(stacked)) == 7
+    wrapped = plot_forecast_overlay(DataFrame(rows); ncol = 3)
+    @test length(panel_axes(wrapped)) == 7
+    @test length(grid_cols(wrapped)) == 3
+    @test length(grid_rows(wrapped)) == 3
+    ## Each panel is titled with its zone, and only the lowest panel in
+    ## each column carries the date axis label.
+    @test sort([ax.title[] for ax in panel_axes(wrapped)]) ==
+        ["zone $(z)" for z in 1:7]
+    @test count(ax -> ax.xlabel[] != "", panel_axes(wrapped)) == 3
+    @test_throws ArgumentError plot_forecast_overlay(DataFrame(rows); ncol = 0)
 end
 
 @testitem "plot_forecast_overlay tick density scales with made dates" setup = [

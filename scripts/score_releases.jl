@@ -11,13 +11,16 @@
 # the per-fit `rt_`, `size_` and `r0_by_release_by_stream.csv` overlays.
 # The forecast overlays go to `data/forecast_overlay.csv` and, per province,
 # `data/province/forecast_overlay.csv`, and per health zone,
-# `data/zone/forecast_overlay.csv`.
+# `data/zone/forecast_overlay.csv`. Each release's per-province and
+# per-zone estimates go to `data/province/released_estimates.csv` and
+# `data/zone/released_estimates.csv`.
 #
 # The inputs are the assets of every results release on GitHub: a
 # forecast archive (`stream_forecasts.csv`, `forecast.csv`, or a
 # reconstruction on the optional `forecasts-backfill` release), the
 # frozen archive `forecast_frozen.csv`, the per-province
-# `province_forecast.csv`, the per-zone `zone_forecast.csv`, each
+# `province_forecast.csv`, the per-zone `zone_forecast.csv`, the
+# `province_estimates.csv` and `zone_estimates.csv` estimates, each
 # release's own `observations.toml`
 # vintage, `posterior_draws.csv` and `stream_estimates.csv`. Both
 # `results-vX.Y.Z` from a version tag and `results-<run number>` from a
@@ -66,6 +69,8 @@ const STREAM_FORECAST_ASSET = "stream_forecasts.csv"
 const PROVINCE_FORECAST_ASSET = "province_forecast.csv"
 const ZONE_FORECAST_ASSET = "zone_forecast.csv"
 const STREAM_ESTIMATES_ASSET = "stream_estimates.csv"
+const PROVINCE_ESTIMATES_ASSET = "province_estimates.csv"
+const ZONE_ESTIMATES_ASSET = "zone_estimates.csv"
 const DRAWS_ASSET = "posterior_draws.csv"
 const OBS_ASSET = "observations.toml"
 const BACKFILL_TAG = "forecasts-backfill"
@@ -1450,6 +1455,131 @@ function stream_estimate_rows(tag, estimates_path, cutoff)
 end
 
 # ----------------------------------------------------------------------
+# Per-area estimate summary
+# ----------------------------------------------------------------------
+
+## The quantities collected from a release's `province_estimates.csv` and
+## `zone_estimates.csv`, each with the column stems it is read under, first
+## match wins, so a renamed column still reads. A stem with `_median`,
+## `_lower` and `_upper` columns is a posterior summary with its 90%
+## interval. A bare stem column is a reported count, which has no interval.
+const AREA_ESTIMATE_QUANTITIES = Dict(
+    :province => [
+        "R_T" => ["R_T", "rt"], "cases" => ["cases"], "deaths" => ["deaths"],
+        "CFR" => ["cfr", "CFR"],
+    ],
+    :zone => [
+        "R_T" => ["R_T", "rt"], "cases" => ["cases"], "deaths" => ["deaths"],
+    ]
+)
+
+## Columns of the per-area tables, in order. `pooled` is 1 when the
+## province's patch pools several provinces, which then share its
+## reproduction number and case-fatality ratio, and empty when the release
+## keyed its rows by patch rather than by province.
+const AREA_ESTIMATE_COLUMNS = Dict(
+    :province => [
+        :release, :date, :area, :patch, :pooled, :quantity, :median,
+        :lo90, :hi90,
+    ],
+    :zone => [
+        :release, :date, :area, :label, :province, :patch, :quantity,
+        :median, :lo90, :hi90,
+    ]
+)
+
+## A finite numeric cell, or `missing` when it is empty, not a number or not
+## finite (a zone that is not walking has no reproduction number).
+function _area_value(s)
+    x = tryparse(Float64, strip(s))
+    return isnothing(x) || !isfinite(x) ? missing : x
+end
+
+## The `(release, date, area, ..., quantity, median, lo90, hi90)` rows of a
+## release's per-province (`level = :province`) or per-zone (`:zone`)
+## estimates table, one per area and quantity, dated by the release
+## `cutoff`. A zone's `area` is `<province>.<zone>`, the key the zone model
+## uses, since a zone name alone need not be unique. A province table keyed
+## by patch alone takes the patch as its area. A quantity the table does not
+## carry, and a cell with no value, give no row. `nothing` when the asset is
+## absent or carries no area column.
+function area_estimate_rows(tag, path, cutoff, level::Symbol)
+    isnothing(path) && return nothing
+    header, rows = read_simple_csv(path)
+    has(c) = c in header
+    idx(c) = has(c) ? col(header, c) : nothing
+    keycol = level === :zone ? idx("zone") :
+        has("province") ? idx("province") : idx("patch")
+    isnothing(keycol) && return nothing
+    cell(r, c) = has(c) ? r[col(header, c)] : ""
+
+    ## Each quantity's columns, from the first stem the table carries.
+    qcols = Pair{String, NamedTuple}[]
+    for (qty, stems) in AREA_ESTIMATE_QUANTITIES[level]
+        for s in stems
+            m, lo, hi = s * "_median", s * "_lower", s * "_upper"
+            if all(has, (m, lo, hi))
+                push!(qcols, qty => (; median = m, lo, hi))
+                break
+            elseif has(s)
+                push!(qcols, qty => (; median = s, lo = nothing, hi = nothing))
+                break
+            end
+        end
+    end
+
+    out = NamedTuple[]
+    no_province = 0
+    for r in rows
+        length(r) == length(header) || continue
+        ## A zone with no province has no model key, so it is not read.
+        if level === :zone && isempty(cell(r, "province"))
+            no_province += 1
+            continue
+        end
+        area = level === :zone ? string(cell(r, "province"), ".", r[keycol]) :
+            r[keycol]
+        ids = level === :zone ?
+            (; label = cell(r, "label"), province = cell(r, "province")) :
+            (; pooled = cell(r, "pooled"))
+        bound(c) = isnothing(c) ? missing : _area_value(cell(r, c))
+        for (qty, c) in qcols
+            m = _area_value(cell(r, c.median))
+            ismissing(m) && continue
+            push!(
+                out, (;
+                    release = tag, date = string(cutoff), area,
+                    patch = cell(r, "patch"), ids..., quantity = qty,
+                    median = m, lo90 = bound(c.lo), hi90 = bound(c.hi),
+                )
+            )
+        end
+    end
+    no_province > 0 && @warn string(
+        tag, ": skipped ", no_province, " zone row(s) with no province"
+    )
+    return out
+end
+
+## Write the per-area `rows` of `level` to `dest` in
+## `AREA_ESTIMATE_COLUMNS` order, sorted by date, area and quantity, with
+## estimates to three decimals, whole numbers as integers and a missing value
+## as an empty cell. Written even when empty (header only), since the docs
+## build reads it.
+function write_area_estimates(dest, rows, level::Symbol)
+    sorted = sort(rows; by = r -> (r.date, r.area, r.quantity))
+    fmt(x) = ismissing(x) ? "" :
+        x isa AbstractFloat ?
+        (isinteger(x) ? string(Int(x)) : string(round(x; digits = 3))) :
+        string(x)
+    mkpath(dirname(dest))
+    return write_simple_csv(
+        dest,
+        [c => [fmt(r[c]) for r in sorted] for c in AREA_ESTIMATE_COLUMNS[level]]
+    )
+end
+
+# ----------------------------------------------------------------------
 # Driver
 # ----------------------------------------------------------------------
 
@@ -1481,6 +1611,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
     zone_overlay_rows = NamedTuple[]
     rt_rows = NamedTuple[]
     r0_rows = NamedTuple[]
+    ## Per-province and per-zone estimates, keyed by level, with the count of
+    ## releases each was read from.
+    area_rows = Dict(level => NamedTuple[] for level in (:province, :zone))
+    area_counts = Dict(level => 0 for level in (:province, :zone))
     ## One accumulator per per-stream estimate table, keyed by its filename.
     stream_est_rows = Dict(
         f => NamedTuple[] for f in values(STREAM_QUANTITY_DEST)
@@ -1826,6 +1960,24 @@ if abspath(PROGRAM_FILE) == @__FILE__
         isnothing(byqty) || for (qty, rows) in byqty
             append!(stream_est_rows[STREAM_QUANTITY_DEST[qty]], rows)
         end
+
+        ## Per-province and per-zone estimates at the release cut-off. Absent
+        ## on every release published before the asset existed, a clean skip.
+        for (level, asset) in (
+                (:province, PROVINCE_ESTIMATES_ASSET),
+                (:zone, ZONE_ESTIMATES_ASSET),
+            )
+            path = fetch_asset(repo, tag, asset, tagdir(tag))
+            rows = try
+                area_estimate_rows(tag, path, cutoffs[tag], level)
+            catch e
+                @warn "skipping $tag $level estimates" exception = e
+                nothing
+            end
+            isnothing(rows) && continue
+            append!(area_rows[level], rows)
+            area_counts[level] += 1
+        end
     end
 
     println(
@@ -2106,5 +2258,27 @@ if abspath(PROGRAM_FILE) == @__FILE__
             ]
         )
         println("Wrote $(nrow(df)) per-stream rows to data/$file")
+    end
+
+    ## `data/province/released_estimates.csv` and
+    ## `data/zone/released_estimates.csv`: each release's per-area
+    ## reproduction number, reported counts and, for provinces, case-fatality
+    ## ratio, in long format. The basename is already in `FIT_DATA_EXCLUDE`,
+    ## which matches on basename, so both stay out of the fit key without a
+    ## change to the key itself.
+    write_area_estimates(
+        joinpath(@__DIR__, "..", "data", "province", "released_estimates.csv"),
+        area_rows[:province], :province
+    )
+    write_area_estimates(
+        joinpath(@__DIR__, "..", "data", "zone", "released_estimates.csv"),
+        area_rows[:zone], :zone
+    )
+    for level in (:province, :zone)
+        println(
+            "Wrote $(length(area_rows[level])) per-$level estimate rows " *
+                "from $(area_counts[level])/$(length(tags)) releases to " *
+                "data/$level/released_estimates.csv"
+        )
     end
 end

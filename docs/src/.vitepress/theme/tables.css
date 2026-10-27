@@ -1,0 +1,180 @@
+/* Large report tables, enhanced by tables.ts. Every rule is scoped to the
+   wrapper that script adds, so tables without it render as before. */
+
+.vp-doc .bvd-table {
+  margin: 16px 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.vp-doc .bvd-table-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 6px;
+}
+
+.vp-doc .bvd-table-filter {
+  flex: 1 1 12rem;
+  max-width: 20rem;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  background: var(--vp-c-bg);
+  color: var(--vp-c-text-1);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.vp-doc .bvd-table-filter:focus {
+  border-color: var(--vp-c-brand-1);
+  outline: none;
+}
+
+.vp-doc .bvd-table-count {
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-doc .bvd-table-scroll {
+  max-height: min(70vh, 36rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+}
+
+.vp-doc .bvd-table-scroll:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+/* VitePress makes tables block-level scrollers; the box scrolls instead,
+   so the header can stick to it. */
+.vp-doc .bvd-table-scroll > table.bvd-table-enhanced {
+  display: table;
+  margin: 0;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.vp-doc .bvd-table-enhanced thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.vp-doc .bvd-table-enhanced tr,
+.vp-doc .bvd-table-enhanced tr:nth-child(2n) {
+  background: transparent;
+  border: 0;
+}
+
+.vp-doc .bvd-table-enhanced tbody tr:nth-child(2n) {
+  background: var(--vp-c-bg-soft);
+}
+
+.vp-doc .bvd-table-enhanced tbody tr:hover {
+  background: var(--vp-c-default-soft);
+}
+
+.vp-doc .bvd-table-enhanced tr[hidden] {
+  display: none;
+}
+
+.vp-doc .bvd-table-enhanced th,
+.vp-doc .bvd-table-enhanced td {
+  padding: 3px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--vp-c-divider);
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.vp-doc .bvd-table-enhanced tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.vp-doc .bvd-table-enhanced th {
+  background: var(--vp-c-bg-alt);
+  color: var(--vp-c-text-1);
+  font-weight: 600;
+  vertical-align: bottom;
+}
+
+.vp-doc .bvd-table-enhanced thead tr:last-child th {
+  border-bottom: 2px solid var(--vp-c-divider);
+}
+
+/* The inline alignment the markdown and DataFrame writers emit puts every
+   column on the right; numbers stay there and text reads from the left. */
+.vp-doc .bvd-table-enhanced .bvd-num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Long labels wrap rather than widen a column of short numbers. */
+.vp-doc .bvd-table-enhanced th.bvd-num {
+  white-space: normal;
+  min-width: 5rem;
+}
+
+.vp-doc .bvd-table-enhanced .bvd-text {
+  text-align: left !important;
+}
+
+.vp-doc .bvd-table-enhanced td.bvd-text {
+  min-width: 6rem;
+}
+
+.vp-doc .bvd-table-enhanced .bvd-sort {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.vp-doc .bvd-table-enhanced th.bvd-num .bvd-sort {
+  justify-content: flex-end;
+}
+
+.vp-doc .bvd-table-enhanced .bvd-sort::after {
+  content: "↕";
+  flex: none;
+  color: var(--vp-c-text-3);
+  font-weight: 400;
+}
+
+.vp-doc .bvd-table-enhanced th[aria-sort="ascending"] .bvd-sort::after {
+  content: "▲";
+  color: var(--vp-c-brand-1);
+}
+
+.vp-doc .bvd-table-enhanced th[aria-sort="descending"] .bvd-sort::after {
+  content: "▼";
+  color: var(--vp-c-brand-1);
+}
+
+.vp-doc .bvd-table-enhanced .bvd-sort:hover {
+  color: var(--vp-c-brand-1);
+}
+
+.vp-doc .bvd-table-enhanced .bvd-sort:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
