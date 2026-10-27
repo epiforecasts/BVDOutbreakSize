@@ -1,7 +1,8 @@
 cff-version: 1.2.0
 message: >-
-  If you use or build on this project, please cite it using
-  these metadata.
+  If you use this project, please cite it using these metadata,
+  together with the INSP and WHO situation reports that supply
+  its data.
 title: >-
   BVDOutbreakSize: estimating the current size of the 2026 DRC
   Bundibugyo virus outbreak

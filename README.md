@@ -155,32 +155,37 @@ The rendered report is published from the
 
 ## Citation
 
-If you use or build on this project, please cite the works this repository depends on:
+If you use this project, please cite it and the situation reports that supply its data:
 
-- **This project** — Abbott, S., Funk, S. (2026).
-  *BVDOutbreakSize: joint forward-generative Turing model for the
-  2026 DRC Bundibugyo outbreak.*
+- **This project** — Abbott, S. and Funk, S. (2026).
+  *BVDOutbreakSize: estimating the current size of the 2026 DRC
+  Bundibugyo virus outbreak.*
   <https://github.com/epiforecasts/BVDOutbreakSize>.
   DOI: [10.5281/zenodo.20312758](https://doi.org/10.5281/zenodo.20312758).
-- **INSP situation reports** that supply the DRC suspected-case and
-  suspected-death counts and the sitrep cumulative trajectory —
-  Institut National de Santé Publique, Démocratique du Congo (2026).
+- **INSP situation reports**, the source of every DRC series —
+  Institut National de Santé Publique, République Démocratique du Congo (2026).
   *Situation reports on the 17th Ebola epidemic.*
-  <https://insp.cd/ebola-17eme-epidemie/>. Transcribed by
-  INRB-UMIE/BDBV2026-Data,
-  <https://github.com/INRB-UMIE/BDBV2026-Data>.
-- **WHO situation reports and Disease Outbreak News** that supply
-  the Uganda import-case counts and the dated detection and death
-  events for the first Uganda import —
-  World Health Organization Regional Office for Africa (2026).
-  *Ebola disease caused by Bundibugyo virus outbreak, Democratic
-  Republic of the Congo and Uganda — Weekly External Situation
-  Report 01.* Data as of 18 May 2026.
-  World Health Organization (2026). *Disease Outbreak News:
-  Ebola disease caused by Bundibugyo virus — Democratic Republic
-  of the Congo and Uganda (DON602, DON603).* Source of the first
-  Uganda import hospital-admission date (11 May 2026) and the fatal
-  import death date (14 May 2026).
+  <https://insp.cd/ebola-17eme-epidemie/>.
+- **WHO situation reports and Disease Outbreak News**, the source of the
+  Uganda exports and their deaths —
+  World Health Organization (2026). *Ebola disease caused by Bundibugyo
+  virus, Democratic Republic of the Congo and Uganda.*
+
+## Acknowledgements
+
+Kath Sherratt and Samuel Brand were authors of versions 1.0.0 to 3.0.0.
+We thank them for their contributions to those versions and their review of them.
+
+## Funding
+
+This work was funded by the National Institute for Health and Care Research (NIHR) Health Protection Research Unit in Health Analytics & Modelling, a partnership between the UK Health Security Agency, Imperial College London and the London School of Hygiene & Tropical Medicine (grant code NIHR207404).
+The views expressed are those of the author(s) and not necessarily those of the NIHR, UK Health Security Agency or the Department of Health and Social Care.
+
+## Further references
+
+The works this project builds on and compares against.
+Citing them is not needed to use it.
+
 - **McCabe et al. estimates** that this work re-implements and compares
   against, in all three released versions (the two Imperial reports and
   the peer-reviewed Lancet publication) —
@@ -218,19 +223,6 @@ If you use or build on this project, please cite the works this repository depen
   delay priors — Funk, S. (2026). *bdbv-linelist-analysis:
   Bayesian reanalysis of the 2012 Isiro Bundibugyo line list.*
   <https://github.com/sbfnk/bdbv-linelist-analysis>.
-
-## Acknowledgements
-
-Kath Sherratt and Samuel Brand were authors of versions 1.0.0 to 3.0.0.
-We thank them for their contributions to those versions and their review of them.
-
-## Funding
-
-This work was funded by the National Institute for Health and Care Research (NIHR) Health Protection Research Unit in Health Analytics & Modelling, a partnership between the UK Health Security Agency, Imperial College London and the London School of Hygiene & Tropical Medicine (grant code NIHR207404).
-The views expressed are those of the author(s) and not necessarily those of the NIHR, UK Health Security Agency or the Department of Health and Social Care.
-
-## Further references
-
 - Rosello et al., *Ebola virus disease in DRC, 1976–2014*, eLife 2015.
   Original Isiro 2012 onset-to-death gamma point estimate.
 - Imai et al., *Estimating the potential total number of novel
