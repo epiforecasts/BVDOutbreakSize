@@ -204,6 +204,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   The province page shows each province's reproduction number, confirmed cases and case-fatality ratio at every release, and the zone page the reproduction number and confirmed cases of the twelve zones with most cases.
   `scripts/score_releases.jl` collects them from each release's `province_estimates.csv` and `zone_estimates.csv` into `data/province/released_estimates.csv` and `data/zone/released_estimates.csv`, skipping a release without the table.
   The basename is already excluded from the fit hash, so the fit keys do not change, and neither do the fitted values.
+- The summaries at the top of the in-sample and forecast evaluation pages give their per-stream and per-province scores as a table rather than a bullet per row.
+  The national in-sample table marks which streams are still reporting and replaces the folded calibration table further down that page.
+  A value that was not scored reads n/a.
 - Past province and health-zone forecasts against what was observed are shown only on the forecast evaluation pages, not also on the forecast pages.
   Each forecast page links to its evaluation section instead.
 - The past province and health-zone forecasts are drawn as a grid of three columns, one panel per province stream or zone, rather than a single column.
