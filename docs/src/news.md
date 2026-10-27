@@ -198,6 +198,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Report
 
+- The province in-sample checks set the spatial hyperparameters against their prior, in place of a pair plot of every province's reproduction number and case total.
+  Those derived quantities stay in the province estimates.
 - The province and health-zone estimates report point prevalence at the cut-off: the people infected but not yet symptomatic and the people with symptoms who have not yet been detected, per 100,000 residents.
   A figure ranks the areas by the rate in the community.
   Each posterior draw gives its own prevalence from its daily infections and delays, and the methods give the calculation.

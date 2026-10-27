@@ -91,41 +91,34 @@ prior_case_ppc_fig #hide
 
 prior_death_ppc_fig #hide
 
+# ### Spatial hyperparameters against their prior
+#
+# Whether the data move the province model's spatial hyperparameters away from their prior.
+
 #md # ```@raw html
-#md # <details><summary>Province prior and posterior pair plot</summary>
+#md # <details><summary>Spatial hyperparameter pair plot</summary>
 #md # ```
 
-## Per-province entries of a vector deterministic, one draw vector each,
-## keyed `<name>_<patch>` so they can sit side by side in one table.
-function _patch_columns(chn, key::Symbol, name::AbstractString; f = identity)
-    draws = [collect(v) for v in vec(collect(chn[key]))]
-    return [
-        Symbol(name, "_", p) => Float64[f(d[p]) for d in draws]
-            for p in 1:N_PATCHES
-    ]
-end
-_province_pair_draws(chn) = NamedTuple(
-    vcat(
-        _patch_columns(chn, :R_T_patch, "R_T"),
-        _patch_columns(chn, :C_T_patch, "log10_C_T"; f = x -> log10(x + 1))
-    )
-)
-_province_pair_labels = Dict(
-    Symbol(name, "_", p) => string(label, ", ", PROVINCE_LABELS[p])
-        for p in 1:N_PATCHES
-        for (name, label) in (("R_T", "R_T"), ("log10_C_T", "log10 C_T"))
-)
-province_pair_fig = plot_pair(
-    _province_pair_draws(chn_joint);
-    prior = _province_pair_draws(prior_patch_chn),
-    labels = _province_pair_labels
+spatial_pair_fig = plot_pair(
+    chn_joint, spatial_params;
+    prior = prior_patch_chn, labels = spatial_labels
 );
 
 #md # ```@raw html
 #md # </details>
+#md # <figure class="bvd-figure">
 #md # ```
 
-province_pair_fig #hide
+spatial_pair_fig #hide
+
+#md # ```@raw html
+#md # <figcaption>
+#md # Joint posterior of the spatial hyperparameters, with the prior overlaid.
+#md # These are the spread, half-life and correlation of the Rt deviations, the spreads of suspected-case detection and case confirmation, the importation intensity, its destination and flow spreads and their correlations, and the spreads of lethality and death confirmation.
+#md # The province reproduction numbers and case totals are derived from these and are in the [province estimates](@ref "Province estimates").
+#md # </figcaption>
+#md # </figure>
+#md # ```
 
 # ## [Province compositions](@id province-compositions)
 #
@@ -409,6 +402,16 @@ MarkdownTable(province_count_calibration_table) #hide
 #md # ```@raw html
 #md # <details><summary>Province posterior correlation heatmap</summary>
 #md # ```
+
+## Per-province entries of a vector deterministic, one draw vector each,
+## keyed `<name>_<patch>` so they can sit side by side in one table.
+function _patch_columns(chn, key::Symbol, name::AbstractString; f = identity)
+    draws = [collect(v) for v in vec(collect(chn[key]))]
+    return [
+        Symbol(name, "_", p) => Float64[f(d[p]) for d in draws]
+            for p in 1:N_PATCHES
+    ]
+end
 
 ## LaTeX label for one province's entry of a quantity. Spaces in a province
 ## name need escaping inside `\mathrm`.

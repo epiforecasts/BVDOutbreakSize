@@ -330,6 +330,31 @@ if !@isdefined(_BVD_SETUP_LOADED)
         obs.province_death_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES)
     )
+    ## The province model's spatial hyperparameters and their labels, for the
+    ## estimates table and the in-sample prior and posterior pair plot.
+    spatial_labels = Dict(
+        :region_sd => "Rt deviation spread",
+        :region_halflife => "Rt deviation half-life (days)",
+        :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
+        :province_suspected_ascertainment_sd => "Detection spread (logit)",
+        :province_ascertainment_sd => "Confirmation spread",
+        :importation_epsilon => "Importation intensity",
+        :importation_destination_sd => "Importation destination spread",
+        :importation_origin_destination_correlation =>
+            "Origin-destination correlation",
+        :importation_flow_sd => "Importation flow spread",
+        :importation_reciprocity => "Importation reciprocity",
+        :province_cfr_sd => "Lethality spread (logit)",
+        :province_death_ascertainment_sd => "Death-confirmation spread"
+    )
+    spatial_params = [
+        :region_sd, :region_halflife, :region_corr_primary_secondary,
+        :province_suspected_ascertainment_sd, :province_ascertainment_sd,
+        :importation_epsilon, :importation_destination_sd,
+        :importation_origin_destination_correlation, :importation_flow_sd,
+        :importation_reciprocity, :province_cfr_sd,
+        :province_death_ascertainment_sd,
+    ]
     ## Draws from the province model's prior for the province pages. The
     ## `joint_prior_draws` are single-population and carry no province
     ## quantities. Every observation is withheld as there, but the province
