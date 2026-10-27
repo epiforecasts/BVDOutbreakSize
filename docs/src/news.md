@@ -125,7 +125,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
-- The model cut-off advances to SitRep 163, 24 October (#PRNUM).
+- The model cut-off advances to SitRep 163, 24 October (#1166).
   Haut-Uélé's care paragraph repeats SitRep 162's word for word and says the day's care data did not arrive, so it is a stale carry-forward and Haut-Uélé has no care entry that day.
   Tableau 3 prints no figures for Bas-Uélé or Tshopo, so the day's 424 validated suspects are a partial and stay out of the suspected-case stream.
   SitRep 163 redraws SitRep 160's onset extract, so the onset curve does not add it.
