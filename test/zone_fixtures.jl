@@ -162,6 +162,8 @@ function zone_synthetic(;
         n, seeding, cutoff = seeding + Day(n - 1),
         zone_confirmed_history = hist,
         zone_death_history = death_hist,
+        zone_confirmed_revision_24h = Dict{String, Dict{String, NamedTuple}}(),
+        zone_death_revision_24h = Dict{String, Dict{String, NamedTuple}}(),
     )
     ## Stand-in parent chain: four identical draws of the truth.
     ndraw = 4

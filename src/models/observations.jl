@@ -456,7 +456,7 @@ ascertainment and the background CFR for reuse by
         onset_to_death = onset_to_death_model(
             cdf_nmax(Gamma(3.33, 3.83));
             oa_alpha_prior = LogNormal(log(1.178), 0.25),
-            oa_theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1),
+            oa_theta_prior = ONSET_ADMISSION_THETA_PRIOR,
             ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
             ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
         ),
@@ -543,9 +543,9 @@ disjoint days. Empty by default.
 
 The background and testing fraction are sampled by an injected
 [`test_positivity_model`](@ref), and the onset-to-report delay is
-injected, defaulting to a weakly-informative prior on the
-onset-to-notification delay (mean 4.5 d, SD 3.6 d), consistent with
-Ebola surveillance reporting delays.
+injected, defaulting to the line-list onset-to-admission Gamma with shape
+`LogNormal(log(1.178), 0.25)` and scale
+[`ONSET_ADMISSION_THETA_PRIOR`](@ref) (implied mean about 4 d).
 
 Returns the onset-to-report PMF and the BVD onset-to-report daily series
 (unit ascertainment, no background) so [`confirmed_cases_model`](@ref) can
@@ -571,7 +571,7 @@ sitrep.
         onset_to_report = gamma_delay_model(
             cdf_nmax(Gamma(1.178, 3.694));
             alpha_prior = LogNormal(log(1.178), 0.25),
-            theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)
+            theta_prior = ONSET_ADMISSION_THETA_PRIOR
         ),
         cutoff::Union{Nothing, Integer} = nothing,
         simulated = nothing
@@ -1421,7 +1421,7 @@ rate and the daily at-risk prevalence for reuse by
         onset_to_detection = gamma_delay_model(
             cdf_nmax(Gamma(1.178, 3.694));
             alpha_prior = LogNormal(log(1.178), 0.25),
-            theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)
+            theta_prior = ONSET_ADMISSION_THETA_PRIOR
         ),
         cutoff::Union{Nothing, Integer} = nothing,
         simulated = nothing

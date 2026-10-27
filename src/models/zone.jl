@@ -2344,9 +2344,11 @@ The observations and health-zone metadata reduced to the `top_zones` zones
 of each province with most confirmed cases at the cut-off, the rest of the
 province's zones pooled into one `pool_name` zone so every patch total is
 still allocated. The pooled zone's cumulative case and death series are
-the sums of the pooled zones', its population their sum and its centroid
+the running sums of the pooled zones' increments, each taking its own
+printed 24h figure. Its population is their sum and its centroid
 their population-weighted mean, so mixing and the distance correlation
-stay on. A province with `top_zones` zones or fewer is unchanged, and the
+stay on.
+A province with `top_zones` zones or fewer is unchanged, and the
 `unallocated` rows pass through. For fast iteration on real data rather
 than for reporting: [`fit_zone`](@ref) takes `top_zones` and applies this.
 Returns `(; obs, zones, kept)`, with `kept` the retained zone keys per
@@ -2363,54 +2365,80 @@ function zone_subset(
         named = [z for z in keys(block) if z != "unallocated"]
         last_count(z) = isempty(block[z].counts) ? 0 : Int(block[z].counts[end])
         sort!(named; by = z -> (-last_count(z), z))
-        kept[prov] = named[1:min(top_zones, end)]
+        ## A single pooled zone keeps its own name rather than becoming the
+        ## rest of nothing.
+        n_keep = length(named) == top_zones + 1 ? length(named) : top_zones
+        kept[prov] = named[1:min(n_keep, end)]
     end
-    pool(history) = begin
-        out = Dict{String, Dict{String, NamedTuple}}()
-        for (prov, block) in history
-            keep = get(kept, prov, String[])
-            newblock = Dict{String, NamedTuple}()
-            rest = nothing
-            pooled = 0
-            for (z, h) in block
-                if z == "unallocated" || z in keep
-                    newblock[z] = h
-                    continue
-                end
-                pooled += 1
-                if rest === nothing
-                    rest = (; days = copy(h.days), counts = collect(Int, h.counts))
-                else
-                    rest.days == h.days || error(
-                        "zone_subset: zone `$(prov).$(z)` is reported on " *
-                            "different vintage days to the zones pooled with it."
-                    )
-                    rest = (; rest.days, counts = rest.counts .+ Int.(h.counts))
-                end
-            end
-            ## A single pooled zone keeps its own name rather than becoming
-            ## the rest of nothing.
-            if rest !== nothing && pooled == 1
-                for (z, h) in block
-                    (z == "unallocated" || z in keep) && continue
-                    newblock[z] = h
-                    push!(kept[prov], z)
-                end
-            elseif rest !== nothing
-                newblock[pool_name] = rest
-            end
-            out[prov] = newblock
-        end
-        out
-    end
-    obs2 = merge(obs, (; zone_confirmed_history = pool(conf)))
+    conf2, conf_printed = _pool_zones(
+        conf, get(obs, :zone_confirmed_revision_24h, Dict{String, Any}()),
+        kept, pool_name
+    )
+    obs2 = merge(
+        obs, (;
+            zone_confirmed_history = conf2,
+            zone_confirmed_revision_24h = conf_printed,
+        )
+    )
     if hasproperty(obs, :zone_death_history)
-        obs2 = merge(obs2, (; zone_death_history = pool(obs.zone_death_history)))
+        deaths, death_printed = _pool_zones(
+            obs.zone_death_history,
+            get(obs, :zone_death_revision_24h, Dict{String, Any}()),
+            kept, pool_name
+        )
+        obs2 = merge(
+            obs2, (;
+                zone_death_history = deaths,
+                zone_death_revision_24h = death_printed,
+            )
+        )
     end
     zones2 = zones === nothing ? nothing : _zone_subset_metadata(
             zones, kept, obs2.zone_confirmed_history, pool_name
         )
     return (; obs = obs2, zones = zones2, kept)
+end
+
+## A zone history and its printed 24h figures with each province's zones
+## outside `kept` pooled into one `pool_name` zone. The pooled cumulative is
+## the running sum of the pooled zones' increments, so it never falls and
+## each pooled zone's own printed figure is already in it. Returns the
+## pooled history and the printed figures of the zones that remain.
+function _pool_zones(history, printed, kept, pool_name)
+    out = Dict{String, Dict{String, NamedTuple}}()
+    for (prov, block) in history
+        keep = get(kept, prov, String[])
+        newblock = Dict{String, NamedTuple}()
+        pooled = String[]
+        for (z, h) in block
+            z == "unallocated" || z in keep ? (newblock[z] = h) : push!(pooled, z)
+        end
+        if !isempty(pooled)
+            sort!(pooled)
+            days = block[first(pooled)].days
+            inc = zeros(Int, length(days))
+            for z in pooled
+                h = block[z]
+                h.days == days || error(
+                    "zone_subset: zone `$(prov).$(z)` is reported on " *
+                        "different vintage days to the zones pooled with it."
+                )
+                inc .+= zone_increments(
+                    h.counts, h.days, _zone_printed(printed, prov, z)
+                )
+            end
+            newblock[pool_name] = (; days = copy(days), counts = cumsum(inc))
+        end
+        out[prov] = newblock
+    end
+    out_printed = Dict{String, Dict{String, NamedTuple}}()
+    for (prov, block) in printed
+        remain = get(out, prov, nothing)
+        out_printed[prov] = Dict{String, NamedTuple}(
+            z => p for (z, p) in block if remain === nothing || haskey(remain, z)
+        )
+    end
+    return out, out_printed
 end
 
 ## Metadata rows for the kept zones plus one pooled row per province that
@@ -2535,7 +2563,8 @@ function zone_fit_inputs(
     )
     per_patch = zone_increment_matrix(
         obs.zone_confirmed_history, patch_names;
-        reattribution
+        reattribution,
+        printed = get(obs, :zone_confirmed_revision_24h, Dict{String, Any}())
     )
     excluded = [
         (;
@@ -2631,6 +2660,7 @@ function zone_fit_inputs(
         death_history;
         include_zone_falls = true
     )
+    death_printed = get(obs, :zone_death_revision_24h, Dict{String, Any}())
     death_counts = zeros(Int, nz, nv)
     for z in 1:nz
         h = _zone_history_series(
@@ -2643,12 +2673,10 @@ function zone_fit_inputs(
                 "$(zone_names[z])` is reported on different vintage days to " *
                 "the confirmed-case tables; both compositions read one grid."
         )
-        prev = 0
-        for v in 1:nv
-            c = Int(h.counts[v])
-            death_counts[z, v] = max(c - prev, 0)
-            prev = c
-        end
+        death_counts[z, :] = zone_increments(
+            h.counts, days,
+            _zone_printed(death_printed, zone_province[z], zone_names[z])
+        )
     end
     for (p, zs) in enumerate(patch_ranges)
         isempty(zs) && continue
