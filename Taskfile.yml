@@ -252,6 +252,11 @@ tasks:
       - BVD_DOC_PAGE=estimates/zone julia --project=docs docs/execute.jl
         {{.CLI_ARGS}}
 
+  test-tables:
+    desc: Run the docs large-table sort and parse tests under Node.
+    cmds:
+      - node --test docs/test/table_sort.test.mjs
+
   fetch-fits:
     desc: >
       Download the fits from the latest successful docs CI run into
