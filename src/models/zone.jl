@@ -1662,10 +1662,11 @@ moves whole patch trajectories, and moves the patches together where the
 province model says they move together. The factor is block diagonal
 between the patch-week cells and the origin and delay cells, so a pull of
 the zone compositions on the delays does not reach the patch levels
-through the province model's correlation between the two. The daily patch trajectory the
-draw implies is the province model's mean curve times `exp(a_p(t))` with
-`a = L η` ([`zone_parent_scale`](@ref)), its origin intensities the mean
-times `e = exp(c)` ([`zone_parent_epsilon`](@ref)), and its generation
+through the province model's correlation between the two. The daily
+patch trajectory the draw implies is the province model's mean curve
+times `exp(a_p(t))` with `a = L η` ([`zone_parent_scale`](@ref)), its
+origin intensities the mean times `e = exp(c)`
+([`zone_parent_epsilon`](@ref)), and its generation
 interval and delays are rebuilt from the drawn parameters
 ([`zone_delay_parameters`](@ref), [`zone_delay_terms`](@ref)). The zone
 model is conditional on all three.

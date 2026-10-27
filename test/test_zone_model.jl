@@ -2475,14 +2475,14 @@ end
     ## `y ∼ N(R η, s² I)` on the delay rows `R`. The posterior mean of the
     ## whitened draw is `Rᵀ (R Rᵀ + s² I)⁻¹ y`.
     y = [-0.66, 0.31]
-    s2 = 0.01
+    s2 = 1.0e-4
     pull(L) = let R = L[xc, :]
         transpose(R) * ((R * transpose(R) + s2 * I) \ y)
     end
     η = pull(meld.L)
     ## The delays move toward the pull, and the patch trajectories stay at
     ## the parent's on every day.
-    @test meld.L[xc, :] * η ≈ y rtol = 0.1
+    @test meld.L[xc, :] * η ≈ y rtol = 0.05
     @test zone_parent_scale(meld.weights, meld.L, η, np, n) == ones(np, n)
     ## The joint factor of the same draws carries the pull into the levels:
     ## shorter delays lower every patch's infections.
