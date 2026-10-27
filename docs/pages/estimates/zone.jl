@@ -172,33 +172,23 @@ end;
 #md # ```
 
 
-MarkdownTable(first(zone_overview_display, 20)) #hide
+MarkdownTable(zone_overview_display) #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The twenty highest-ranked zones, with every zone in the fold below.
+#md # Every health zone, highest-ranked first.
 #md # The share is of the patch's infections at the cut-off, in percent, and the share, reproduction number and deviation are medians with 90% intervals.
 #md # A zone whose reproduction number is not modelled separately takes it from its province.
 #md # </figcaption>
 #md # </figure>
 #md # ```
 
-#md # ```@raw html
-#md # <details><summary>All health zones</summary>
-#md # ```
-
-MarkdownTable(zone_overview_display) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
 # ## [Point prevalence](@id zone-prevalence)
 #
 # The zone estimates split the infections in the community at the cut-off in the same way as the [province estimates](@ref province-prevalence).
 # The [point prevalence](@ref methods-prevalence) section of the Methods gives the calculation.
-# The figure and table show the twenty zones with the highest rate in the community per 100,000 residents.
-# Every zone is listed in the fold below the table.
+# The figure shows the twenty zones with the highest rate in the community per 100,000 residents.
+# The table lists every zone in the same order.
 
 #md # ```@raw html
 #md # <details><summary>Compute point prevalence by zone</summary>
@@ -226,19 +216,7 @@ zone_prevalence_fig #hide
 
 #-
 
-MarkdownTable(
-    prevalence_table(zone_prevalence_overview; max_rows = 20, area = "Zone")
-) #hide
-
-#md # ```@raw html
-#md # <details><summary>Point prevalence in every health zone</summary>
-#md # ```
-
 MarkdownTable(prevalence_table(zone_prevalence_overview; area = "Zone")) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # ## Composition checks
 #

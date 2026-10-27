@@ -104,10 +104,10 @@ zone_forecast_fig = plot_zone_forecast(
     zone_inputs.zone_labels, zone_patch;
     patch_labels = zone_inputs.patch_labels, top = 15
 );
-## The fifteen largest zone forecasts, then every patch total.
+## Every zone forecast, largest first, then every patch total.
 zone_forecast_display = let t = zone_forecast_summary
     zones = sort(t[t.zone .!= "Patch total", :], :median; rev = true)
-    vcat(first(zones, 15), t[t.zone .== "Patch total", :])
+    vcat(zones, t[t.zone .== "Patch total", :])
 end;
 
 #md # ```@raw html
@@ -129,7 +129,7 @@ MarkdownTable(zone_forecast_display) #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The fifteen zones with the largest forecasts, then each patch total.
+#md # Every zone, largest forecast first, then each patch total.
 #md # The last four columns are the probability that the zone reports at least 1, 5, 10 and 20 confirmed cases over the week.
 #md # </figcaption>
 #md # </figure>
