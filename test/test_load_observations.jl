@@ -262,6 +262,12 @@
         minimum(obs.isolation_history.days) .<=
             obs.occupancy_break_days .<= maximum(obs.isolation_history.days)
     )
+    ## The 23 October Ituri break resolves to a grid day inside the
+    ## isolation window.
+    oct23 = obs.n - (Date(obs.cutoff) - Date("2026-10-23")).value
+    @test oct23 in obs.occupancy_break_days
+    @test minimum(obs.isolation_history.days) <= oct23 <=
+        maximum(obs.isolation_history.days)
 
     ## Manual confirmed harmonisation-break days: the same opt-in dated-list
     ## shape, resolved onto the grid. 22 July 2026 (SitRep 069) is listed —
