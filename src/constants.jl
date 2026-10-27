@@ -148,6 +148,15 @@ M_PRIOR_DOUBLING_DAYS), 0.30)`.
 const M_PRIOR_DOUBLING_DAYS = 11.7
 
 """
+    ONSET_ADMISSION_THETA_PRIOR
+
+Prior on the scale of the line-list onset-to-admission Gamma: median at the
+reanalysis estimate 3.694, log-scale SD 1.198 / 3.694 ≈ 0.32. Open at zero,
+so near-zero scales are penalised.
+"""
+const ONSET_ADMISSION_THETA_PRIOR = LogNormal(log(3.694), 0.32)
+
+"""
     RENEWAL_START_LEAD
 
 Days the renewal start sits after the genetic TMRCA day. The renewal
