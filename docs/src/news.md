@@ -22,7 +22,7 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Model
 
-- Each occupancy reclassification break step takes a `Normal(0, 75)` prior in beds rather than `Normal(0, 25)` (#PRNUM).
+- Each occupancy reclassification break step takes a `Normal(0, 75)` prior in beds rather than `Normal(0, 25)` (#1179).
   A reclassification moves a share of one province's isolation register, and the scale puts a quarter of the largest province's stock (Ituri, about 300 to 600 beds) at two standard deviations.
   The family stays Normal, since a step cannot exceed the stock it acts on.
   Fitted values change.
