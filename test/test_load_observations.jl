@@ -241,8 +241,9 @@
 
     ## Manual occupancy break days: an opt-in dated list within the grid,
     ## sorted ascending. The 9 and 19 June and 14 July DHIS2
-    ## reclassifications and the 11 August MVEBDB-format break (see
-    ## data/observations.toml's occupancy_break_dates source) are listed,
+    ## reclassifications, the 11 August MVEBDB-format break and the
+    ## 23 October Ituri break (see data/observations.toml's
+    ## occupancy_break_dates source) are listed,
     ## so each resolves to its grid day and falls inside the isolation
     ## window.
     @test obs.occupancy_break_days isa AbstractVector{<:Integer}
@@ -254,12 +255,19 @@
             for d in (
                 Date("2026-06-09"), Date("2026-06-19"),
                 Date("2026-07-14"), Date("2026-08-11"),
+                Date("2026-10-23"),
             )
     ]
     @test all(
         minimum(obs.isolation_history.days) .<=
             obs.occupancy_break_days .<= maximum(obs.isolation_history.days)
     )
+    ## The 23 October Ituri break resolves to a grid day inside the
+    ## isolation window.
+    oct23 = obs.n - (Date(obs.cutoff) - Date("2026-10-23")).value
+    @test oct23 in obs.occupancy_break_days
+    @test minimum(obs.isolation_history.days) <= oct23 <=
+        maximum(obs.isolation_history.days)
 
     ## Manual confirmed harmonisation-break days: the same opt-in dated-list
     ## shape, resolved onto the grid. 22 July 2026 (SitRep 069) is listed —

@@ -50,6 +50,13 @@ repos:
         additional_dependencies: ['pyyaml']
         pass_filenames: false
         files: '^\.github/(workflows/(docs|test)\.yml|workflows/codecoverage\.yaml|actions/changed-paths/)'
+    # Needs Node on the PATH, which the GitHub runners and the docs build have.
+    -   id: zone-map-timeline
+        name: Dashboard map date logic tests
+        entry: node --test docs/test/zone_map_timeline.test.js
+        language: system
+        pass_filenames: false
+        files: '^docs/(src/public/zone_map/|test/)'
 #####
 # Secrets
 -   repo: https://github.com/Yelp/detect-secrets

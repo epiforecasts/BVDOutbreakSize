@@ -799,13 +799,17 @@ function _evolution_upper(released, renewal, trajectory)
     return upper
 end
 
+## The legend note on the release marks of an estimate-evolution plot.
+const _EVOLUTION_MARKS = "median, 30/60/90% bars"
+
 ## Draw one estimate-evolution panel into `ax`, shared by the single-axis and
 ## faceted plots. `_x` maps a calendar date to the axis' numeric day-offset
 ## and is passed in so faceted panels share one mapping. `cap` is the panel's
 ## value-axis crop: every interval, median and band is clamped to it and a
 ## series that runs past it is marked with an open triangle, so a wide fit
-## reads as running off the axis rather than being dropped. Returns the
-## legend handles and labels for the series actually drawn.
+## reads as running off the axis rather than being dropped. `labels.marks`
+## is the release marks' bracketed legend note, dropped when empty. Returns
+## the legend handles and labels for the series actually drawn.
 function _evolution_panel!(
         ax, _x, released, renewal, trajectory,
         refline, labels::NamedTuple;
@@ -931,7 +935,11 @@ function _evolution_panel!(
     released_mark = _series!(:steelblue)
     if !isnothing(released_mark)
         push!(handles, released_mark)
-        push!(llabels, labels.released * " (median, 30/60/90% bars)")
+        push!(
+            llabels,
+            isempty(labels.marks) ? labels.released :
+                labels.released * " ($(labels.marks))"
+        )
     end
 
     ## Dotted vertical rule at each release date.
@@ -1030,7 +1038,7 @@ function plot_estimate_evolution(
         trajectory, refline,
         (;
             released = released_label, renewal = renewal_label,
-            trajectory = trajectory_label,
+            trajectory = trajectory_label, marks = _EVOLUTION_MARKS,
         );
         cap = ymax
     )
@@ -1069,6 +1077,10 @@ range, floored at `1.0`.
 median or band past it is clamped and marked with an open triangle, as in
 [`plot_estimate_evolution`](@ref).
 
+`marks_label` is the bracketed note on the released marks' legend entry,
+naming the intervals they carry. An empty one leaves the entry unbracketed,
+for marks that carry no interval. A `NaN` bound draws no bar.
+
 Returns a figure carrying `empty_note` in place of the panels when no group
 has any estimate.
 """
@@ -1084,6 +1096,7 @@ function plot_evolution_by_group(
         ncols::Int = 2,
         shared_yrange::Bool = true,
         ymax::Union{Nothing, Real} = nothing,
+        marks_label::AbstractString = _EVOLUTION_MARKS,
         empty_note::AbstractString = "No per-dataset estimates yet."
     )
     ## A group with no estimates is dropped, so the panels show only fits
@@ -1151,7 +1164,7 @@ function plot_evolution_by_group(
             ax, _x, last(g), NamedTuple[], _traj(g),
             refline, (;
                 released = released_label, renewal = "",
-                trajectory = trajectory_label,
+                trajectory = trajectory_label, marks = marks_label,
             );
             cap = ymax
         )
@@ -1175,6 +1188,49 @@ function plot_evolution_by_group(
         tellheight = true, tellwidth = false
     )
     return fig
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The `label => released` groups [`plot_evolution_by_group`](@ref) takes, one
+per area in `areas` and in that order, from a per-release area estimates
+table such as `data/province/released_estimates.csv`. `df` carries `date`,
+`area`, `quantity`, `median`, `lo90` and `hi90`, and only its `quantity`
+rows are read. A panel is titled by `labels`, defaulting to the area key.
+
+Each group's marks are 8-field tuples sorted by date, by position:
+
+| Position | Field |
+| --- | --- |
+| 1 | the release cut-off date, as a string |
+| 2 | the median |
+| 3, 4 | the 30% bounds, always `NaN` |
+| 5, 6 | the 60% bounds, always `NaN` |
+| 7, 8 | the 90% bounds |
+
+The table carries the 90% interval alone, so the 30% and 60% bounds draw no
+bar. A reported count has no interval, and its median stands in for both 90%
+bounds.
+"""
+function area_evolution_groups(
+        df::DataFrame, quantity::AbstractString;
+        areas::AbstractVector, labels::AbstractDict = Dict{String, String}()
+    )
+    rows = sort(
+        [r for r in eachrow(df) if r.quantity == quantity && !ismissing(r.median)];
+        by = r -> r.date
+    )
+    bound(x, m) = ismissing(x) ? float(m) : float(x)
+    return [
+        get(labels, a, a) => [
+            (
+                string(r.date), float(r.median), NaN, NaN, NaN, NaN,
+                bound(r.lo90, r.median), bound(r.hi90, r.median),
+            ) for r in rows if r.area == a
+        ]
+            for a in areas
+    ]
 end
 
 """
@@ -1203,13 +1259,21 @@ interval or median past that crop is clamped and marked with an open triangle
 at the top of the axis. Every made date gets its own x tick, thinning to
 about a dozen for a busier release history.
 
+With `ncol` set, panels wrap into a grid of `ncol` columns, one per stream
+and horizon, titled by stream (and horizon when there is more than one).
+Suits many streams at one horizon.
+
 Returns a figure carrying `empty_message` in place of the panels when no
 forecasts have been scored yet.
 """
 function plot_forecast_overlay(
         overlay::DataFrame;
         empty_message::AbstractString =
-            "No forecasts scored yet. No release carries a stored forecast."
+            "No forecasts scored yet. No release carries a stored forecast.",
+        ncol::Union{Nothing, Integer} = nothing
+    )
+    isnothing(ncol) || ncol >= 1 || throw(
+        ArgumentError("plot_forecast_overlay: ncol must be at least 1.")
     )
     streams = unique(overlay.stream)
     ## An empty table is the expected early state, so say so rather than
@@ -1253,16 +1317,41 @@ function plot_forecast_overlay(
         "joint" => 1.5
     )
 
-    ncols = length(horizons)
-    nrows = length(streams)
-    fig = Figure(; size = (240 * ncols + 80, 200 * nrows + 90))
+    ## Each panel's stream, horizon, grid cell, labels and whether it is the
+    ## lowest in its column (so carries the rotated date labels).
+    wrapped = !isnothing(ncol)
+    single_h = length(horizons) == 1
+    pairs = [(s, h) for s in streams for h in horizons]
+    nc = wrapped ? min(ncol, length(pairs)) : length(horizons)
+    panels = map(enumerate(pairs)) do (i, (s, h))
+        r, c = fldmod1(i, nc)
+        (;
+            s, h, r, c,
+            title = wrapped ?
+                (single_h ? string(s) : "$(s), $(h)-day ahead") :
+                (r == 1 ? "$(h)-day ahead" : ""),
+            ylabel = c == 1 ? (wrapped ? "Count" : string(s)) : "",
+            bottom = i + nc > length(pairs),
+        )
+    end
+    ncols = maximum(p.c for p in panels)
+    nrows = maximum(p.r for p in panels)
+    ## A wrapped grid with one horizon names it once above the panels.
+    header = wrapped && single_h
+    fig = wrapped ?
+        Figure(; size = (270 * ncols + 60, 180 * nrows + 120 + 30 * header)) :
+        Figure(; size = (240 * ncols + 80, 200 * nrows + 90))
+    header && CairoMakie.Label(
+        fig[0, 1:ncols], "$(only(horizons))-day ahead";
+        font = :bold, tellwidth = false
+    )
 
     ## A stream may lack a role, e.g. recovered has no individual fit, so
     ## collect each role's legend handle wherever it first appears.
     obs_handle = nothing
     role_handles = Dict{String, Any}()
-    for (r, s) in enumerate(streams), (c, h) in enumerate(horizons)
-
+    for p in panels
+        s, h = p.s, p.h
         cell = overlay[(overlay.stream .== s) .& (overlay.horizon .== h), :]
         ## Crop to zero and about three times the larger of this panel's own
         ## observed values and forecast medians. The bare floor keeps an
@@ -1270,17 +1359,17 @@ function plot_forecast_overlay(
         cap = isempty(cell) ? 1.0 :
             max(1.0, 3.0 * max(maximum(cell.observed), maximum(cell.median)))
         ax = Axis(
-            fig[r, c];
-            title = r == 1 ? "$(h)-day ahead" : "",
-            xlabel = r == nrows ? "Forecast made" : "",
-            ylabel = c == 1 ? string(s) : "",
+            fig[p.r, p.c];
+            title = p.title,
+            xlabel = p.bottom ? "Forecast made" : "",
+            ylabel = p.ylabel,
             xticks = (_x.(tickdates), [string(d) for d in tickdates]),
             xticklabelrotation = pi / 4,
             limits = ((0.5, length(alldates) + 0.5), (0, cap))
         )
-        ## Every panel shares the one made-date axis, so only the bottom row
-        ## carries the rotated date labels.
-        r == nrows || CairoMakie.hidexdecorations!(
+        ## Every panel shares the one made-date axis, so only the lowest
+        ## panel in each column carries the rotated date labels.
+        p.bottom || CairoMakie.hidexdecorations!(
             ax;
             ticklabels = true, ticks = false, grid = false,
             label = false, minorgrid = false, minorticks = false
