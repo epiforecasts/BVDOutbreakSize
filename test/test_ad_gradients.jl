@@ -176,3 +176,44 @@ end
     @test all(isfinite, grad)
     @test any(!iszero, grad)
 end
+
+## Gradient check far from the prior median: at an onset-to-report scale of
+## 0.13 the Mooncake gradient along log θ matches a central finite
+## difference of the log density.
+@testitem "AD gradient: reported_cases_model matches finite differences at a small scale (Mooncake)" tags = [
+    :ad,
+] begin
+    using LogDensityProblems: logdensity, logdensity_and_gradient
+    using BVDOutbreakSize: reported_cases_model, default_adtype
+    using Turing: DynamicPPL
+    using Random: Xoshiro
+    include(joinpath(@__DIR__, "ad_fixtures.jl"))
+
+    onsets = ADFixtures.latent_draw().onsets
+    model = reported_cases_model(
+        ADFixtures.REPORTED_HISTORY, ADFixtures.REPORTED_TOTAL, onsets, 5.0,
+        0.3; suspected_daily_history = ADFixtures.SUSPECTED_DAILY_HISTORY
+    )
+    θ = 0.13
+    init = DynamicPPL.InitFromParams(
+        Dict(DynamicPPL.@varname(report_state.θ) => θ),
+        DynamicPPL.InitFromPrior()
+    )
+    vi = DynamicPPL.link(
+        DynamicPPL.VarInfo(Xoshiro(ADFixtures.SEED), model, init), model
+    )
+    x = collect(vi[:])
+    idx = findall(≈(log(θ)), x)
+    @test length(idx) == 1
+    i = only(idx)
+    ldf = DynamicPPL.LogDensityFunction(
+        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype()
+    )
+    logp, grad = logdensity_and_gradient(ldf, x)
+    @test isfinite(logp)
+    h = 1.0e-5
+    e = zeros(length(x))
+    e[i] = h
+    fd = (logdensity(ldf, x .+ e) - logdensity(ldf, x .- e)) / (2h)
+    @test grad[i] ≈ fd rtol = 1.0e-4
+end

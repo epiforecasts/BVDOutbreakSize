@@ -146,6 +146,31 @@ const VALIDATION_STREAM_FITS = (
     ("confirmed_deaths", :confirmed_deaths),
     ("treatment", :isolation_beds),
 )
+## Only streams with truth after the May cut-offs; suspected streams end
+## before the first horizon and bed occupancy starts after.
+const FROZEN_CUTOFF_STREAM_FITS = ("confirmed", "confirmed_deaths")
+
+"""
+    frozen_stream_fit_ids(validation_cutoff, frozen_cutoffs, validation_ids)
+
+The frozen single-stream fits as `(; id, sid, cutoff)` entries: one
+`frozen_validation_<sid>` per id in `validation_ids` at `validation_cutoff`,
+then one `frozen_<cutoff>_<sid>` per `FROZEN_CUTOFF_STREAM_FITS` stream at
+each of `frozen_cutoffs`. `build_fit_specs` and the pages that read the fits
+both take their ids from here.
+"""
+function frozen_stream_fit_ids(validation_cutoff, frozen_cutoffs, validation_ids)
+    return [
+        [
+            (; id = "frozen_validation_$sid", sid, cutoff = validation_cutoff)
+                for sid in validation_ids
+        ];
+        [
+            (; id = "frozen_$(c)_$sid", sid, cutoff = c)
+                for c in frozen_cutoffs for sid in FROZEN_CUTOFF_STREAM_FITS
+        ]
+    ]
+end
 
 """
 Fit ids of the single-stream models the forecast validation draws, for the
@@ -367,9 +392,8 @@ function build_fit_specs(
     ## A single-stream fit at the headline settings to the data frozen at
     ## `cutoff_date`, mirroring `fit_frozen_joint` but for one of the
     ## individual per-stream models below (`model_id` one of "cases",
-    ## "deaths", "confirmed", "confirmed_deaths", "treatment"). Used to show
-    ## each stream's own individual model alongside the joint in the
-    ## one-week-back forecast validation, not just the joint alone.
+    ## "deaths", "confirmed", "confirmed_deaths", "treatment"). Built at each
+    ## cut-off `frozen_stream_fit_ids` lists.
     function frozen_stream(model_id::AbstractString, cutoff_date)
         o = freeze_observations(cutoff_date)
         model = if model_id == "cases"
@@ -639,19 +663,19 @@ function build_fit_specs(
         ),
     ]
     ## One frozen individual fit per still-reported stream at the validation
-    ## cut-off, so the "last week versus now" forecast validation can show
-    ## each stream's own model alongside the frozen joint above, not the
-    ## joint alone. `validation_stream_ids` names which single-stream models
-    ## get one; "exports" is excluded (not forecast at all, see
-    ## `forecast_reported`) and there is no individual model for
-    ## "recovered".
-    for sid in validation_stream_ids(obs)
+    ## cut-off and per `FROZEN_CUTOFF_STREAM_FITS` stream at each frozen
+    ## cut-off, so each stream's own model is scored beside the frozen joint.
+    ## "exports" is excluded (not forecast at all, see `forecast_reported`)
+    ## and there is no individual model for "recovered".
+    for f in frozen_stream_fit_ids(
+            validation_cutoff, frozen_cutoffs, validation_stream_ids(obs)
+        )
         push!(
             specs,
             (;
-                id = "frozen_validation_$sid", kind = :frozen,
-                model = () -> frozen_stream(sid, validation_cutoff).model,
-                thunk = () -> fit_frozen_stream(sid, validation_cutoff),
+                id = f.id, kind = :frozen,
+                model = () -> frozen_stream(f.sid, f.cutoff).model,
+                thunk = () -> fit_frozen_stream(f.sid, f.cutoff),
             )
         )
     end

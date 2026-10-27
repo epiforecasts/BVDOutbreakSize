@@ -29,6 +29,7 @@ A major version: the report gains a health-zone level below the provinces, with 
   The importation intensity loses its change at detection too, so `importation_epsilon_effect` is gone and each origin's intensity is constant in time, with `RT_INTERVENTION_RAMP`, `sigmoid_ramp` and the figures' end-of-scale-up marker removed.
   The single-population composers and `patch_infection_model` lose their `breakpoint` keyword, which only set the ramps; the joint keeps it for the walk start, and `reconstruct_rt` and `reconstruct_patch_rt` lose `breakpoint` and `ramp`.
   Fitted values change and every fit needs rerunning.
+- The onset-to-admission Gamma scale prior is `LogNormal(log(3.694), 0.32)` at the onset-to-report, onset-to-detection and onset-to-death delays, and fitted values change (#1087).
 - Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
   SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.
   Giving Nord-Ubangi, with 2 cases, its own patch while Tshopo, with 59 by 10 October, stayed pooled would have broken the rule the pooling rested on, so Sud-Kivu, Tshopo, Bas-Uele and Sud-Ubangi become patches too.
@@ -196,6 +197,11 @@ A major version: the report gains a health-zone level below the provinces, with 
   Dakwa (Bas-Uélé), new at SitRep 147, has no polygon in the Ministry of Health health-zone map, so its case is carried in the Bas-Uélé unallocated row until the zone is mapped.
 - The national bed capacity drops days on which a province holding at least 5% of the beds prints none, mostly Nord-Kivu (#1043).
 - `province_admissions_history` block, sparse by province, to SitRep 159 (20 October), and province beds raised to the rate-implied beds where the patients exceed a stale printed count (#958).
+- Where a health zone's cumulative count falls, its increment takes the report's printed 24h figure for that zone rather than the clamped zero (#1161, resolves #750).
+  The figures are read from Tableau 2 on the flagged zone-vintages only: 6 of the 8 case falls and 8 of the 9 death falls, with the three falls of 11 June predating the 24h columns.
+  Only three of those figures are non-zero: Butembo's 4 cases and Bunia's 7 and Bambu's 4 deaths on 22 July.
+  The death composition still leaves out the vintages with a zone fall, so the one change the health-zone fit sees is Butembo's 4 cases in the Nord-Kivu composition on 22 July.
+  Fitted health-zone values change.
 
 ### Report
 
@@ -268,6 +274,9 @@ A major version: the report gains a health-zone level below the provinces, with 
   Fitted values do not change (resolves #1055).
 - The report pages describe each figure and table in a caption beneath it rather than in the prose above it, and drop prose that repeats the methods, the limitations or another page (#1127).
   Fitted values do not change.
+- The confirmed-cases and confirmed-deaths single-stream models are fitted at each of the three May frozen cut-offs and scored alongside the frozen joint (resolves #513).
+  They are the only streams with truth to score from those cut-offs, so the frozen comparison of the joint against each stream's own model now covers every May cut-off rather than the one-week-back cut-off alone.
+  Existing fitted values do not change.
 
 ### Infrastructure
 

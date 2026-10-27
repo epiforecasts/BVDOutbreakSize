@@ -302,6 +302,36 @@ function load_observations(
         return result
     end
 
+    ## Sparse per-zone history, one `province.zone` sub-table per zone.
+    function zone_sparse_history(key)
+        ZonePrinted = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
+        result = Dict{String, Dict{String, ZonePrinted}}()
+        haskey(raw, key) || return result
+        for (prov, zones) in raw[key]
+            prov == "source" && continue
+            zones isa AbstractDict || error("$key: $prov is not a table")
+            for (zone, sub) in zones
+                (
+                    sub isa AbstractDict && haskey(sub, "dates") &&
+                        haskey(sub, "values")
+                ) || error(
+                    "$key: $prov.$zone needs `dates` and `values`"
+                )
+                length(sub["values"]) == length(sub["dates"]) || error(
+                    "$key: $prov.$zone has $(length(sub["values"])) " *
+                        "values for $(length(sub["dates"])) dates"
+                )
+                keep = [Date(String(d)) <= cutoff for d in sub["dates"]]
+                idx = Int[_index(d) for d in sub["dates"][keep]]
+                ord = sortperm(idx)
+                vals = Int.(sub["values"][keep])
+                block = get!(result, String(prov), Dict{String, ZonePrinted}())
+                block[String(zone)] = (; days = idx[ord], counts = vals[ord])
+            end
+        end
+        return result
+    end
+
     reported_history = history("reported_case_history")
     confirmed_history = history("confirmed_case_history")
     confirmed_deaths_history = history("confirmed_death_history")
@@ -527,6 +557,10 @@ function load_observations(
             province_sparse_history("province_admissions_history"),
         zone_confirmed_history = zone_history("zone_confirmed_history"),
         zone_death_history = zone_history("zone_death_history"),
+        zone_confirmed_revision_24h =
+            zone_sparse_history("zone_confirmed_revision_24h"),
+        zone_death_revision_24h =
+            zone_sparse_history("zone_death_revision_24h"),
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days,
     )
@@ -605,18 +639,23 @@ function province_increment_matrix(
     return (; days, increments)
 end
 
+## A zone's cumulative falls when it loses more than one, so a single-unit
+## correction is not read as a revision.
+_is_zone_fall(prev, cur) = prev - cur > 1
+
 """
-    zone_cumulative_falls(zone_history; min_fall = 1)
+    zone_cumulative_falls(zone_history)
 
 Every place a named zone's cumulative count falls between consecutive
-vintages by more than `min_fall`, as a vector of named tuples
+vintages by more than one, as a vector of named tuples
 `(; province, zone, day, from, to)`. A cumulative series cannot fall on
 its own, so each entry is a revision: the report has moved counts
-between zones, provinces or the unallocated row. `min_fall` guards
-against a single-unit correction being read as a revision.
-[`zone_increment_matrix`](@ref) clamps these falls to zero.
+between zones, provinces or the unallocated row. A fall of one is read
+as a single-unit correction rather than a revision.
+[`zone_increment_matrix`](@ref) clamps these falls to zero, or takes the
+report's 24h figure where one is recorded ([`zone_increments`](@ref)).
 """
-function zone_cumulative_falls(zone_history; min_fall::Integer = 1)
+function zone_cumulative_falls(zone_history)
     out = @NamedTuple{
         province::String, zone::String, day::Int,
         from::Int, to::Int,
@@ -625,7 +664,7 @@ function zone_cumulative_falls(zone_history; min_fall::Integer = 1)
 
         zone == "unallocated" && continue
         for i in 2:length(h.days)
-            h.counts[i - 1] - h.counts[i] > min_fall || continue
+            _is_zone_fall(h.counts[i - 1], h.counts[i]) || continue
             push!(
                 out,
                 (;
@@ -639,8 +678,34 @@ function zone_cumulative_falls(zone_history; min_fall::Integer = 1)
 end
 
 """
-    zone_reattribution_days(zone_history; include_zone_falls = false,
-        min_fall = 1)
+    zone_increments(counts, days, printed = nothing)
+
+One zone's increments of its cumulative `counts`, clamped at zero,
+except that a flagged fall takes the `printed` figure (`(; days, counts)`)
+for that day, floored at zero.
+"""
+function zone_increments(
+        counts::AbstractVector, days::AbstractVector, printed = nothing
+    )
+    inc = max.(diff(vcat(0, Int.(counts))), 0)
+    printed === nothing && return inc
+    for i in 2:length(counts)
+        _is_zone_fall(counts[i - 1], counts[i]) || continue
+        j = findfirst(==(days[i]), printed.days)
+        j === nothing && continue
+        inc[i] = max(Int(printed.counts[j]), 0)
+    end
+    return inc
+end
+
+## The printed 24h series of `prov.zone` in a revision block, or `nothing`.
+function _zone_printed(daily, prov::AbstractString, zone::AbstractString)
+    haskey(daily, prov) || return nothing
+    return get(daily[prov], zone, nothing)
+end
+
+"""
+    zone_reattribution_days(zone_history; include_zone_falls = false)
 
 The vintage days on which a province's `unallocated` cumulative count
 falls, keyed by province, from the per-health-zone histories loaded by
@@ -655,12 +720,11 @@ A revision can also move counts the other way, out of named zones,
 leaving the unallocated row flat or rising. That vintage is a revision
 just as much, but the unallocated rule does not see it. With
 `include_zone_falls` the vintages of [`zone_cumulative_falls`](@ref) are
-added, so any vintage on which a named zone loses more than `min_fall`
-is left out too. It is off by default.
+added, so any vintage on which a named zone's cumulative falls is left
+out too. It is off by default.
 """
 function zone_reattribution_days(
-        zone_history;
-        include_zone_falls::Bool = false, min_fall::Integer = 1
+        zone_history; include_zone_falls::Bool = false
     )
     out = Dict{String, Vector{Int}}()
     for (prov, zones) in zone_history
@@ -673,7 +737,7 @@ function zone_reattribution_days(
         isempty(falls) || (out[String(prov)] = falls)
     end
     if include_zone_falls
-        for f in zone_cumulative_falls(zone_history; min_fall)
+        for f in zone_cumulative_falls(zone_history)
             push!(get!(out, f.province, Int[]), f.day)
         end
         for (prov, days) in out
@@ -685,7 +749,8 @@ end
 
 """
     zone_increment_matrix(zone_history, patch_names, members = PROVINCE_MEMBERS;
-        reattribution = zone_reattribution_days(zone_history))
+        reattribution = zone_reattribution_days(zone_history),
+        printed = Dict())
 
 Reshape the per-health-zone cumulative histories loaded by
 [`load_observations`](@ref) into one increment matrix per patch, the
@@ -697,7 +762,11 @@ provinces, the `unallocated` rows left out, and one column per vintage.
 Every zone must be reported on the same vintage days, which the tables
 guarantee by sharing one `dates` array; a mismatch is an error.
 Increments are the differences of consecutive cumulative counts, the
-first from zero, clamped at zero as for the provinces.
+first from zero, clamped at zero as for the provinces. Where a zone's
+cumulative count falls and `printed` (keyed province → zone, the
+`zone_confirmed_revision_24h` block of [`load_observations`](@ref)) holds
+the report's 24h figure for that zone and day, the figure replaces the
+clamped zero ([`zone_increments`](@ref)). The default is no figures.
 
 A vintage on which a member province's unallocated count falls
 (`reattribution`, the days per province of
@@ -722,7 +791,8 @@ empty vector.
 function zone_increment_matrix(
         zone_history, patch_names::AbstractVector,
         members::AbstractDict = PROVINCE_MEMBERS;
-        reattribution::AbstractDict = zone_reattribution_days(zone_history)
+        reattribution::AbstractDict = zone_reattribution_days(zone_history),
+        printed::AbstractDict = Dict{String, Any}()
     )
     out = @NamedTuple{
         patch::String, zones::Vector{Tuple{String, String}},
@@ -764,8 +834,10 @@ function zone_increment_matrix(
         end
         inc = Matrix{Int}(undef, length(keys_), length(days))
         for (i, (prov, zone)) in enumerate(keys_)
-            c = zone_history[prov][zone].counts
-            inc[i, :] = max.(diff(vcat(0, c)), 0)
+            inc[i, :] = zone_increments(
+                zone_history[prov][zone].counts, days,
+                _zone_printed(printed, prov, zone)
+            )
         end
         excluded = sort!(
             unique!(
