@@ -1,30 +1,35 @@
-## The estimates across past releases are checks on the national fit, so they
-## sit on the national in-sample page (#1058). The page reads the release
-## overlays, so its CI render job must collect the rescored ones rather than
-## fall back to the committed copies.
+## The estimates across past releases are checks on the fit, so they sit on
+## the in-sample pages (#1058): the national page, and the province and zone
+## pages for their own areas. These pages read the release overlays, so their
+## CI render jobs must collect the rescored ones rather than fall back to the
+## committed copies.
 
 @testitem "report pages: past-release checks on the in-sample page" tags = [
     :quality,
 ] begin
     using BVDOutbreakSize
     pages = joinpath(pkgdir(BVDOutbreakSize), "docs", "pages")
-    headings = [
-        "# ## Estimate evolution across releases",
-        "# ### Reproduction number by release",
-        "# ### Basic reproduction number by release",
-    ]
-    hosts = Dict(h => String[] for h in headings)
+    insample = joinpath("evaluation", "insample")
+    national = joinpath(insample, "national.jl")
+    areas = [joinpath(insample, "province.jl"), joinpath(insample, "zone.jl")]
+    ## Each heading and the in-sample pages that carry it.
+    headings = Dict(
+        "# ## Estimate evolution across releases" => [national; areas],
+        "# ### Reproduction number by release" => [national; areas],
+        "# ### Confirmed cases by release" => areas,
+        "# ### Basic reproduction number by release" => [national],
+    )
+    hosts = Dict(h => String[] for h in keys(headings))
     for (dir, _, files) in walkdir(pages), f in files
         endswith(f, ".jl") || continue
         path = joinpath(dir, f)
         lines = rstrip.(readlines(path))
-        for h in headings
+        for h in keys(headings)
             h in lines && push!(hosts[h], relpath(path, pages))
         end
     end
-    insample = joinpath("evaluation", "insample", "national.jl")
-    for h in headings
-        @test hosts[h] == [insample]
+    for (h, expected) in headings
+        @test sort(hosts[h]) == sort(expected)
     end
 end
 
@@ -49,7 +54,9 @@ end
         any(reads, eachline(path)) &&
             push!(readers, splitext(relpath(path, pages))[1])
     end
-    @test joinpath("evaluation", "insample", "national") in readers
+    for page in ("national", "province", "zone")
+        @test joinpath("evaluation", "insample", page) in readers
+    end
     ## Each render matrix entry's `id` and its `overlays` flag, in order.
     workflow = read(joinpath(root, ".github", "workflows", "docs.yml"), String)
     flags = Dict(

@@ -80,6 +80,8 @@ end
     )
     @test length(written) >= 4  # guards against a silent regex miss
     @test joinpath("province", "forecast_overlay.csv") in written
+    @test joinpath("province", "released_estimates.csv") in written
+    @test joinpath("zone", "released_estimates.csv") in written
     for f in written
         @test _is_excluded(f, FIT_DATA_EXCLUDE)
     end

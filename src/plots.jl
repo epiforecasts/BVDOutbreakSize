@@ -804,8 +804,10 @@ end
 ## and is passed in so faceted panels share one mapping. `cap` is the panel's
 ## value-axis crop: every interval, median and band is clamped to it and a
 ## series that runs past it is marked with an open triangle, so a wide fit
-## reads as running off the axis rather than being dropped. Returns the
-## legend handles and labels for the series actually drawn.
+## reads as running off the axis rather than being dropped. `labels.marks`,
+## when given, replaces the bracketed note on the release marks' legend
+## entry, and an empty one drops it. Returns the legend handles and labels
+## for the series actually drawn.
 function _evolution_panel!(
         ax, _x, released, renewal, trajectory,
         refline, labels::NamedTuple;
@@ -930,8 +932,13 @@ function _evolution_panel!(
     end
     released_mark = _series!(:steelblue)
     if !isnothing(released_mark)
+        marks_note = get(labels, :marks, "median, 30/60/90% bars")
         push!(handles, released_mark)
-        push!(llabels, labels.released * " (median, 30/60/90% bars)")
+        push!(
+            llabels,
+            isempty(marks_note) ? labels.released :
+                labels.released * " ($marks_note)"
+        )
     end
 
     ## Dotted vertical rule at each release date.
@@ -1069,6 +1076,10 @@ range, floored at `1.0`.
 median or band past it is clamped and marked with an open triangle, as in
 [`plot_estimate_evolution`](@ref).
 
+`marks_label` is the bracketed note on the released marks' legend entry,
+naming the intervals they carry. An empty one leaves the entry unbracketed,
+for marks that carry no interval. A `NaN` bound draws no bar.
+
 Returns a figure carrying `empty_note` in place of the panels when no group
 has any estimate.
 """
@@ -1084,6 +1095,7 @@ function plot_evolution_by_group(
         ncols::Int = 2,
         shared_yrange::Bool = true,
         ymax::Union{Nothing, Real} = nothing,
+        marks_label::AbstractString = "median, 30/60/90% bars",
         empty_note::AbstractString = "No per-dataset estimates yet."
     )
     ## A group with no estimates is dropped, so the panels show only fits
@@ -1151,7 +1163,7 @@ function plot_evolution_by_group(
             ax, _x, last(g), NamedTuple[], _traj(g),
             refline, (;
                 released = released_label, renewal = "",
-                trajectory = trajectory_label,
+                trajectory = trajectory_label, marks = marks_label,
             );
             cap = ymax
         )
@@ -1175,6 +1187,39 @@ function plot_evolution_by_group(
         tellheight = true, tellwidth = false
     )
     return fig
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The `label => released` groups [`plot_evolution_by_group`](@ref) takes, one
+per area in `areas` and in that order, from a per-release area estimates
+table such as `data/province/released_estimates.csv`. `df` carries `date`,
+`area`, `quantity`, `median`, `lo90` and `hi90`, and only its `quantity`
+rows are read. A panel is titled by `labels`, defaulting to the area key.
+
+The table carries the 90% interval alone, so the 30% and 60% bounds are
+`NaN` and draw no bar. A reported count has no interval, and its median
+stands in for both 90% bounds.
+"""
+function area_evolution_groups(
+        df::DataFrame, quantity::AbstractString;
+        areas::AbstractVector, labels::AbstractDict = Dict{String, String}()
+    )
+    rows = sort(
+        [r for r in eachrow(df) if r.quantity == quantity && !ismissing(r.median)];
+        by = r -> r.date
+    )
+    bound(x, m) = ismissing(x) ? float(m) : float(x)
+    return [
+        get(labels, a, a) => [
+            (
+                string(r.date), float(r.median), NaN, NaN, NaN, NaN,
+                bound(r.lo90, r.median), bound(r.hi90, r.median),
+            ) for r in rows if r.area == a
+        ]
+            for a in areas
+    ]
 end
 
 """
