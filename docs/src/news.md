@@ -126,6 +126,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Data
 
+- 23 October is an occupancy reclassification break, because Ituri's start-of-day stock implied by its care paragraph falls 96 below the previous report's count while the same balance matched on the seven previous days (#1172).
+  Fitted values change.
 - The onset curve gains SitReps 151, 153 and 158, so its latest vintage is 19 October rather than 10 October (#1138, #1148).
   The reader now reads a short bar whose dark dead segment passes as outline, drops a column that carries the next bar's outline height, reads no bar from the band's pink beside the last outline, and lets two agreeing soft columns outvote a middle column under the dashed line.
   The rebuild adds 8 May to SitReps 133 and 134 and 2 May to SitRep 146, removes a 4 May bar from SitReps 112 and 143 to 145, and moves SitRep 120's 7 September from 17 to 24.
