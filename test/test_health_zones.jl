@@ -215,9 +215,6 @@ end
     falls = zone_cumulative_falls(hist)
     @test [(f.province, f.zone, f.day, f.from, f.to) for f in falls] ==
         [("ituri", "a", 7, 20, 15)]
-    ## A one-unit correction is below the default guard and above `0`.
-    @test [f.day for f in zone_cumulative_falls(hist; min_fall = 0)] == [7, 9]
-    @test isempty(zone_cumulative_falls(hist; min_fall = 5))
     ## The unallocated rule alone leaves the province out; widening it to
     ## the named zones' falls adds that vintage, which the composition
     ## then drops.
@@ -317,6 +314,14 @@ end
     @test inc[v] == 7
     rest = setdiff(eachindex(inc), v)
     @test inc[rest] == plain[rest]
+    ## Katwa prints `-2` deaths on 26 July, the revision itself, which reads
+    ## as no new death.
+    katwa = obs.zone_death_history["nord_kivu"]["katwa"]
+    k = findfirst(==(day("2026-07-26")), katwa.days)
+    @test obs.zone_death_revision_24h["nord_kivu"]["katwa"].counts == [-2]
+    @test zone_increments(
+        katwa.counts, katwa.days, obs.zone_death_revision_24h["nord_kivu"]["katwa"]
+    )[k] == 0
     ## Butembo's cases fall from 65 to 62 on 22 July with 4 printed. Nord-Kivu
     ## has no unallocated fall that day, so the cell reaches the composition,
     ## and it is the only case cell the figures change.

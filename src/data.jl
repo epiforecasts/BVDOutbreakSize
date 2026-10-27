@@ -639,25 +639,23 @@ function province_increment_matrix(
     return (; days, increments)
 end
 
-## A zone's cumulative must fall by more than this to count as a revision.
-const ZONE_MIN_FALL = 1
-
-## Whether a zone's cumulative count falls by more than `min_fall` from `prev`.
-_is_zone_fall(prev, cur, min_fall = ZONE_MIN_FALL) = prev - cur > min_fall
+## A zone's cumulative falls when it loses more than one, so a single-unit
+## correction is not read as a revision.
+_is_zone_fall(prev, cur) = prev - cur > 1
 
 """
-    zone_cumulative_falls(zone_history; min_fall = ZONE_MIN_FALL)
+    zone_cumulative_falls(zone_history)
 
 Every place a named zone's cumulative count falls between consecutive
-vintages by more than `min_fall`, as a vector of named tuples
+vintages by more than one, as a vector of named tuples
 `(; province, zone, day, from, to)`. A cumulative series cannot fall on
 its own, so each entry is a revision: the report has moved counts
-between zones, provinces or the unallocated row. `min_fall` guards
-against a single-unit correction being read as a revision.
+between zones, provinces or the unallocated row. A fall of one is read
+as a single-unit correction rather than a revision.
 [`zone_increment_matrix`](@ref) clamps these falls to zero, or takes the
 report's 24h figure where one is recorded ([`zone_increments`](@ref)).
 """
-function zone_cumulative_falls(zone_history; min_fall::Integer = ZONE_MIN_FALL)
+function zone_cumulative_falls(zone_history)
     out = @NamedTuple{
         province::String, zone::String, day::Int,
         from::Int, to::Int,
@@ -666,7 +664,7 @@ function zone_cumulative_falls(zone_history; min_fall::Integer = ZONE_MIN_FALL)
 
         zone == "unallocated" && continue
         for i in 2:length(h.days)
-            _is_zone_fall(h.counts[i - 1], h.counts[i], min_fall) || continue
+            _is_zone_fall(h.counts[i - 1], h.counts[i]) || continue
             push!(
                 out,
                 (;
@@ -682,10 +680,9 @@ end
 """
     zone_increments(counts, days, printed = nothing)
 
-One zone's increments of its cumulative `counts` on the vintage `days`,
-clamped at zero, except that a fall [`zone_cumulative_falls`](@ref) flags
-takes the `printed` figure for that day, floored at zero. `printed` is
-`(; days, counts)` or `nothing`.
+One zone's increments of its cumulative `counts`, clamped at zero,
+except that a flagged fall takes the `printed` figure (`(; days, counts)`)
+for that day, floored at zero.
 """
 function zone_increments(
         counts::AbstractVector, days::AbstractVector, printed = nothing
@@ -708,8 +705,7 @@ function _zone_printed(daily, prov::AbstractString, zone::AbstractString)
 end
 
 """
-    zone_reattribution_days(zone_history; include_zone_falls = false,
-        min_fall = ZONE_MIN_FALL)
+    zone_reattribution_days(zone_history; include_zone_falls = false)
 
 The vintage days on which a province's `unallocated` cumulative count
 falls, keyed by province, from the per-health-zone histories loaded by
@@ -724,12 +720,11 @@ A revision can also move counts the other way, out of named zones,
 leaving the unallocated row flat or rising. That vintage is a revision
 just as much, but the unallocated rule does not see it. With
 `include_zone_falls` the vintages of [`zone_cumulative_falls`](@ref) are
-added, so any vintage on which a named zone loses more than `min_fall`
-is left out too. It is off by default.
+added, so any vintage on which a named zone's cumulative falls is left
+out too. It is off by default.
 """
 function zone_reattribution_days(
-        zone_history;
-        include_zone_falls::Bool = false, min_fall::Integer = ZONE_MIN_FALL
+        zone_history; include_zone_falls::Bool = false
     )
     out = Dict{String, Vector{Int}}()
     for (prov, zones) in zone_history
@@ -742,7 +737,7 @@ function zone_reattribution_days(
         isempty(falls) || (out[String(prov)] = falls)
     end
     if include_zone_falls
-        for f in zone_cumulative_falls(zone_history; min_fall)
+        for f in zone_cumulative_falls(zone_history)
             push!(get!(out, f.province, Int[]), f.day)
         end
         for (prov, days) in out

@@ -1915,8 +1915,8 @@ end
     @test length(sub.kept["a"]) == 2 && haskey(conf["a"], "rest")
     @test length(conf["a"]) == 3
     @test length(sub.kept["b"]) == 3 && !haskey(conf["b"], "rest")
-    ## The pooled series is the sum of what it pooled, so every patch total
-    ## is unchanged at every vintage.
+    ## The pooled series is the running sum of the pooled zones' increments.
+    ## None of them falls here, so every patch total is unchanged.
     for prov in ("a", "b"), v in eachindex(syn.days)
         before = sum(h.counts[v] for h in values(syn.obs.zone_confirmed_history[prov]))
         after = sum(h.counts[v] for h in values(conf[prov]))
@@ -1943,55 +1943,31 @@ end
     @test_throws ArgumentError zone_subset(syn.obs; top_zones = 0, zones = meta)
 end
 
-@testitem "_pool_printed sums the pooled zones' increments" begin
-    using BVDOutbreakSize: _pool_printed
-
-    days = [1, 4, 7]
-    history = Dict(
-        "a" => Dict{String, NamedTuple}(
-            "k" => (; days, counts = [5, 9, 12]),
-            "p" => (; days, counts = [4, 8, 2]),
-            "q" => (; days, counts = [1, 3, 6]),
-            "unallocated" => (; days, counts = [0, 0, 0]),
-        )
-    )
-    printed = Dict(
-        "a" => Dict{String, NamedTuple}(
-            "k" => (; days = [7], counts = [9]),
-            "p" => (; days = [7], counts = [2]),
-        ),
-        "b" => Dict{String, NamedTuple}("x" => (; days = [4], counts = [1])),
-    )
-    out = _pool_printed(history, printed, Dict("a" => ["k"]), "rest")
-    ## The kept zone and a province with no pooling pass through.
-    @test out["a"]["k"] == printed["a"]["k"]
-    @test out["b"] == printed["b"]
-    @test !haskey(out["a"], "p")
-    ## `p` falls 8 to 2 and prints 2; `q` rises by 3 the same day.
-    @test out["a"]["rest"] == (; days = [7], counts = [5])
-end
-
-@testitem "zone_subset pools the printed 24h figures into the rest" setup = [
+@testitem "zone_subset pools the zones' increments, each with its printed figure" setup = [
     ZoneSynthetic,
 ] begin
-    using BVDOutbreakSize: zone_increments
+    using BVDOutbreakSize: zone_increments, zone_increment_matrix
 
     syn = zone_synthetic()
     meta = zone_metadata(syn)
     kept = zone_subset(syn.obs; top_zones = 2, zones = meta).kept["a"]
     hist = deepcopy(syn.obs.zone_confirmed_history)
     pooled = sort!([z for z in keys(hist["a"]) if !(z in kept)])
-    ## One pooled zone loses three cases at the third vintage and prints 5
-    ## new that day; one kept zone carries a figure of its own.
-    z1 = first(pooled)
-    h = hist["a"][z1]
-    c = h.counts .+ 3
-    c[3] = c[2] - 3
-    hist["a"][z1] = (; days = h.days, counts = c)
-    d = h.days[3]
+    @test length(pooled) >= 2
+    ## At the third vintage one pooled zone falls by 8 and prints 2 new,
+    ## while another rises by 10, so the summed cumulative still rises.
+    z1, z2 = pooled[1], pooled[2]
+    days = hist["a"][z1].days
+    c1 = hist["a"][z1].counts .+ 8
+    c1[3:end] .= c1[2] - 8
+    c2 = copy(hist["a"][z2].counts)
+    c2[3:end] .= c2[2] + 10
+    hist["a"][z1] = (; days, counts = c1)
+    hist["a"][z2] = (; days, counts = c2)
+    d = days[3]
     printed = Dict(
         "a" => Dict{String, NamedTuple}(
-            z1 => (; days = [d], counts = [5]),
+            z1 => (; days = [d], counts = [2]),
             kept[1] => (; days = [d], counts = [7]),
         )
     )
@@ -2000,19 +1976,35 @@ end
             zone_confirmed_history = hist, zone_confirmed_revision_24h = printed,
         )
     )
+    summed = sum(hist["a"][z].counts for z in pooled)
+    @test summed[3] > summed[2]
     sub = zone_subset(obs; top_zones = 2, zones = meta)
+    ## The kept zone's figure passes through and the pooled zones' go.
     got = sub.obs.zone_confirmed_revision_24h["a"]
-    @test got[kept[1]] == printed["a"][kept[1]]
-    @test !haskey(got, z1)
-    ## The rest's figure is the sum of the pooled zones' increments that day,
-    ## the falling zone taking its printed 5.
-    @test got["rest"].days == [d]
-    want = 5 + sum(
-        max(hist["a"][z].counts[3] - hist["a"][z].counts[2], 0)
-            for z in pooled[2:end]
+    @test got == Dict(kept[1] => printed["a"][kept[1]])
+    ## The rest's increment is each pooled zone's own: 2 printed for `z1`
+    ## and the plain difference for the others.
+    want = [
+        zone_increments(hist["a"][z].counts, days, get(printed["a"], z, nothing))
+            for z in pooled
+    ]
+    @test want[1][3] == 2
+    rest = sub.obs.zone_confirmed_history["a"]["rest"]
+    @test zone_increments(rest.counts, rest.days) == sum(want)
+    m = only(
+        r for r in zone_increment_matrix(
+                sub.obs.zone_confirmed_history, ["a"], Dict("a" => ["a"]);
+                reattribution = Dict{String, Vector{Int}}(),
+                printed = sub.obs.zone_confirmed_revision_24h
+            )
     )
-    @test got["rest"].counts == [want]
-    @test zone_increments(c, h.days, printed["a"][z1])[3] == 5
+    i = findfirst(==(("a", "rest")), m.zones)
+    @test m.increments[i, :] == sum(want)
+    ## A hand-built `obs` without the revision blocks still subsets.
+    bare = Base.structdiff(
+        obs, NamedTuple{(:zone_confirmed_revision_24h, :zone_death_revision_24h)}
+    )
+    @test zone_subset(bare; top_zones = 2, zones = meta).kept["a"] == kept
 end
 
 @testitem "zone diagnostics leave out a reproduction number undefined in some draw" setup = [
