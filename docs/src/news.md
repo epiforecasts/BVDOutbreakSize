@@ -113,7 +113,7 @@ A minor version: every affected province is its own patch, the importation kerne
   Fitted values change with the new data.
 - 23 October is an occupancy reclassification break, because Ituri's start-of-day stock implied by its care paragraph falls 96 below the previous report's count while the same balance matched on the seven previous days (#1172).
   Fitted values change.
-- Bas-Uélé's care paragraphs on SitReps 155 and 156 (16 and 17 October) repeat SitRep 154's word for word, so they are left out of the province occupancy block as stale carry-forwards (#PRNUM).
+- Bas-Uélé's care paragraphs on SitReps 155 and 156 (16 and 17 October) repeat SitRep 154's word for word, so they are left out of the province occupancy block as stale carry-forwards (#1180).
   Fitted values change.
 - The onset curve gains SitReps 151, 153 and 158, so its latest vintage is 19 October rather than 10 October (#1138, #1148).
   The reader now reads a short bar whose dark dead segment passes as outline, drops a column that carries the next bar's outline height, reads no bar from the band's pink beside the last outline, and lets two agreeing soft columns outvote a middle column under the dashed line.
