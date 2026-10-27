@@ -307,7 +307,8 @@ A major version: the report gains a health-zone level below the provinces, with 
 
 ### Infrastructure
 
-- The docs jobs that restore the compiled package from `list` log why Julia rejects it, as every fit job was recompiling it for about nine minutes (#1175).
+- The docs jobs log why Julia rejects the compiled package restored from `list` (#1175).
+- The docs deploy waits on the health-zone pages, so a failed zone render skips the deploy rather than failing it on a missing page (#1175).
 - The docs fits save their chain to the cache as soon as sampling ends, so a fit that finishes near the job's time limit is kept if the job is then cancelled, and the re-run loads it rather than refitting.
 - The docs build keeps its resolved manifest for ten days rather than three, so a re-run of failed jobs after a long fit can still pin it.
 - The benchmark driver turns off Pkg's automatic precompilation, which under Julia 1.13.2 fails with "Unknown package" on indirect dependencies after AirspeedVelocity adds its own packages.
