@@ -8,7 +8,7 @@ description: >-
 # render jobs start, hours later, their own run's cache has usually been
 # evicted or superseded and they restore another run's. That depot holds
 # BVDOutbreakSize built from other sources, so each job compiled it again.
-# The dependencies in it still match, so only this one image has to travel.
+# The dependencies in it usually still match, so only this one image travels.
 #
 # `save` must run after the environment is precompiled. `restore` must run
 # after the depot cache and the pinned manifest are restored and before the
@@ -62,12 +62,17 @@ runs:
       name: Report whether the image is usable
       continue-on-error: true
       shell: bash
-      # The loading debug log names the check that rejects the image.
+      # The loading debug log names the check that rejects the image. A stale
+      # dependency is named on its own line, so keep every rejection.
       env:
         JULIA_DEBUG: loading
       run: |
+        set +e
+        log="$RUNNER_TEMP/pkgimage-report.log"
         julia --project=docs -e '
           pkg = Base.identify_package("BVDOutbreakSize")
           println("BVDOutbreakSize pkgimage usable: ", Base.isprecompiled(pkg))' \
-          2>&1 | grep -A8 -e 'pkgimage usable' -e 'Rejecting.*BVDOutbreakSize' \
-          || true
+          > "$log" 2>&1
+        echo "julia exited with status $?"
+        grep -A8 -e 'pkgimage usable' -e 'Rejecting' "$log" | head -n 200
+        exit 0
