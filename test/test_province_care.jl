@@ -734,3 +734,35 @@ end
     )
     @test all(in(kept), complete)
 end
+
+@testitem "province care manifest: a misprinted cell leaves only its own block" begin
+    using BVDOutbreakSize, TOML, Dates
+    root = pkgdir(BVDOutbreakSize)
+    script = read(joinpath(root, "scripts", "province_care_manifest.jl"), String)
+    entries = [
+        (parse(Int, m[1]), m[2], m[3]) for m in eachmatch(
+                r"\((\d+), \"([a-z_]+)\", :([a-z_0-9]+)\) =>", script
+            )
+    ]
+    @test (164, "nord_kivu", "admissions_24h") in entries
+    dates = Dict{Int, String}()
+    for line in Iterators.drop(eachline(joinpath(root, "data", "insp_sitrep_scanned.csv")), 1)
+        f = split(line, ',')
+        sr = tryparse(Int, f[1])
+        sr === nothing || (dates[sr] = f[2])
+    end
+    manifest = TOML.parsefile(joinpath(root, "data", "observations.toml"))
+    blocks = Dict("admissions_24h" => "province_admissions_history")
+    read_csv = read(joinpath(root, "data", "province_care_read.csv"), String)
+    for (sr, prov, column) in entries
+        block = manifest[blocks[column]]
+        ## The misprinted cell is absent from its block...
+        @test !(dates[sr] in get(block, prov, Dict("dates" => String[]))["dates"])
+        ## ...while the blind read keeps the printed figure.
+        @test occursin(Regex("^$(sr),$(dates[sr]),", "m"), read_csv)
+    end
+    ## Only the listed column is dropped: Nord-Kivu's SitRep 164 patient
+    ## count stays in the read, and the same report's other admissions enter.
+    @test occursin("\n164,2026-10-25,Nord-Kivu,497,", read_csv)
+    @test "2026-10-25" in manifest["province_admissions_history"]["ituri"]["dates"]
+end
