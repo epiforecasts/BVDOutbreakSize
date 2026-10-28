@@ -413,6 +413,26 @@ end
     @test count(d -> count(==(d), care.days) >= 2, days) > 50
 end
 
+@testitem "province care blocks: stale carry-forwards have no entry" begin
+    using BVDOutbreakSize
+    using Dates
+
+    obs = load_observations()
+    iso = obs.province_isolation_history
+    day(d) = obs.n - (Date(obs.cutoff) - Date(d)).value
+    ## Care paragraphs that repeat an earlier report's figures (the STALE
+    ## list in scripts/province_care_manifest.jl) leave no entry that day.
+    for (prov, d) in (
+            ("haut_uele", "2026-10-13"), ("haut_uele", "2026-10-20"),
+            ("haut_uele", "2026-10-24"), ("bas_uele", "2026-10-16"),
+            ("bas_uele", "2026-10-17"),
+        )
+        @test !(day(d) in iso[prov].days)
+    end
+    ## The report they repeat keeps its entry.
+    @test day("2026-10-15") in iso["bas_uele"].days
+end
+
 @testitem "province_care_observations: weekly and change-day thinning" begin
     using BVDOutbreakSize: province_care_observations
 

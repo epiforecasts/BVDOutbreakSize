@@ -81,6 +81,12 @@ const STALE = Dict(
     ## Haut-Uélé's paragraph repeats SitRep 162's word for word, and its
     ## challenges say "les données de prise en charge ne sont pas remontées".
     (163, "haut_uele") => "word-for-word repeat of SitRep 162",
+    ## Bas-Uélé's paragraph repeats SitRep 154's word for word ("3 patients
+    ## restent en isolement, sans guérison ni décès notifié") on both days,
+    ## while its laboratory bullet changes and SitRep 158's flows imply 27
+    ## patients at the start of 19 October.
+    (155, "bas_uele") => "word-for-word repeat of SitRep 154",
+    (156, "bas_uele") => "word-for-word repeat of SitRep 154",
 )
 const MISPRINTED = Dict(
     (164, "nord_kivu", :admissions_24h) =>
