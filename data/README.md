@@ -51,6 +51,8 @@ A province paragraph that repeats an earlier report's word for word, or says it 
 List its (SitRep, province) in `STALE` in `scripts/province_care_manifest.jl`, with its reason, so the manifest leaves it out of both blocks; the CSVs keep the printed values.
 The list holds SitRep 152, SitRep 159 and SitRep 163 Haut-Uélé (see the notes below).
 A single printed figure that cannot be right is listed in `MISPRINTED` by (SitRep, province, CSV column), and only that cell is left out of its block; the list holds SitRep 164 Nord-Kivu admissions.
+A province occupancy dated after the last day of the national `isolation_history` is left out of `[province_isolation_history]`, since the province counts are fitted as splits inside the national window, and it enters once a later tile is printed (SitRep 164's four counts wait on this).
+The script reads that date from `observations.toml`, so advance the national `isolation_history` before step 3.
 Table-era bed counts (to SitRep 080) are taken from the scan's `Nombre de lits` row alone, because the blind read's table-era bed figures are implied from the printed rate, which the national `bed_capacity_history` already carries.
 The manifest blocks `[province_isolation_history]`, `[province_bed_capacity_history]` and `[province_admissions_history]` carry the occupancy, bed and 24h admissions series as one `[block.province]` sub-table per province with its own `dates` and `values`, because coverage differs by province and by day.
 A province that prints nothing on a day has no entry; a printed zero is a zero.

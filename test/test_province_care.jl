@@ -736,33 +736,21 @@ end
 end
 
 @testitem "province care manifest: a misprinted cell leaves only its own block" begin
-    using BVDOutbreakSize, TOML, Dates
+    using BVDOutbreakSize, TOML
     root = pkgdir(BVDOutbreakSize)
-    script = read(joinpath(root, "scripts", "province_care_manifest.jl"), String)
-    entries = [
-        (parse(Int, m[1]), m[2], m[3]) for m in eachmatch(
-                r"\((\d+), \"([a-z_]+)\", :([a-z_0-9]+)\) =>", script
-            )
-    ]
-    @test (164, "nord_kivu", "admissions_24h") in entries
-    dates = Dict{Int, String}()
-    for line in Iterators.drop(eachline(joinpath(root, "data", "insp_sitrep_scanned.csv")), 1)
-        f = split(line, ',')
-        sr = tryparse(Int, f[1])
-        sr === nothing || (dates[sr] = f[2])
-    end
     manifest = TOML.parsefile(joinpath(root, "data", "observations.toml"))
-    blocks = Dict("admissions_24h" => "province_admissions_history")
     read_csv = read(joinpath(root, "data", "province_care_read.csv"), String)
-    for (sr, prov, column) in entries
-        block = manifest[blocks[column]]
-        ## The misprinted cell is absent from its block...
-        @test !(dates[sr] in get(block, prov, Dict("dates" => String[]))["dates"])
-        ## ...while the blind read keeps the printed figure.
-        @test occursin(Regex("^$(sr),$(dates[sr]),", "m"), read_csv)
+    ## SitRep 164 Nord-Kivu admissions are in MISPRINTED: the printed 495
+    ## stays in the blind read but leaves the admissions block.
+    @test occursin("\n164,2026-10-25,Nord-Kivu,497,,,87.8,495,", read_csv)
+    adm = manifest["province_admissions_history"]
+    @test !("2026-10-25" in adm["nord_kivu"]["dates"])
+    ## The same report's other provinces' admissions still enter.
+    @test "2026-10-25" in adm["ituri"]["dates"]
+    ## No province occupancy is dated after the last national tile.
+    last_tile = maximum(manifest["isolation_history"]["dates"])
+    for (prov, h) in manifest["province_isolation_history"]
+        h isa Dict || continue
+        @test all(<=(last_tile), h["dates"])
     end
-    ## Only the listed column is dropped: Nord-Kivu's SitRep 164 patient
-    ## count stays in the read, and the same report's other admissions enter.
-    @test occursin("\n164,2026-10-25,Nord-Kivu,497,", read_csv)
-    @test "2026-10-25" in manifest["province_admissions_history"]["ituri"]["dates"]
 end

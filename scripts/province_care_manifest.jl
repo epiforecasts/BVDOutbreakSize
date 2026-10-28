@@ -87,11 +87,7 @@ const STALE = Dict(
 )
 ## Single printed figures that cannot be right, left out of one block only,
 ## keyed by (SitRep, province, CSV column). Both CSVs keep the printed value.
-## Each entry needs its reason and a matching line in data/README.md.
 const MISPRINTED = Dict(
-    ## Nord-Kivu prints "495 nouvelles admissions ... contre 82 sorties ...
-    ## Ainsi, 497 patients", which closes only from a start of 84 against
-    ## the 495 patients of SitRep 163, so the 495 repeats that count.
     (164, "nord_kivu", :admissions_24h) =>
         "495 admissions repeat SitRep 163's 495 patients",
 )
@@ -104,8 +100,11 @@ const ORDER = [
 ## is fitted as a split of the national tile's window, so a province count
 ## dated after the last printed tile (SitRep 164's blank tile) is left out
 ## until a later tile is printed.
+## Advance the national `isolation_history` before running this script.
 function last_national_isolation()
-    return maximum(Date.(TOML.parsefile(MANIFEST)["isolation_history"]["dates"]))
+    block = get(TOML.parsefile(MANIFEST), "isolation_history", nothing)
+    block === nothing && error("$(MANIFEST) has no [isolation_history] block")
+    return maximum(Date.(block["dates"]))
 end
 
 ## SitRep numbers that have a report date in the hand-scanned headline CSV.
