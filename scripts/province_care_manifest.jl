@@ -87,7 +87,7 @@ const STALE = Dict(
 ## Single cells left out of one block (data/README.md).
 const MISPRINTED = Dict(
     (164, "nord_kivu", :admissions_24h) =>
-        "495 admissions repeat SitRep 163's 495 patients",
+        "495 admissions cannot close SitRep 163's 495 patients to 497",
 )
 const ORDER = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo", "bas_uele",
@@ -131,10 +131,9 @@ function read_cells(path, column, T::Type = Int)
         ismissing(v) && continue
         key = get(KEYS, String(row.province), nothing)
         key === nothing && error("$(path): unknown province `$(row.province)`")
-        haskey(MISPRINTED, (Int(row.sitrep), key, column)) && continue
         out[(Int(row.sitrep), key)] = T(v)
     end
-    return out
+    return drop_misprinted!(out, MISPRINTED, column)
 end
 
 """

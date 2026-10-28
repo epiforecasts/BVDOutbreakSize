@@ -759,14 +759,24 @@ end
     @test !haskey(blocks, "bas_uele")
 end
 
-@testitem "province care data: SitRep 164 cells held back or left out" begin
+@testitem "province care rules: a misprinted cell leaves only its own column" begin
+    using BVDOutbreakSize, Dates
+    include(joinpath(pkgdir(BVDOutbreakSize), "scripts", "province_care_rules.jl"))
+
+    misprinted = Dict((164, "nord_kivu", :admissions_24h) => "cannot close")
+    admissions = Dict((164, "nord_kivu") => 495, (164, "ituri") => 59)
+    patients = Dict((164, "nord_kivu") => 497, (164, "ituri") => 409)
+    drop_misprinted!(admissions, misprinted, :admissions_24h)
+    drop_misprinted!(patients, misprinted, :patients_isolated)
+    @test admissions == Dict((164, "ituri") => 59)
+    @test patients == Dict((164, "nord_kivu") => 497, (164, "ituri") => 409)
+end
+
+@testitem "province care data: no province occupancy after the last national tile" begin
     using BVDOutbreakSize, TOML
     manifest = TOML.parsefile(
         joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
     )
-    adm = manifest["province_admissions_history"]
-    @test !("2026-10-25" in string.(adm["nord_kivu"]["dates"]))
-    @test "2026-10-25" in string.(adm["ituri"]["dates"])
     last_tile = maximum(string.(manifest["isolation_history"]["dates"]))
     for (prov, h) in manifest["province_isolation_history"]
         h isa Dict || continue

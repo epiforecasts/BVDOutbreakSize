@@ -9,6 +9,14 @@ function last_isolation_date(manifest::AbstractDict)
     return maximum(Date.(block["dates"]))
 end
 
+"""Remove the `misprinted` cells of `column` from `cells`, keyed by (SitRep, province)."""
+function drop_misprinted!(cells::AbstractDict, misprinted::AbstractDict, column::Symbol)
+    for (sr, prov, col) in keys(misprinted)
+        col == column && delete!(cells, (sr, prov))
+    end
+    return cells
+end
+
 """Drop entries dated after `last`, returning them as (province, date, value)."""
 function drop_after!(blocks::AbstractDict, last)
     dropped = Tuple{String, Any, Any}[]
