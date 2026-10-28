@@ -429,7 +429,7 @@ province_pairs_fig = plot_stream_pairs(province_totals, province_observed);
 
 province_pairs_fig #hide
 
-# ## Estimate evolution across releases
+# ## [Estimate evolution across releases](@id province-estimate-evolution)
 #
 # How each province's estimates have moved as releases accrued, read from the estimates each release published at its own cut-off.
 # Releases began publishing per-province estimates recently, so each panel fills in as releases accumulate.
