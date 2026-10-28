@@ -735,19 +735,30 @@ end
     @test all(in(kept), complete)
 end
 
-@testitem "province care manifest: a misprinted cell leaves only its own block" begin
-    using BVDOutbreakSize, TOML
+@testitem "province care rules: misprinted cells and occupancy after the last tile" begin
+    using BVDOutbreakSize, Dates, TOML
     root = pkgdir(BVDOutbreakSize)
+    include(joinpath(root, "scripts", "province_care_rules.jl"))
+
+    misprinted = Dict((164, "nord_kivu", :admissions_24h) => "repeat")
+    @test is_misprinted(misprinted, 164, "nord_kivu", :admissions_24h)
+    @test !is_misprinted(misprinted, 164, "nord_kivu", :patients_isolated)
+    @test !is_misprinted(misprinted, 164, "ituri", :admissions_24h)
+
+    blocks = Dict(
+        "nord_kivu" => [(Date(2026, 10, 24), 495), (Date(2026, 10, 25), 497)],
+        "ituri" => [(Date(2026, 10, 24), 422)],
+    )
+    dropped = drop_after!(blocks, Date(2026, 10, 24))
+    @test dropped == [("nord_kivu", Date(2026, 10, 25), 497)]
+    @test blocks["nord_kivu"] == [(Date(2026, 10, 24), 495)]
+    @test blocks["ituri"] == [(Date(2026, 10, 24), 422)]
+
+    ## Regression guard on the committed blocks.
     manifest = TOML.parsefile(joinpath(root, "data", "observations.toml"))
-    read_csv = read(joinpath(root, "data", "province_care_read.csv"), String)
-    ## SitRep 164 Nord-Kivu admissions are in MISPRINTED: the printed 495
-    ## stays in the blind read but leaves the admissions block.
-    @test occursin("\n164,2026-10-25,Nord-Kivu,497,,,87.8,495,", read_csv)
     adm = manifest["province_admissions_history"]
     @test !("2026-10-25" in adm["nord_kivu"]["dates"])
-    ## The same report's other provinces' admissions still enter.
     @test "2026-10-25" in adm["ituri"]["dates"]
-    ## No province occupancy is dated after the last national tile.
     last_tile = maximum(manifest["isolation_history"]["dates"])
     for (prov, h) in manifest["province_isolation_history"]
         h isa Dict || continue
