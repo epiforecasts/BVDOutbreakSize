@@ -2271,9 +2271,8 @@ cfr_prior_fig #hide
 # with $p_1(\xi \mid Y_1)$ the joint model's marginal posterior over $\xi$.
 # We approximate $p_1$ by a multivariate normal fitted to the joint model's draws of the log weekly patch infections, the log intensities $\log \varepsilon_q$ of Equation (15) and the log parameters $\log \theta_k$ of the generation interval and delays.
 # A week in which a patch's mean infections sum to less than one is left out as not yet seeded.
-# The covariance between the infection cells and the other cells is set to zero, so the two blocks are independent in the zone model.
-# The zone data are compositions within each patch and do not measure a patch's level, but they do inform the delays through the timing of the shares.
-# Kept, that covariance would carry a pull on the delays into the infections of every patch.
+# The covariance between the infection cells and the other cells is set to zero.
+# The zone data inform the delays but not a patch's level, and that covariance would carry their pull on the delays into every patch's infections.
 # With $L$ the Cholesky factor of the resulting covariance over the $d$ kept cells, one draw is
 #
 # ```math

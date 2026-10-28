@@ -296,14 +296,11 @@ end
 """
 $(TYPEDSIGNATURES)
 
-The zone stage's patch infections against the province model's, over the
-last `weeks` windows of `week` days to the cut-off. The zone infections of
-a patch sum to its sampled patch infections, so the zone stage's side is
-[`zone_patch_infections`](@ref) of the zone chain `chn`, and the province
-model's is `infections_patch` of its chain `parent_chain`, the one `inputs`
-were built from. The zone likelihood scores compositions within each
-patch, so the two should agree up to the province model's own Monte Carlo
-error.
+The zone stage's patch infections ([`zone_patch_infections`](@ref) of
+`chn`) against the province model's (`infections_patch` of
+`parent_chain`, the chain `inputs` were built from), over the last `weeks`
+windows of `week` days to the cut-off. The two should agree, since the
+zone data do not measure a patch's level.
 
 Returns a table with one row per patch and window, and one for all patches
 together: the window's last date, the posterior mean infections in the
