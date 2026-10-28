@@ -487,6 +487,8 @@ end
         hcat(δ1, φ .* δ1, φ^2 .* δ1)
     ## Continuing from a later knot takes that knot as the start.
     @test sum_to_zero_ar1(δ2, F_drift, Z[:, 2:2], φ) ≈ reshape(δ3, 3, 1)
+    @test sum_to_zero_ar1(δ2, F_drift, zeros(size(F_drift, 2), 0), φ) ==
+        zeros(3, 0)
 end
 
 @testitem "relative_multiplier: identified contrasts within each group" begin

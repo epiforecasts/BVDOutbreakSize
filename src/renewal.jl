@@ -417,7 +417,8 @@ Convolve a daily trajectory `x` (infections or onsets) with a delay PMF
 delayed event on the same daily grid: entry `t` sums `x[t−d] · delay[d+1]`
 over lags `d` that stay in range. Maps infections to onsets, onsets to
 deaths, onsets to reports and onsets to detected exports. Type-stable and
-AD-transparent.
+AD-transparent. A non-finite entry of `x` makes every day it reaches
+non-finite, including through a lag of zero weight, which gives `NaN`.
 """
 convolve_delay(x::AbstractVector, delay::AbstractVector) =
     Convolution(delay)(x)

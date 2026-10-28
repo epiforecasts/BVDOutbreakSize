@@ -1030,9 +1030,18 @@ end
             1.2 .+ 0.3 .* sin.(1:n),
         ),
     )
-    for (dth, rec, ro, κ, h) in cases
-        got = accumulate_occupancy(A, Ab, dth, rec, ro, κ, h)
-        ref = balance(A, Ab, dth, rec, ro, κ, h)
+    ## Empty stocks: no admissions for the first days, so the suspect pool
+    ## is zero, and discharges arriving while the true-case stock is zero.
+    A0 = vcat(zeros(5), A[6:end])
+    Ab0 = vcat(zeros(5), Ab[6:end])
+    empty = (
+        vcat(zeros(2), fill(1.0, 4), lag(A0)[7:end] .* 0.3),
+        lag(A0) .* 0.3, lag(Ab0) .* 0.5, 0.1, fill(0.4, n),
+    )
+    runs = ((A, Ab, cases[1]), (A, Ab, cases[2]), (A0, Ab0, empty))
+    for (adm, adm_bg, (dth, rec, ro, κ, h)) in runs
+        got = accumulate_occupancy(adm, adm_bg, dth, rec, ro, κ, h)
+        ref = balance(adm, adm_bg, dth, rec, ro, κ, h)
         for k in keys(ref)
             @test isapprox(
                 getproperty(got, k), getproperty(ref, k);

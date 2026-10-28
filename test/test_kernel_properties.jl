@@ -29,10 +29,8 @@ end
     ## A matrix row gives the same as its copy.
     M = rand(rng, 3, 40)
     @test convolve_delay(view(M, 2, :), w) ≈ convolve_delay(M[2, :], w)
-    ## A lag whose weight is exactly zero should carry nothing, so an `Inf`
-    ## on day 2 reaches only day 2 (lag 0) and day 4 (lag 2). The package's
-    ## direct convolution adds `0 · Inf` on that lag and gives `NaN` on day 3
-    ## (EpiAware/ComposableRecurrences.jl#297).
+    ## An `Inf` on day 2 should reach only days 2 and 4, since lag 1 has zero
+    ## weight. Broken: day 3 is `NaN` (EpiAware/ComposableRecurrences.jl#297).
     @test_broken isequal(
         convolve_delay([1.0, Inf, 2.0, 3.0], [0.5, 0.0, 0.5]),
         [0.5, Inf, 1.5, Inf]
