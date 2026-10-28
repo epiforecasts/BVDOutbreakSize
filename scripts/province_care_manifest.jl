@@ -28,10 +28,8 @@
 # the province has no entry that day. It is for a care paragraph that repeats
 # an earlier report's word for word, or says it carries the day before
 # forward, which is a reporting gap and not a fresh figure. Both CSVs keep the printed values; only the
-# manifest drops them.
-#
-# Province occupancy after the last national tile waits for a later one
-# (data/README.md).
+# manifest drops them. `MISPRINTED` cells, and province occupancy after the
+# last national tile, are left out as data/README.md describes.
 #
 # Each block is sparse: one `[block.province]` sub-table per province with its
 # own `dates` and `values`, since the reports print the figures for different
@@ -84,7 +82,6 @@ const STALE = Dict(
     ## challenges say "les données de prise en charge ne sont pas remontées".
     (163, "haut_uele") => "word-for-word repeat of SitRep 162",
 )
-## Single cells left out of one block (data/README.md).
 const MISPRINTED = Dict(
     (164, "nord_kivu", :admissions_24h) =>
         "495 admissions cannot close SitRep 163's 495 patients to 497",

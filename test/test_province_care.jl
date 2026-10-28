@@ -778,8 +778,12 @@ end
         joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
     )
     last_tile = maximum(string.(manifest["isolation_history"]["dates"]))
-    for (prov, h) in manifest["province_isolation_history"]
-        h isa Dict || continue
-        @test all(<=(last_tile), string.(h["dates"]))
+    provinces = filter(!=("source"), collect(keys(manifest["province_isolation_history"])))
+    @test !isempty(provinces)
+    for prov in provinces
+        @test all(<=(last_tile), string.(manifest["province_isolation_history"][prov]["dates"]))
     end
+    ## MISPRINTED holds SitRep 164 Nord-Kivu's admissions out of the block.
+    adm = manifest["province_admissions_history"]["nord_kivu"]
+    @test !("2026-10-25" in string.(adm["dates"]))
 end
