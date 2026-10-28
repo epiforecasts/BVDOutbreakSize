@@ -78,6 +78,16 @@ const STALE = Dict(
     ## challenges say "les données de prise en charge ne sont pas remontées".
     (163, "haut_uele") => "word-for-word repeat of SitRep 162",
 )
+## Single printed figures that cannot be right, left out of one block only,
+## keyed by (SitRep, province, CSV column). Both CSVs keep the printed value.
+## Each entry needs its reason and a matching line in data/README.md.
+const MISPRINTED = Dict(
+    ## Nord-Kivu prints "495 nouvelles admissions ... contre 82 sorties ...
+    ## Ainsi, 497 patients", which closes only from a start of 84 against
+    ## the 495 patients of SitRep 163, so the 495 repeats that count.
+    (164, "nord_kivu", :admissions_24h) =>
+        "495 admissions repeat SitRep 163's 495 patients",
+)
 const ORDER = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo", "bas_uele",
     "sud_ubangi", "nord_ubangi",
@@ -109,6 +119,7 @@ function read_cells(path, column, T::Type = Int)
         ismissing(v) && continue
         key = get(KEYS, String(row.province), nothing)
         key === nothing && error("$(path): unknown province `$(row.province)`")
+        haskey(MISPRINTED, (Int(row.sitrep), key, column)) && continue
         out[(Int(row.sitrep), key)] = T(v)
     end
     return out
@@ -261,6 +272,9 @@ function main()
     )
     for ((sr, prov), why) in sort!(collect(STALE); by = first)
         println(stderr, "excluded SitRep $(sr) $(prov): $(why)")
+    end
+    for ((sr, prov, column), why) in sort!(collect(MISPRINTED); by = first)
+        println(stderr, "excluded SitRep $(sr) $(prov) $(column): $(why)")
     end
     for (name, data) in (
             ("isolation", isolation), ("beds", beds), ("admissions", admissions),

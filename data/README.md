@@ -160,6 +160,8 @@ Reading it needed two reader changes, each with a synthetic test.
 - Outside the incomplete-data band, a window whose kept columns show no dark pixel at all has lost its bar's top outline, so it reads the window's outlined columns when they stand more than two counts taller (160's 25 August, read as 31 against 88 to 89 in every other vintage).
 - Nothing left of the y-axis line is a bar (160's 23 March, and a 24 and 28 April bar of 1 in SitReps 106 and 107 that the dashboard has at 0).
 SitReps 161 and 162 are new renders (732x391 and 732x510) with SitRep 160's n and last tick, so they are the same extract and are not digitised.
+SitRep 164's figure (page 4, 732x391) carries SitRep 160's n = 7 709, so it is the same extract and is not digitised.
+Its caption reads `au cours des 21 derniers jours`, as SitRep 163's does, but the chart runs from April.
 SitRep 138 (n = 6 370) is not digitised: its render loses the outline between the 15 and 16 June bars, so 16 June reads 40 against 28 to 29 in every other vintage and the dashboard.
 SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
 On SitRep 133's render (738x452) the strict mask keeps only the 0 and 50 ticks and takes a title glyph for the top one, so the reader uses the near-grey ticks whenever they give a grid finer by more than 15%.
@@ -225,7 +227,7 @@ SitRep 033 gives the split as prose only, 084 to 086 (the brief format) carry no
 None of those four is scanned.
 From SitRep 124 the caption drops `de santé` and carries the date instead, reading `par province et zone du 15 septembre 2026`.
 The table itself is unchanged, so the scanner matches the caption as far as `par province et zone`.
-The series run to SitRep 163 (24 October); SitRep 142 (3 October) is not published on insp.cd.
+The series run to SitRep 164 (25 October); SitRep 142 (3 October) is not published on insp.cd.
 From SitRep 147 Dakwa (Bas-Uélé) is carried in the Bas-Uélé unallocated row, because it has no polygon in the health-zone map (see the inclusion rules below).
 SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
 SitRep 048 (1 July) is filled from the INRB-UMIE mirror under the fallback order below, since its zones sum to the national totals; SitRep 057 (10 July) is not, since the mirror's zones sum to 1 878 cases against the national 1 873.
@@ -267,7 +269,7 @@ SitRep 116 prints `1` in Buta's Létalité cell.
 
 `scripts/confirm_zone_data.jl` (`task confirm-zone-data`) cross-checks both blocks against the INRB-UMIE mirror's per-zone `cumulative_confirmed_cases` and `cumulative_confirmed_deaths` CSVs, its `NA` zone read as the unallocated row.
 Of the 5439 case cells and 5441 death cells the two transcriptions share, 5425 and 5431 agree.
-The mirror does not yet carry 7, 8, 20, 22, 23 and 24 October (SitReps 146, 147, 159, 161, 162 and 163).
+The mirror does not yet carry 7, 8, 20, 22, 23, 24 and 25 October (SitReps 146, 147, 159, 161, 162, 163 and 164).
 It carries 3 October, which INSP has not published, and the blocks leave that date out.
 Every disagreement was re-read from the PDF and the manifest matches the printed table in each case.
 On 3 June the mirror's unallocated row reads 97 cases and 1 death against the printed 94 and 10.
@@ -620,6 +622,13 @@ No script tracks mirror-sourced values, so this check is manual.
   The paragraphs without Haut-Uélé sum to 1009 against a tile of 1008, which is kept.
   Tableau 3 prints ND for Bas-Uélé, Tshopo and Sud Ubangi; Bas-Uélé and Tshopo validated 30 to 41 suspects a day together on SitReps 158 to 162, so its 424 is left out of `suspected_daily_history`, as at SitReps 147 and 149, and kept in `insp_sitrep_scanned.csv`.
   The vaccination paragraph repeats SitRep 162's word for word and is not recorded in `candidate_signals.csv`.
+- **SitRep 164 (25 October)**: the page-1 `PATIENTS EN ISOLEMENT/CTE` tile prints its label and icon with no number, so 25 October has no entry in `isolation_history`.
+  Every committed row of `insp_sitrep_scanned.csv` from SitRep 016 to 163 records a tile value.
+  The care paragraphs (section 2.4.1) give Ituri 409, Nord-Kivu 497, Haut-Uélé 38 and Bas-Uélé 38, which enter `province_isolation_history`; none prints a bed count, so `bed_capacity_history` has no entry either.
+  Nord-Kivu's paragraph reads `495 nouvelles admissions ont été enregistrées contre 82 sorties ... Ainsi, 497 patients`, which closes against SitRep 163's 495 patients only from a start of 84, so the 495 repeats the previous count.
+  It is listed in `MISPRINTED` in `scripts/province_care_manifest.jl`, which leaves that one cell out of `province_admissions_history`; both CSVs keep the printed 495.
+  Bas-Uélé prints 38 patients after 92 at SitRep 163, with 14 admissions and 8 sorties, so its start-of-day stock is 32 rather than 92.
+  Tableau 3 prints ND for Ituri and Nord Ubangi, and Ituri validated 183 suspects on SitRep 163, so the 249 is left out of `suspected_daily_history`, as at SitReps 147, 149 and 163.
 - **Laboratory, SitRep 157 (18 October)**: the Bas-Uélé bullet reads `12 nouveaux échantillons reçus au laboratoire de Buta dont 4 nouveaux échantillons ont été envoyés au laboratoire Isiro tous sont revenus négatifs`, and 12 is the count that closes the provinces to the page-1 500.
 - **`candidate_signals.csv` gap at SitRep 128**: the run that added SitRep 128 recorded only `poe_*`, `eds_*`, `vaccination_*`, `smsps_confirmed_coverage` and `psea_zs_signalement_awareness` for that vintage, silently dropping `alerts_total_day`, `alerts_validated_alive`, `alerts_validated_dead_community`, `alerts_investigated`, `alert_investigation_rate`, `contacts_seen`, `contacts_under_follow_up` and `contact_tracing_coverage`, all of which had been recorded continuously through SitRep 127 and are still printed at 128 (Tableau 3 and the section 2.1.1 contact-tracing prose). This run resumes all of them from SitRep 129 onward without backfilling 128's own single-day gap; a future update could close it directly from the already-cached `SitRep_MVE_128_2026.pdf`.
 

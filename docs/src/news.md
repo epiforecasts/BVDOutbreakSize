@@ -107,6 +107,10 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Data
 
+- The model cut-off advances to SitRep 164, 25 October.
+  Its page-1 isolation tile prints no number, so the national isolation and bed-capacity series stop at 24 October while the province care blocks advance.
+  Nord-Kivu's printed 495 admissions repeat the previous day's patient count and are left out of the province admissions block.
+  Fitted values change with the new data.
 - The model cut-off advances to SitRep 163, 24 October (#1166).
   Haut-Uélé's care paragraph that day repeats SitRep 162's and is left out of the province care blocks, so the national bed capacity takes Nord-Kivu's 410 alone.
   `data/onset_dashboard_history.csv` adds the dashboard snapshot of 26 October.
