@@ -49,7 +49,7 @@ To advance the two blocks when new reports land, after `download_sitreps.jl`:
 5. Run the province loader tests (`test/test_province_care.jl`) and `pre-commit run --files` on the three files.
 A province paragraph that repeats an earlier report's word for word, or says it carries the day before forward, is a stale carry-forward.
 List its (SitRep, province) in `STALE` in `scripts/province_care_manifest.jl`, with its reason, so the manifest leaves it out of both blocks; the CSVs keep the printed values.
-The list holds SitRep 152, SitRep 159 and SitRep 163 Haut-Uélé (see the notes below).
+The list holds Haut-Uélé on SitReps 152, 159 and 163 and Bas-Uélé on SitReps 155 and 156 (see the notes below).
 Table-era bed counts (to SitRep 080) are taken from the scan's `Nombre de lits` row alone, because the blind read's table-era bed figures are implied from the printed rate, which the national `bed_capacity_history` already carries.
 The manifest blocks `[province_isolation_history]`, `[province_bed_capacity_history]` and `[province_admissions_history]` carry the occupancy, bed and 24h admissions series as one `[block.province]` sub-table per province with its own `dates` and `values`, because coverage differs by province and by day.
 A province that prints nothing on a day has no entry; a printed zero is a zero.
@@ -593,6 +593,9 @@ No script tracks mirror-sourced values, so this check is manual.
   SitRep 157 prints no Haut-Uélé or Bas-Uélé paragraph, and the others sum to 895 against a tile of 937, which is kept, as at SitRep 147.
   From SitRep 158 Bas-Uélé counts the suspects it isolates in ESS (`portant à 47 patients en isolement les 3 lits pour confirmés étant occupés`), so its count steps from 3 to 47 and then 60.
   Its `3 lits pour confirmés` cover only the confirmed patients, so they are not counted as Bas-Uélé's beds; searched every local PDF for `lits pour confirm`, which appears only in SitReps 158 and 159.
+  SitReps 155 and 156 repeat SitRep 154's Bas-Uélé paragraph word for word (`aucun nouveau cas confirmé n’a été enregistré ; 3 patients restent en isolement, sans guérison ni décès notifié`), while its laboratory bullet changes from 27 samples at SitRep 154 to 26 and then 19.
+  Both are listed in `STALE`, so Bas-Uélé has no entry on 16 or 17 October in the occupancy block.
+  SitRep 158's 20 admissions with no sortie imply 27 patients at the start of 19 October, which SitRep 157's missing paragraph leaves unchecked against 18 October.
 - **Care paragraph carried forward, SitRep 159 (20 October)**: Haut-Uélé's paragraph reads `les données de prise en charge du jour ne sont pas parvenues ; les 29 patients hospitalisés de la veille sont reportés`, so Haut-Uélé has no entry on 20 October in either province care block, through the `STALE` list.
   Searched every local PDF for `de la veille sont report`: SitRep 159 is the only hit.
   The tile of 1041 is not a repeat (1029 the day before) and is kept, although it includes the carried 29.
