@@ -108,7 +108,7 @@ A minor version: every affected province is its own patch, the importation kerne
 ### Data
 
 - The model cut-off advances to SitRep 164, 25 October.
-  Its page-1 isolation tile prints no number, so the national isolation and bed-capacity series stop at 24 October while the province care blocks advance.
+  Its page-1 isolation tile prints no number, so the national isolation and bed-capacity series stop at 24 October, and the province isolation counts for that day wait for the next printed tile.
   Nord-Kivu's printed 495 admissions repeat the previous day's patient count and are left out of the province admissions block.
   Fitted values change with the new data.
 - The model cut-off advances to SitRep 163, 24 October (#1166).

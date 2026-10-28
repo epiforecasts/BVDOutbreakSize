@@ -624,7 +624,8 @@ No script tracks mirror-sourced values, so this check is manual.
   The vaccination paragraph repeats SitRep 162's word for word and is not recorded in `candidate_signals.csv`.
 - **SitRep 164 (25 October)**: the page-1 `PATIENTS EN ISOLEMENT/CTE` tile prints its label and icon with no number, so 25 October has no entry in `isolation_history`.
   Every committed row of `insp_sitrep_scanned.csv` from SitRep 016 to 163 records a tile value.
-  The care paragraphs (section 2.4.1) give Ituri 409, Nord-Kivu 497, Haut-Uélé 38 and Bas-Uélé 38, which enter `province_isolation_history`; none prints a bed count, so `bed_capacity_history` has no entry either.
+  The care paragraphs (section 2.4.1) give Ituri 409, Nord-Kivu 497, Haut-Uélé 38 and Bas-Uélé 38, and none prints a bed count, so `bed_capacity_history` has no entry either.
+  `scripts/province_care_manifest.jl` leaves a province count dated after the last national tile out of `province_isolation_history`, because the province counts are fitted as splits inside the national window, so the four counts enter once a later tile is printed.
   Nord-Kivu's paragraph reads `495 nouvelles admissions ont été enregistrées contre 82 sorties ... Ainsi, 497 patients`, which closes against SitRep 163's 495 patients only from a start of 84, so the 495 repeats the previous count.
   It is listed in `MISPRINTED` in `scripts/province_care_manifest.jl`, which leaves that one cell out of `province_admissions_history`; both CSVs keep the printed 495.
   Bas-Uélé prints 38 patients after 92 at SitRep 163, with 14 admissions and 8 sorties, so its start-of-day stock is 32 rather than 92.

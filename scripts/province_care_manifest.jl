@@ -30,6 +30,11 @@
 # forward, which is a reporting gap and not a fresh figure. Both CSVs keep the printed values; only the
 # manifest drops them.
 #
+# A province occupancy dated after the last day of the national
+# `isolation_history` in data/observations.toml is left out of the
+# isolation block, since the province counts are fitted as splits inside the
+# national tile's window. It returns once a later tile is printed.
+#
 # Each block is sparse: one `[block.province]` sub-table per province with its
 # own `dates` and `values`, since the reports print the figures for different
 # provinces on different days. A province with no printed figure on a day has
@@ -43,6 +48,7 @@
 using CSV
 using DataFrames
 using Dates
+using TOML
 
 include(joinpath(@__DIR__, "province_effective_beds.jl"))
 
@@ -52,6 +58,7 @@ const SCAN_CSV = length(ARGS) >= 1 ? ARGS[1] :
 const READ_CSV = length(ARGS) >= 2 ? ARGS[2] :
     joinpath(ROOT, "data", "province_care_read.csv")
 const SITREP_CSV = joinpath(ROOT, "data", "insp_sitrep_scanned.csv")
+const MANIFEST = joinpath(ROOT, "data", "observations.toml")
 ## Last SitRep of the occupation-table era; the prose era starts at 081.
 const TABLE_ERA_END = 80
 
@@ -92,6 +99,14 @@ const ORDER = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo", "bas_uele",
     "sud_ubangi", "nord_ubangi",
 ]
+
+## The last date of the national `isolation_history`. Province occupancy
+## is fitted as a split of the national tile's window, so a province count
+## dated after the last printed tile (SitRep 164's blank tile) is left out
+## until a later tile is printed.
+function last_national_isolation()
+    return maximum(Date.(TOML.parsefile(MANIFEST)["isolation_history"]["dates"]))
+end
 
 ## SitRep numbers that have a report date in the hand-scanned headline CSV.
 function dated_sitreps()
@@ -202,6 +217,14 @@ function main()
         read_cells(SCAN_CSV, :patients_isolated),
         read_cells(READ_CSV, :patients_isolated), dates
     )
+    iso_last = last_national_isolation()
+    for (prov, pairs) in isolation
+        late = filter(p -> first(p) > iso_last, pairs)
+        for (d, v) in late
+            println(stderr, "after the last national tile $(iso_last): $(prov) $(d) $(v)")
+        end
+        filter!(p -> first(p) <= iso_last, pairs)
+    end
     printed_beds = reconcile(
         read_cells(SCAN_CSV, :beds), read_cells(READ_CSV, :beds), dates;
         table_era_scan_only = true
