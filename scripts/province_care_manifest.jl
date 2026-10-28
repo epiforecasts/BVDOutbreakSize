@@ -30,10 +30,8 @@
 # forward, which is a reporting gap and not a fresh figure. Both CSVs keep the printed values; only the
 # manifest drops them.
 #
-# A province occupancy dated after the last day of the national
-# `isolation_history` in data/observations.toml is left out of the
-# isolation block, since the province counts are fitted as splits inside the
-# national tile's window. It returns once a later tile is printed.
+# Province occupancy after the last national tile waits for a later one
+# (data/README.md).
 #
 # Each block is sparse: one `[block.province]` sub-table per province with its
 # own `dates` and `values`, since the reports print the figures for different
@@ -86,8 +84,7 @@ const STALE = Dict(
     ## challenges say "les données de prise en charge ne sont pas remontées".
     (163, "haut_uele") => "word-for-word repeat of SitRep 162",
 )
-## Single printed figures that cannot be right, left out of one block only,
-## keyed by (SitRep, province, CSV column). Both CSVs keep the printed value.
+## Single cells left out of one block (data/README.md).
 const MISPRINTED = Dict(
     (164, "nord_kivu", :admissions_24h) =>
         "495 admissions repeat SitRep 163's 495 patients",
@@ -97,12 +94,9 @@ const ORDER = [
     "sud_ubangi", "nord_ubangi",
 ]
 
-## The national isolation_history must be advanced before this script runs.
 function last_national_isolation()
     manifest = TOML.parsefile(MANIFEST)
-    block = get(manifest, "isolation_history", nothing)
-    block === nothing && error("$(MANIFEST) has no [isolation_history] block")
-    last = maximum(Date.(block["dates"]))
+    last = last_isolation_date(manifest)
     as_of = Date(manifest["as_of_date"])
     last < as_of && println(
         stderr, "warning: the national isolation_history ends $(last), " *
@@ -137,7 +131,7 @@ function read_cells(path, column, T::Type = Int)
         ismissing(v) && continue
         key = get(KEYS, String(row.province), nothing)
         key === nothing && error("$(path): unknown province `$(row.province)`")
-        is_misprinted(MISPRINTED, Int(row.sitrep), key, column) && continue
+        haskey(MISPRINTED, (Int(row.sitrep), key, column)) && continue
         out[(Int(row.sitrep), key)] = T(v)
     end
     return out
@@ -220,10 +214,6 @@ function main()
         read_cells(SCAN_CSV, :patients_isolated),
         read_cells(READ_CSV, :patients_isolated), dates
     )
-    iso_last = last_national_isolation()
-    for (prov, d, v) in drop_after!(isolation, iso_last)
-        println(stderr, "after the last national tile $(iso_last): $(prov) $(d) $(v)")
-    end
     printed_beds = reconcile(
         read_cells(SCAN_CSV, :beds), read_cells(READ_CSV, :beds), dates;
         table_era_scan_only = true
@@ -233,6 +223,10 @@ function main()
         read_cells(READ_CSV, :occupancy_rate_pct, Float64), dates
     )
     beds = effective_bed_block(printed_beds, isolation, rates)
+    iso_last = last_national_isolation()
+    for (prov, d, v) in drop_after!(isolation, iso_last)
+        println(stderr, "after the last national tile $(iso_last): $(prov) $(d) $(v)")
+    end
     admissions = reconcile(
         read_cells(SCAN_CSV, :admissions_24h),
         read_cells(READ_CSV, :admissions_24h), dates

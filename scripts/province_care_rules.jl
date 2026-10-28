@@ -1,30 +1,23 @@
-# Cell rules for the blocks scripts/province_care_manifest.jl emits.
-# Dependency-free so the test suite can include it.
+# Rules for the blocks scripts/province_care_manifest.jl emits; see
+# "Province isolation occupancy and beds" in data/README.md. Dependency-free
+# so the test suite can include it.
 
-"""
-    is_misprinted(misprinted, sitrep, province, column) -> Bool
+"""Last date of the national `isolation_history` in a parsed manifest."""
+function last_isolation_date(manifest::AbstractDict)
+    block = get(manifest, "isolation_history", nothing)
+    block === nothing && error("the manifest has no [isolation_history] block")
+    return maximum(Date.(block["dates"]))
+end
 
-Whether the (SitRep, province, CSV column) cell is listed in `misprinted`, so
-only that cell is left out of its block.
-"""
-is_misprinted(misprinted, sitrep, province, column) =
-    haskey(misprinted, (sitrep, province, column))
-
-"""
-    drop_after!(blocks, last) -> Vector
-
-Remove every `(date, value)` entry dated after `last` from each province's
-pairs in `blocks`, and return the removed `(province, date, value)` entries
-sorted by province.
-"""
-function drop_after!(blocks, last)
+"""Drop entries dated after `last`, returning them as (province, date, value)."""
+function drop_after!(blocks::AbstractDict, last)
     dropped = Tuple{String, Any, Any}[]
     for prov in sort!(collect(keys(blocks)))
-        pairs = blocks[prov]
-        for (d, v) in pairs
-            d > last && push!(dropped, (prov, d, v))
+        kept = empty(blocks[prov])
+        for (d, v) in blocks[prov]
+            d > last ? push!(dropped, (prov, d, v)) : push!(kept, (d, v))
         end
-        filter!(p -> first(p) <= last, pairs)
+        isempty(kept) ? delete!(blocks, prov) : (blocks[prov] = kept)
     end
     return dropped
 end

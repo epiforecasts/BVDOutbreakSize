@@ -735,33 +735,41 @@ end
     @test all(in(kept), complete)
 end
 
-@testitem "province care rules: misprinted cells and occupancy after the last tile" begin
-    using BVDOutbreakSize, Dates, TOML
-    root = pkgdir(BVDOutbreakSize)
-    include(joinpath(root, "scripts", "province_care_rules.jl"))
+@testitem "province care rules: occupancy after the last national tile" begin
+    using BVDOutbreakSize, Dates
+    include(joinpath(pkgdir(BVDOutbreakSize), "scripts", "province_care_rules.jl"))
 
-    misprinted = Dict((164, "nord_kivu", :admissions_24h) => "repeat")
-    @test is_misprinted(misprinted, 164, "nord_kivu", :admissions_24h)
-    @test !is_misprinted(misprinted, 164, "nord_kivu", :patients_isolated)
-    @test !is_misprinted(misprinted, 164, "ituri", :admissions_24h)
+    manifest = Dict(
+        "isolation_history" => Dict("dates" => [Date(2026, 10, 23), Date(2026, 10, 24)])
+    )
+    @test last_isolation_date(manifest) == Date(2026, 10, 24)
+    @test_throws ErrorException last_isolation_date(Dict{String, Any}())
 
     blocks = Dict(
         "nord_kivu" => [(Date(2026, 10, 24), 495), (Date(2026, 10, 25), 497)],
         "ituri" => [(Date(2026, 10, 24), 422)],
+        "bas_uele" => [(Date(2026, 10, 25), 38)],
     )
     dropped = drop_after!(blocks, Date(2026, 10, 24))
-    @test dropped == [("nord_kivu", Date(2026, 10, 25), 497)]
+    @test dropped == [
+        ("bas_uele", Date(2026, 10, 25), 38), ("nord_kivu", Date(2026, 10, 25), 497),
+    ]
     @test blocks["nord_kivu"] == [(Date(2026, 10, 24), 495)]
     @test blocks["ituri"] == [(Date(2026, 10, 24), 422)]
+    @test !haskey(blocks, "bas_uele")
+end
 
-    ## Regression guard on the committed blocks.
-    manifest = TOML.parsefile(joinpath(root, "data", "observations.toml"))
+@testitem "province care data: SitRep 164 cells held back or left out" begin
+    using BVDOutbreakSize, TOML
+    manifest = TOML.parsefile(
+        joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    )
     adm = manifest["province_admissions_history"]
-    @test !("2026-10-25" in adm["nord_kivu"]["dates"])
-    @test "2026-10-25" in adm["ituri"]["dates"]
-    last_tile = maximum(manifest["isolation_history"]["dates"])
+    @test !("2026-10-25" in string.(adm["nord_kivu"]["dates"]))
+    @test "2026-10-25" in string.(adm["ituri"]["dates"])
+    last_tile = maximum(string.(manifest["isolation_history"]["dates"]))
     for (prov, h) in manifest["province_isolation_history"]
         h isa Dict || continue
-        @test all(<=(last_tile), h["dates"])
+        @test all(<=(last_tile), string.(h["dates"]))
     end
 end

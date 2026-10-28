@@ -23,7 +23,7 @@ See `data/README.md` for the full data-update procedure, including the manual tr
 | `scan_province_care.jl` | Scans the occupation tables and the care-continuity prose for the per-province patients in isolation, beds and 24h flows into `data/province_care_scanned.csv`, one row per (SitRep, province) with the source text quoted. Exits non-zero on any entry it cannot parse. |
 | `province_care_manifest.jl` | Reconciles `data/province_care_scanned.csv` with the blind read `data/province_care_read.csv` and prints the sparse `province_isolation_history`, `province_bed_capacity_history` and `province_admissions_history` blocks. Stops on any cell the two reads disagree on. |
 | `province_effective_beds.jl` | The effective-beds rule the manifest applies to each province bed entry: the printed beds, or the rate-implied beds where the patients exceed the printed beds and the rate implies more. |
-| `province_care_rules.jl` | The cell rules the manifest applies: a cell listed in `MISPRINTED` leaves only its own block, and a province occupancy dated after the last national tile waits for a later one. |
+| `province_care_rules.jl` | The rule that holds a province occupancy dated after the last national tile until a later one is printed. |
 
 `check_new_sitreps.jl`, `download_sitreps.jl` and `confirm_insp_data.jl` need no Julia packages beyond `Downloads`.
 The three `scan_province_*.jl` scripts need `pdftotext` on `PATH` and the PDFs from `download_sitreps.jl`.
