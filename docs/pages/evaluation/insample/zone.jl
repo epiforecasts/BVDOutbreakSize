@@ -382,7 +382,7 @@ zone_week_rt_fig #hide
 #md # </figure>
 #md # ```
 
-# ## Estimate evolution across releases
+# ## [Estimate evolution across releases](@id zone-estimate-evolution)
 #
 # How the reproduction number and confirmed cases of the twelve zones with most confirmed cases to date have moved as releases accrued, read from the estimates each release published at its own cut-off.
 # A zone that a release did not estimate has no mark for that release.
