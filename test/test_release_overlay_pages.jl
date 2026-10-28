@@ -23,7 +23,9 @@
     for (dir, _, files) in walkdir(pages), f in files
         endswith(f, ".jl") || continue
         path = joinpath(dir, f)
-        lines = rstrip.(readlines(path))
+        ## A heading with its own anchor counts under its title.
+        unanchor(l) = replace(l, r"\[(.*)\]\(@id [^)]*\)" => s"\1")
+        lines = unanchor.(rstrip.(readlines(path)))
         for h in keys(headings)
             h in lines && push!(hosts[h], relpath(path, pages))
         end
