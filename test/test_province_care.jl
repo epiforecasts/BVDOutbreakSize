@@ -413,6 +413,26 @@ end
     @test count(d -> count(==(d), care.days) >= 2, days) > 50
 end
 
+@testitem "province care blocks: stale carry-forwards have no entry" begin
+    using BVDOutbreakSize
+    using Dates
+
+    obs = load_observations()
+    iso = obs.province_isolation_history
+    day(d) = obs.n - (Date(obs.cutoff) - Date(d)).value
+    ## Care paragraphs that repeat an earlier report's figures (the STALE
+    ## list in scripts/province_care_manifest.jl) leave no entry that day.
+    for (prov, d) in (
+            ("haut_uele", "2026-10-13"), ("haut_uele", "2026-10-20"),
+            ("haut_uele", "2026-10-24"), ("bas_uele", "2026-10-16"),
+            ("bas_uele", "2026-10-17"),
+        )
+        @test !(day(d) in iso[prov].days)
+    end
+    ## The report they repeat keeps its entry.
+    @test day("2026-10-15") in iso["bas_uele"].days
+end
+
 @testitem "province_care_observations: weekly and change-day thinning" begin
     using BVDOutbreakSize: province_care_observations
 
@@ -733,4 +753,57 @@ end
         Date(2026, 9, 26),
     )
     @test all(in(kept), complete)
+end
+
+@testitem "province care rules: occupancy after the last national tile" begin
+    using BVDOutbreakSize, Dates
+    include(joinpath(pkgdir(BVDOutbreakSize), "scripts", "province_care_rules.jl"))
+
+    manifest = Dict(
+        "isolation_history" => Dict("dates" => [Date(2026, 10, 23), Date(2026, 10, 24)])
+    )
+    @test last_isolation_date(manifest) == Date(2026, 10, 24)
+    @test_throws ErrorException last_isolation_date(Dict{String, Any}())
+
+    blocks = Dict(
+        "nord_kivu" => [(Date(2026, 10, 24), 495), (Date(2026, 10, 25), 497)],
+        "ituri" => [(Date(2026, 10, 24), 422)],
+        "bas_uele" => [(Date(2026, 10, 25), 38)],
+    )
+    dropped = drop_after!(blocks, Date(2026, 10, 24))
+    @test dropped == [
+        ("bas_uele", Date(2026, 10, 25), 38), ("nord_kivu", Date(2026, 10, 25), 497),
+    ]
+    @test blocks["nord_kivu"] == [(Date(2026, 10, 24), 495)]
+    @test blocks["ituri"] == [(Date(2026, 10, 24), 422)]
+    @test !haskey(blocks, "bas_uele")
+end
+
+@testitem "province care rules: a misprinted cell leaves only its own column" begin
+    using BVDOutbreakSize, Dates
+    include(joinpath(pkgdir(BVDOutbreakSize), "scripts", "province_care_rules.jl"))
+
+    misprinted = Dict((164, "nord_kivu", :admissions_24h) => "cannot close")
+    admissions = Dict((164, "nord_kivu") => 495, (164, "ituri") => 59)
+    patients = Dict((164, "nord_kivu") => 497, (164, "ituri") => 409)
+    drop_misprinted!(admissions, misprinted, :admissions_24h)
+    drop_misprinted!(patients, misprinted, :patients_isolated)
+    @test admissions == Dict((164, "ituri") => 59)
+    @test patients == Dict((164, "nord_kivu") => 497, (164, "ituri") => 409)
+end
+
+@testitem "province care data: no province occupancy after the last national tile" begin
+    using BVDOutbreakSize, TOML
+    manifest = TOML.parsefile(
+        joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    )
+    last_tile = maximum(string.(manifest["isolation_history"]["dates"]))
+    provinces = filter(!=("source"), collect(keys(manifest["province_isolation_history"])))
+    @test !isempty(provinces)
+    for prov in provinces
+        @test all(<=(last_tile), string.(manifest["province_isolation_history"][prov]["dates"]))
+    end
+    ## MISPRINTED holds SitRep 164 Nord-Kivu's admissions out of the block.
+    adm = manifest["province_admissions_history"]["nord_kivu"]
+    @test !("2026-10-25" in string.(adm["dates"]))
 end

@@ -341,6 +341,8 @@ function parse_prose_entry(entry::AbstractString, name::AbstractString)
             [
                 "(\\d+)\\)? ?$P (?:sont )?" *
                     "(?:hospitalis[ei]s?|pris en charge en hospitalisation)",
+                ## SitRep 164: "497 patients sont pris en charge CTE/CT".
+                "(\\d+)\\)? ?$P (?:sont )?pris en charge cte/ct",
                 "(\\d+)\\)? ?malades? (?:sont |restent |demeurent )?" *
                     "(?:hospitalis[ei]s?|en isolement|en hospitalisation)",
                 "(\\d+)\\)? ?$P (?:sont |restent |demeurent )?en isolement",
