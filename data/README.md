@@ -49,7 +49,10 @@ To advance the two blocks when new reports land, after `download_sitreps.jl`:
 5. Run the province loader tests (`test/test_province_care.jl`) and `pre-commit run --files` on the three files.
 A province paragraph that repeats an earlier report's word for word, or says it carries the day before forward, is a stale carry-forward.
 List its (SitRep, province) in `STALE` in `scripts/province_care_manifest.jl`, with its reason, so the manifest leaves it out of both blocks; the CSVs keep the printed values.
-The list holds SitRep 152, SitRep 159 and SitRep 163 Haut-Uélé (see the notes below).
+The list holds Haut-Uélé on SitReps 152, 159 and 163 and Bas-Uélé on SitReps 155 and 156 (see the notes below).
+A single printed figure that cannot be right is listed in `MISPRINTED` by (SitRep, province, CSV column), and only that cell is left out of its block; the list holds SitRep 164 Nord-Kivu admissions.
+A province occupancy dated after the last day of the national `isolation_history` is left out of `[province_isolation_history]`, since the province counts are fitted as splits inside the national window, and it enters once a later tile is printed (SitRep 164's four counts wait on this).
+The script reads that date from `observations.toml`, so advance the national `isolation_history` before step 3.
 Table-era bed counts (to SitRep 080) are taken from the scan's `Nombre de lits` row alone, because the blind read's table-era bed figures are implied from the printed rate, which the national `bed_capacity_history` already carries.
 The manifest blocks `[province_isolation_history]`, `[province_bed_capacity_history]` and `[province_admissions_history]` carry the occupancy, bed and 24h admissions series as one `[block.province]` sub-table per province with its own `dates` and `values`, because coverage differs by province and by day.
 A province that prints nothing on a day has no entry; a printed zero is a zero.
@@ -160,6 +163,8 @@ Reading it needed two reader changes, each with a synthetic test.
 - Outside the incomplete-data band, a window whose kept columns show no dark pixel at all has lost its bar's top outline, so it reads the window's outlined columns when they stand more than two counts taller (160's 25 August, read as 31 against 88 to 89 in every other vintage).
 - Nothing left of the y-axis line is a bar (160's 23 March, and a 24 and 28 April bar of 1 in SitReps 106 and 107 that the dashboard has at 0).
 SitReps 161 and 162 are new renders (732x391 and 732x510) with SitRep 160's n and last tick, so they are the same extract and are not digitised.
+SitRep 164's figure (page 4, 732x391) carries SitRep 160's n = 7 709, so it is the same extract and is not digitised.
+Its caption reads `au cours des 21 derniers jours`, as SitRep 163's does, but the chart runs from April.
 SitRep 138 (n = 6 370) is not digitised: its render loses the outline between the 15 and 16 June bars, so 16 June reads 40 against 28 to 29 in every other vintage and the dashboard.
 SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
 On SitRep 133's render (738x452) the strict mask keeps only the 0 and 50 ticks and takes a title glyph for the top one, so the reader uses the near-grey ticks whenever they give a grid finer by more than 15%.
@@ -225,7 +230,7 @@ SitRep 033 gives the split as prose only, 084 to 086 (the brief format) carry no
 None of those four is scanned.
 From SitRep 124 the caption drops `de santé` and carries the date instead, reading `par province et zone du 15 septembre 2026`.
 The table itself is unchanged, so the scanner matches the caption as far as `par province et zone`.
-The series run to SitRep 163 (24 October); SitRep 142 (3 October) is not published on insp.cd.
+The series run to SitRep 164 (25 October); SitRep 142 (3 October) is not published on insp.cd.
 From SitRep 147 Dakwa (Bas-Uélé) is carried in the Bas-Uélé unallocated row, because it has no polygon in the health-zone map (see the inclusion rules below).
 SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
 SitRep 048 (1 July) is filled from the INRB-UMIE mirror under the fallback order below, since its zones sum to the national totals; SitRep 057 (10 July) is not, since the mirror's zones sum to 1 878 cases against the national 1 873.
@@ -267,7 +272,7 @@ SitRep 116 prints `1` in Buta's Létalité cell.
 
 `scripts/confirm_zone_data.jl` (`task confirm-zone-data`) cross-checks both blocks against the INRB-UMIE mirror's per-zone `cumulative_confirmed_cases` and `cumulative_confirmed_deaths` CSVs, its `NA` zone read as the unallocated row.
 Of the 5439 case cells and 5441 death cells the two transcriptions share, 5425 and 5431 agree.
-The mirror does not yet carry 7, 8, 20, 22, 23 and 24 October (SitReps 146, 147, 159, 161, 162 and 163).
+The mirror does not yet carry 7, 8, 20, 22, 23, 24 and 25 October (SitReps 146, 147, 159, 161, 162, 163 and 164).
 It carries 3 October, which INSP has not published, and the blocks leave that date out.
 Every disagreement was re-read from the PDF and the manifest matches the printed table in each case.
 On 3 June the mirror's unallocated row reads 97 cases and 1 death against the printed 94 and 10.
@@ -593,6 +598,9 @@ No script tracks mirror-sourced values, so this check is manual.
   SitRep 157 prints no Haut-Uélé or Bas-Uélé paragraph, and the others sum to 895 against a tile of 937, which is kept, as at SitRep 147.
   From SitRep 158 Bas-Uélé counts the suspects it isolates in ESS (`portant à 47 patients en isolement les 3 lits pour confirmés étant occupés`), so its count steps from 3 to 47 and then 60.
   Its `3 lits pour confirmés` cover only the confirmed patients, so they are not counted as Bas-Uélé's beds; searched every local PDF for `lits pour confirm`, which appears only in SitReps 158 and 159.
+  SitReps 155 and 156 repeat SitRep 154's Bas-Uélé paragraph word for word (`aucun nouveau cas confirmé n’a été enregistré ; 3 patients restent en isolement, sans guérison ni décès notifié`), while its laboratory bullet changes from 27 samples at SitRep 154 to 26 and then 19.
+  Both are listed in `STALE`, so Bas-Uélé has no entry on 16 or 17 October in the occupancy block.
+  SitRep 158's 20 admissions with no sortie imply 27 patients at the start of 19 October, which SitRep 157's missing paragraph leaves unchecked against 18 October.
 - **Care paragraph carried forward, SitRep 159 (20 October)**: Haut-Uélé's paragraph reads `les données de prise en charge du jour ne sont pas parvenues ; les 29 patients hospitalisés de la veille sont reportés`, so Haut-Uélé has no entry on 20 October in either province care block, through the `STALE` list.
   Searched every local PDF for `de la veille sont report`: SitRep 159 is the only hit.
   The tile of 1041 is not a repeat (1029 the day before) and is kept, although it includes the carried 29.
@@ -620,6 +628,14 @@ No script tracks mirror-sourced values, so this check is manual.
   The paragraphs without Haut-Uélé sum to 1009 against a tile of 1008, which is kept.
   Tableau 3 prints ND for Bas-Uélé, Tshopo and Sud Ubangi; Bas-Uélé and Tshopo validated 30 to 41 suspects a day together on SitReps 158 to 162, so its 424 is left out of `suspected_daily_history`, as at SitReps 147 and 149, and kept in `insp_sitrep_scanned.csv`.
   The vaccination paragraph repeats SitRep 162's word for word and is not recorded in `candidate_signals.csv`.
+- **SitRep 164 (25 October)**: the page-1 `PATIENTS EN ISOLEMENT/CTE` tile prints its label and icon with no number, so 25 October has no entry in `isolation_history`.
+  Every committed row of `insp_sitrep_scanned.csv` from SitRep 016 to 163 records a tile value.
+  The care paragraphs (section 2.4.1) give Ituri 409, Nord-Kivu 497, Haut-Uélé 38 and Bas-Uélé 38, and none prints a bed count, so `bed_capacity_history` has no entry either.
+  `scripts/province_care_manifest.jl` leaves a province count dated after the last national tile out of `province_isolation_history`, because the province counts are fitted as splits inside the national window, so the four counts enter once a later tile is printed.
+  Nord-Kivu's paragraph reads `495 nouvelles admissions ont été enregistrées contre 82 sorties ... Ainsi, 497 patients`, which closes against SitRep 163's 495 patients only from a start of 84, and equals that count, so it cannot be the day's admissions.
+  It is listed in `MISPRINTED` in `scripts/province_care_manifest.jl`, which leaves that one cell out of `province_admissions_history`; both CSVs keep the printed 495.
+  Bas-Uélé prints 38 patients after 92 at SitRep 163, with 14 admissions and 8 sorties, so its start-of-day stock is 32 rather than 92.
+  Tableau 3 prints ND for Ituri and Nord Ubangi, and Ituri validated 183 suspects on SitRep 163, so the 249 is left out of `suspected_daily_history`, as at SitReps 147, 149 and 163.
 - **Laboratory, SitRep 157 (18 October)**: the Bas-Uélé bullet reads `12 nouveaux échantillons reçus au laboratoire de Buta dont 4 nouveaux échantillons ont été envoyés au laboratoire Isiro tous sont revenus négatifs`, and 12 is the count that closes the provinces to the page-1 500.
 - **`candidate_signals.csv` gap at SitRep 128**: the run that added SitRep 128 recorded only `poe_*`, `eds_*`, `vaccination_*`, `smsps_confirmed_coverage` and `psea_zs_signalement_awareness` for that vintage, silently dropping `alerts_total_day`, `alerts_validated_alive`, `alerts_validated_dead_community`, `alerts_investigated`, `alert_investigation_rate`, `contacts_seen`, `contacts_under_follow_up` and `contact_tracing_coverage`, all of which had been recorded continuously through SitRep 127 and are still printed at 128 (Tableau 3 and the section 2.1.1 contact-tracing prose). This run resumes all of them from SitRep 129 onward without backfilling 128's own single-day gap; a future update could close it directly from the already-cached `SitRep_MVE_128_2026.pdf`.
 

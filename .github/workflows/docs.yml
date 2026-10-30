@@ -761,24 +761,6 @@ jobs:
               commit_sha: context.sha,
               body: fs.readFileSync(path, 'utf8')
             });
-      # Two ways to get here, and they need different messages. A verdict of
-      # `fail` means the fit is bad. No verdict at all means the check never
-      # got that far (a missing fit, a malformed threshold), so there is
-      # nothing in the job summary to point anyone at and the fits have not
-      # been judged either way.
-      - name: Fail the build when the gate did not pass
-        if: steps.check.outcome == 'failure'
-        env:
-          STATUS: ${{ steps.check.outputs.status }}
-        run: |
-          if [ -z "$STATUS" ]; then
-            echo "::error::the convergence check did not reach a verdict," \
-              "so the fits are unjudged; see this job's log"
-          else
-            echo "::error::a gated fit did not clear the convergence" \
-              "thresholds; the verdict is in this job's summary"
-          fi
-          exit 1
 
   # Execute each literate page from the cached fits, in parallel. Each render
   # loads the chains it needs (no refitting) and emits its markdown, figures

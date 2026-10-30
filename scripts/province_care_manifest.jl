@@ -28,7 +28,8 @@
 # the province has no entry that day. It is for a care paragraph that repeats
 # an earlier report's word for word, or says it carries the day before
 # forward, which is a reporting gap and not a fresh figure. Both CSVs keep the printed values; only the
-# manifest drops them.
+# manifest drops them. `MISPRINTED` cells, and province occupancy after the
+# last national tile, are left out as data/README.md describes.
 #
 # Each block is sparse: one `[block.province]` sub-table per province with its
 # own `dates` and `values`, since the reports print the figures for different
@@ -43,8 +44,10 @@
 using CSV
 using DataFrames
 using Dates
+using TOML
 
 include(joinpath(@__DIR__, "province_effective_beds.jl"))
+include(joinpath(@__DIR__, "province_care_rules.jl"))
 
 const ROOT = normpath(joinpath(@__DIR__, ".."))
 const SCAN_CSV = length(ARGS) >= 1 ? ARGS[1] :
@@ -52,6 +55,7 @@ const SCAN_CSV = length(ARGS) >= 1 ? ARGS[1] :
 const READ_CSV = length(ARGS) >= 2 ? ARGS[2] :
     joinpath(ROOT, "data", "province_care_read.csv")
 const SITREP_CSV = joinpath(ROOT, "data", "insp_sitrep_scanned.csv")
+const MANIFEST = joinpath(ROOT, "data", "observations.toml")
 ## Last SitRep of the occupation-table era; the prose era starts at 081.
 const TABLE_ERA_END = 80
 
@@ -77,11 +81,32 @@ const STALE = Dict(
     ## Haut-Uélé's paragraph repeats SitRep 162's word for word, and its
     ## challenges say "les données de prise en charge ne sont pas remontées".
     (163, "haut_uele") => "word-for-word repeat of SitRep 162",
+    ## Bas-Uélé's paragraph repeats SitRep 154's word for word ("3 patients
+    ## restent en isolement, sans guérison ni décès notifié") on both days,
+    ## while its laboratory bullet changes and SitRep 158's flows imply 27
+    ## patients at the start of 19 October.
+    (155, "bas_uele") => "word-for-word repeat of SitRep 154",
+    (156, "bas_uele") => "word-for-word repeat of SitRep 154",
+)
+const MISPRINTED = Dict(
+    (164, "nord_kivu", :admissions_24h) =>
+        "495 admissions cannot close SitRep 163's 495 patients to 497",
 )
 const ORDER = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo", "bas_uele",
     "sud_ubangi", "nord_ubangi",
 ]
+
+function last_national_isolation()
+    manifest = TOML.parsefile(MANIFEST)
+    last = last_isolation_date(manifest)
+    as_of = Date(manifest["as_of_date"])
+    last < as_of && println(
+        stderr, "warning: the national isolation_history ends $(last), " *
+            "before as_of_date $(as_of); later province occupancy is left out"
+    )
+    return last
+end
 
 ## SitRep numbers that have a report date in the hand-scanned headline CSV.
 function dated_sitreps()
@@ -111,7 +136,7 @@ function read_cells(path, column, T::Type = Int)
         key === nothing && error("$(path): unknown province `$(row.province)`")
         out[(Int(row.sitrep), key)] = T(v)
     end
-    return out
+    return drop_misprinted!(out, MISPRINTED, column)
 end
 
 """
@@ -200,6 +225,10 @@ function main()
         read_cells(READ_CSV, :occupancy_rate_pct, Float64), dates
     )
     beds = effective_bed_block(printed_beds, isolation, rates)
+    iso_last = last_national_isolation()
+    for (prov, d, v) in drop_after!(isolation, iso_last)
+        println(stderr, "after the last national tile $(iso_last): $(prov) $(d) $(v)")
+    end
     admissions = reconcile(
         read_cells(SCAN_CSV, :admissions_24h),
         read_cells(READ_CSV, :admissions_24h), dates
@@ -261,6 +290,9 @@ function main()
     )
     for ((sr, prov), why) in sort!(collect(STALE); by = first)
         println(stderr, "excluded SitRep $(sr) $(prov): $(why)")
+    end
+    for ((sr, prov, column), why) in sort!(collect(MISPRINTED); by = first)
+        println(stderr, "excluded SitRep $(sr) $(prov) $(column): $(why)")
     end
     for (name, data) in (
             ("isolation", isolation), ("beds", beds), ("admissions", admissions),
