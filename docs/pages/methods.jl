@@ -2271,7 +2271,9 @@ cfr_prior_fig #hide
 # with $p_1(\xi \mid Y_1)$ the joint model's marginal posterior over $\xi$.
 # We approximate $p_1$ by a multivariate normal fitted to the joint model's draws of the log weekly patch infections, the log intensities $\log \varepsilon_q$ of Equation (15) and the log parameters $\log \theta_k$ of the generation interval and delays.
 # A week in which a patch's mean infections sum to less than one is left out as not yet seeded.
-# With $L$ the Cholesky factor of the draws' sample covariance over the $d$ kept cells, one draw is
+# The covariance between the infection cells and the other cells is set to zero.
+# The zone data inform the delays but not a patch's level, and that covariance would carry their pull on the delays into every patch's infections.
+# With $L$ the Cholesky factor of the resulting covariance over the $d$ kept cells, one draw is
 #
 # ```math
 # \eta \sim \mathrm{Normal}(0, I_d), \qquad
@@ -2285,9 +2287,9 @@ cfr_prior_fig #hide
 # The deviation $\zeta_p(t)$ interpolates patch $p$'s weekly cells of $\zeta$ between week midpoints, and $\zeta^{\varepsilon}_q$ and $\zeta^{\theta}_k$ are the cells for origin $q$ and parameter $k$.
 # The parameters are the mean and standard deviation of the generation interval and of the incubation period, the shape and scale of the onset-to-report delay, the mean and standard deviation of the report-to-receipt delay, and the shapes and scales of the two onset-to-death components.
 # Each draw rebuilds its delay distributions from them as the joint model does.
-# The joint model has fewer draws than cells, so the covariance is shrunk toward its own diagonal by the least weight that factorises.
+# The joint model has fewer draws than cells, so each block's covariance is shrunk toward its own diagonal by the least weight that factorises.
 #
-# A draw moves whole patch trajectories, and moves patches and intensities together where the joint posterior correlates them.
+# A draw moves whole patch trajectories, and moves patches together where the joint posterior correlates them.
 # The zone infections of a patch sum to its sampled infections by construction.
 # This is the only term from the joint posterior, since scoring the zone sums again would count it twice.
 #

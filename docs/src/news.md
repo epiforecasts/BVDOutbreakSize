@@ -18,6 +18,8 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Model
 
+- The health-zone stage draws the weekly province infections independently of the importation intensities and the delays, so its province totals no longer fall below the joint model's (#1122).
+  The zone in-sample page compares the two by province, and fitted zone values change.
 - The onset-to-admission Gamma scale prior is `LogNormal(log(3.694), 0.32)` at the onset-to-report, onset-to-detection and onset-to-death delays, and fitted values change (#1087).
 - Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
   SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.

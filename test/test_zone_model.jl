@@ -577,6 +577,12 @@ end
     for i in 1:20, t in 1:inputs.n, (p, zs) in enumerate(inputs.patch_ranges)
         @test pinf[p][i, t] ≈ sum(inf[z][i, t] for z in zs) rtol = 1.0e-8
     end
+    ## So the level check reads the stand-in parent back, one row per patch
+    ## and week and one for all patches.
+    lc = BVDOutbreakSize.zone_patch_level_check(chn, inputs, syn.chain)
+    @test size(lc, 1) == 4 * (length(inputs.patch_ranges) + 1)
+    @test all(r -> isapprox(r, 1; rtol = 1.0e-8), lc[!, "Ratio"])
+    @test lc[end, "Week ending"] == inputs.seeding + Day(inputs.n - 1)
 end
 
 @testitem "zone forecast: the fitted model is unchanged and the split is proper" setup = [
@@ -600,6 +606,8 @@ end
     @test zf.meld_L[1:d, 1:d] == zd.meld_L
     @test zf.meld_weights[1:(np * n), 1:d] == zd.meld_weights
     @test all(iszero, zf.meld_weights[1:(np * n), (d + 1):end])
+    ## The future weeks are infection cells and do not load on the delays.
+    @test all(iszero, zf.meld_L[(d + 1):end, inputs.meld.extra_cells])
     @test zf.interp[1:nd, 1:K] ≈ zd.interp
     @test all(iszero, zf.interp[1:nd, (K + 1):end])
     @test zf.I_bar[:, 1:n] == zd.I_bar
@@ -2416,6 +2424,72 @@ end
     @test zd.meld_delay_mean ≈ log.(syn.delay_params)
     @test size(plain.model_data.meld_epsilon_rows, 1) == 0
     @test plain.model_data.meld_delay_rows == plain.meld.L[d0 .+ (1:nθ), :]
+    ## The factor is block diagonal: the patch-week cells and the extra
+    ## cells load on separate components of the whitened draw.
+    for m in (plain.meld, mixed.meld)
+        @test all(iszero, m.L[1:d0, m.extra_cells])
+        @test all(iszero, m.L[m.extra_cells, 1:d0])
+    end
+    @test all(iszero, zd.meld_delay_rows[:, 1:d0])
+    @test all(iszero, zd.meld_epsilon_rows[:, 1:d0])
+end
+
+@testitem "zone meld: a pull on the delays leaves the patch levels alone" begin
+    using BVDOutbreakSize: zone_meld_block, zone_parent_scale
+    using LinearAlgebra: cholesky, Symmetric, I
+    using Random: Xoshiro, randn
+    using Statistics: cov
+
+    ## A parent whose draws tie the delays to every patch's weekly level, as
+    ## the province fit does when shorter delays mean fewer recent
+    ## infections: one shared factor `u` moves both.
+    rng = Xoshiro(1122)
+    np, n, ndraw = 2, 28, 400
+    knots = [0, 7, 14, 21, 28]
+    I_bar = fill(50.0, np, n)
+    u = randn(rng, ndraw)
+    infections = [
+        vec(
+            [
+                50.0 * exp(0.3 * u[i] + 0.05 * randn(rng)) for p in 1:np,
+                    t in 1:n
+            ]
+        ) for i in 1:ndraw
+    ]
+    extra = hcat(
+        0.2 .* u .+ 0.05 .* randn(rng, ndraw),
+        -0.1 .* u .+ 0.05 .* randn(rng, ndraw)
+    )
+    meld = zone_meld_block(infections, np, n, knots, I_bar, 1; extra)
+    d, xc = meld.d, meld.extra_cells
+    ic = setdiff(1:d, xc)
+    Σ = cov(meld.log_sums)
+    ## The parent ties the two blocks together.
+    @test maximum(abs, Σ[ic, xc]) > 0.03
+    ## Each block keeps the parent's covariance, and the blocks are apart.
+    LLt = meld.L * transpose(meld.L)
+    @test LLt[ic, ic] ≈ Σ[ic, ic] rtol = 1.0e-4
+    @test LLt[xc, xc] ≈ Σ[xc, xc] rtol = 1.0e-4
+    @test all(iszero, meld.L[ic, xc]) && all(iszero, meld.L[xc, ic])
+    ## A zone likelihood that pulls the log delays alone, as a Gaussian
+    ## `y ∼ N(R η, s² I)` on the delay rows `R`. The posterior mean of the
+    ## whitened draw is `Rᵀ (R Rᵀ + s² I)⁻¹ y`.
+    y = [-0.66, 0.31]
+    s2 = 1.0e-4
+    pull(L) = let R = L[xc, :]
+        transpose(R) * ((R * transpose(R) + s2 * I) \ y)
+    end
+    η = pull(meld.L)
+    ## The delays move toward the pull, and the patch trajectories stay at
+    ## the parent's on every day.
+    @test meld.L[xc, :] * η ≈ y rtol = 0.05
+    @test zone_parent_scale(meld.weights, meld.L, η, np, n) == ones(np, n)
+    ## The joint factor of the same draws carries the pull into the levels:
+    ## shorter delays lower every patch's infections.
+    L_joint = Matrix(cholesky(Symmetric(Σ + 1.0e-6 * I)).L)
+    η_joint = pull(L_joint)
+    scale_joint = zone_parent_scale(meld.weights, L_joint, η_joint, np, n)
+    @test all(<(0.8), scale_joint)
 end
 
 @testitem "bvd_zone: each draw carries its own generation interval and delays" setup = [

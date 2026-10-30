@@ -300,9 +300,9 @@ the pair is kept when the parent's mean infections over that window reach
 seeded, whose log sums are not normal. Over the kept pairs the log sums
 have mean `m` and sample covariance `Σ`. The Cholesky factor `L` is taken
 after adding `ridge` of each cell's own variance to the diagonal, so that
-`log S = m + L η` with `η ∼ N(0, I_d)` reproduces the parent's joint
-posterior on the shared quantity to first order. `Σ` is rank deficient
-whenever the parent carries fewer draws than there are cells. The
+`log S = m + L η` with `η ∼ N(0, I_d)` reproduces the parent's
+posterior on each block of the shared quantity to first order. `Σ` is
+rank deficient whenever the parent carries fewer draws than there are cells. The
 factorisation then blends toward `diag(Σ)` at the smallest weight that
 succeeds (`_zone_meld_factor`). Shrinking toward the diagonal of
 `Σ` rather than toward the identity keeps every week's own variance and
@@ -324,11 +324,15 @@ kept midpoint fell before `t0` would break that, and is an error.
 
 `extra` holds further shared quantities, one row per parent draw and one
 column each, on the scale they are melded on. They are appended after the
-patch-week cells as `extra_cells`, so the infection block of `L` is the
-leading block, and their rows of `weights` are zero: they reach the zone
-model through `L η` alone. The zone stage passes the per-origin log
-importation intensity here when the zones mix, followed by the log
-generation-interval and delay parameters.
+patch-week cells as `extra_cells`, and their rows of `weights` are zero:
+they reach the zone model through `L η` alone. The zone stage passes the
+per-origin log importation intensity here when the zones mix, followed by
+the log generation-interval and delay parameters.
+
+The covariance between the patch-week cells and the extra cells is set to
+zero, so `L` is block diagonal. The zone data inform the delays but not a
+patch's level, and that covariance would carry their pull on the delays
+into every patch's level.
 
 Returns `(; weights, L, cells_patch, cells_week, midpoints, d, extra_cells,
 mean_log, log_sums)`, `log_sums` holding the per-draw log sums and the
@@ -385,7 +389,12 @@ function zone_meld_block(
     ## identity keeps every week's own marginal variance and gives up only
     ## the correlations, which is the direction the parent's own posterior
     ## is least able to support.
-    L = _zone_meld_factor(cov(S), d; ridge)
+    ## Each block is factorised on its own, so `L` is block diagonal.
+    Σ = cov(S)
+    L = zeros(Float64, d, d)
+    for c in (1:d_inf, extra_cells)
+        isempty(c) || (L[c, c] .= _zone_meld_factor(Σ[c, c], length(c); ridge))
+    end
     weights = zeros(Float64, np * n, d)
     for p in 1:np
         cs = findall(==(p), cells_patch)
@@ -425,7 +434,8 @@ The shared quantity is extended over the forecast weeks. Each parent draw's
 log weekly patch infections over the fitted cells of `meld` and over the
 future windows `(n, n + 7]`, … (kept where the parent's mean reaches
 `min_infections`) are stacked, and their covariance factorised with the
-fitted block held at `meld.L`:
+fitted block held at `meld.L` and, as in [`zone_meld_block`](@ref), no
+covariance between the future weeks and the extra cells:
 
 ```math
 L = \\begin{pmatrix} L_{11} & 0 \\\\ L_{21} & L_{22} \\end{pmatrix},
@@ -493,8 +503,10 @@ function zone_forecast_block(
             for i in 1:ndraw, c in 1:df
     ]
     Σ = cov(hcat(meld.log_sums, S_f))
+    Σ21 = Σ[(d + 1):end, 1:d]
+    Σ21[:, meld.extra_cells] .= 0
     L21 = d == 0 ? zeros(df, 0) :
-        Σ[(d + 1):end, 1:d] / transpose(LowerTriangular(meld.L))
+        Σ21 / transpose(LowerTriangular(meld.L))
     L22 = df == 0 ? zeros(0, 0) :
         _zone_meld_factor(
             Symmetric(Σ[(d + 1):end, (d + 1):end] - L21 * transpose(L21)), df;
@@ -1624,12 +1636,14 @@ infections in each patch, when the zones mix of its log importation
 intensity per origin patch, and of its log generation-interval and delay
 parameters, the quantities the two stages share
 ([`zone_meld_block`](@ref)). Its Cholesky factor carries the province
-model's joint posterior over all patches, weeks and origins together, so a
-draw moves whole patch trajectories, and moves the patches together where
-the province model says they move together. The daily patch trajectory the
-draw implies is the province model's mean curve times `exp(a_p(t))` with
-`a = L η` ([`zone_parent_scale`](@ref)), its origin intensities the mean
-times `e = exp(c)` ([`zone_parent_epsilon`](@ref)), and its generation
+model's joint posterior over all patches and weeks together, so a draw
+moves whole patch trajectories, and moves the patches together where the
+province model says they move together. The factor is block diagonal
+between the patch-week cells and the origin and delay cells. The daily
+patch trajectory the draw implies is the province model's mean curve
+times `exp(a_p(t))` with `a = L η` ([`zone_parent_scale`](@ref)), its
+origin intensities the mean times `e = exp(c)`
+([`zone_parent_epsilon`](@ref)), and its generation
 interval and delays are rebuilt from the drawn parameters
 ([`zone_delay_parameters`](@ref), [`zone_delay_terms`](@ref)). The zone
 model is conditional on all three.

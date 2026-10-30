@@ -296,6 +296,57 @@ end
 """
 $(TYPEDSIGNATURES)
 
+The zone stage's patch infections ([`zone_patch_infections`](@ref) of
+`chn`) against the province model's (`infections_patch` of
+`parent_chain`, the chain `inputs` were built from), over the last `weeks`
+windows of `week` days to the cut-off. The two should agree, since the
+zone data do not measure a patch's level.
+
+Returns a table with one row per patch and window, and one for all patches
+together: the window's last date, the posterior mean infections in the
+window from each stage and the ratio of the zone stage's to the province
+model's.
+"""
+function zone_patch_level_check(
+        chn, inputs, parent_chain; weeks::Integer = 4, week::Integer = 7
+    )
+    np, n = length(inputs.patch_names), inputs.n
+    zone = zone_patch_infections(chn, inputs)
+    parent = [
+        reshape(Float64.(v), np, :)
+            for v in _draw_vectors(parent_chain, :infections_patch)
+    ]
+    all(M -> size(M, 2) >= n, parent) || error(
+        "zone_patch_level_check: the parent draws cover fewer than the " *
+            "$n days of the zone inputs."
+    )
+    out = DataFrame(
+        "Province" => String[], "Week ending" => Date[],
+        "Zone stage" => Float64[], "Joint" => Float64[], "Ratio" => Float64[]
+    )
+    labels = vcat(inputs.patch_labels, ["All provinces"])
+    for k in reverse(1:weeks)
+        hi = n - (k - 1) * week
+        lo = max(hi - week + 1, 1)
+        hi >= 1 || continue
+        days = lo:hi
+        for (j, label) in enumerate(labels)
+            ps = j <= np ? (j:j) : (1:np)
+            z = mean(sum(sum(view(zone[p], :, days); dims = 2) for p in ps))
+            r = mean(sum(M[ps, days]) for M in parent)
+            push!(
+                out, (
+                    label, inputs.seeding + Day(hi - 1), z, r, z / r,
+                )
+            )
+        end
+    end
+    return out
+end
+
+"""
+$(TYPEDSIGNATURES)
+
 Posterior-predictive draws of the zone forecast: `predict` on
 [`bvd_zone`](@ref) run past the cut-off ([`forecast_draws`](@ref)) over the
 zone chain `chn`. `inputs` must carry the parent's forecast
