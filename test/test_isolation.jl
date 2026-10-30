@@ -803,6 +803,11 @@ end
     @test length(brk) == 100
     @test all(isfinite, brk)
     @test any(!=(0), brk)
+    ## The single step is the standard-normal draw scaled by the default
+    ## break prior sd of 75 beds.
+    stp = only(filter(k -> occursin("occupancy_step", string(k)), ks))
+    z = only.(vec(Array(chn[stp])))
+    @test brk ≈ 75 .* z
 end
 
 @testitem "isolation occupancy: joint prior runs with the live data" tags = [

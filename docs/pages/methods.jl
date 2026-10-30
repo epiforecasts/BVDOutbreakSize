@@ -1369,8 +1369,9 @@ cfr_prior_fig #hide
 # The split is scored only where the borrowed confirmation hazard is non-zero, that is, where the laboratory pipeline of the full model supplies it.
 #
 # One reporting artefact is modelled, on identified days only: an overnight reclassification of the total.
-# The published start-of-day in-bed count is differenced against the previous report day's occupancy, and a day whose gap exceeds a threshold is flagged as a break day.
-# One step is fitted per flagged day, with a prior centred on that day's observed gap but free to move, so the fit can attribute part of a gap to genuine change in demand.
+# A break day is a documented day on which the occupancy steps from the previous report day's by more than that day's admissions and discharges can bridge, read from the published start-of-day in-bed count where the report prints one.
+# One step is fitted per break day, and the fit can attribute part of a gap to genuine change in demand.
+# We use a prior of $\mathrm{Normal}(0,\ 75)$ beds on each step.
 # The steps accumulate into a persistent additive offset on the modelled total occupancy, carried forward to every later day.
 # This offset absorbs the overnight gap without bending the reproduction number to chase it.
 # The split does not change the occupancy before 13 June, since no breakdown is published there and the total backbone carries that window.

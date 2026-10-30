@@ -18,6 +18,10 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Model
 
+- Each occupancy reclassification break step takes a `Normal(0, 75)` prior in beds rather than `Normal(0, 25)` (#1179).
+  A reclassification moves a share of one province's isolation register, and the scale puts a quarter of the largest province's stock (Ituri, about 300 to 600 beds) at two standard deviations.
+  The family stays Normal, since a step cannot exceed the stock it acts on.
+  Fitted values change.
 - The onset-to-admission Gamma scale prior is `LogNormal(log(3.694), 0.32)` at the onset-to-report, onset-to-detection and onset-to-death delays, and fitted values change (#1087).
 - Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
   SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.

@@ -2472,6 +2472,26 @@ supplied `occupancy_break_days` ([`cumulative_occupancy_offset`](@ref))
 absorbs a between-report measurement-basis discontinuity in the
 isolation series. Empty (the default) is a no-op.
 
+Each break step is drawn `Normal(0, occupancy_break_sd)` in beds, with
+`occupancy_break_sd = 75` by default. The prior is set a priori from the
+stocks a reclassification can move, not from a fit. Zero is the no-break
+model, so the prior is centred there and nests it. A reclassification acts
+on one register: suspects de-registered after their rule-out, a recount of
+a province's register, or a province changing what its count covers. It
+moves a share of that province's isolation stock, which for the largest
+province (Ituri) runs to about 300 to 600 beds against a national count of
+up to about 1,100 (`isolation_history`). We assume a reclassification moves
+under a quarter of the largest province's stock with 95% prior probability.
+An SD of 75 puts a 150-bed step at two SDs and a 300-bed step, half that
+province's stock, at four (under 1 in 10,000). One scale serves every
+break, so it is wide for the smaller early stocks, where the start-of-day
+and end-of-day counts around the break day identify the step. Even a rare
+large reclassification cannot remove more patients than the register
+holds, so its size has a ceiling set by the stock, and the Normal's light
+tails carry that. A Student-t with three degrees of freedom on the same
+scale would put 0.4% on a step larger than the largest province's whole
+stock, and a Cauchy 8%.
+
 With per-patch reports (`bvd_reports_matrix`) and the province rows
 `province_isolation`, `province_capacity` and `province_admissions`, the
 province occupancy, bed and 24h admission counts are each scored as a split
@@ -2542,8 +2562,9 @@ in-care fraction and the daily series for forecasting and replication.
         ## measurement-basis discontinuity in the isolation series. See
         ## `cumulative_occupancy_offset`.
         occupancy_break_days::AbstractVector{<:Integer} = Int[],
-        ## Prior sd of each occupancy break step (beds), centred on zero.
-        occupancy_break_sd::Real = 25.0,
+        ## Prior sd of each occupancy break step (beds), centred on zero and
+        ## set from the size of a province's isolation stock (see above).
+        occupancy_break_sd::Real = 75.0,
         ## Per-patch BVD reports `(n_patches × n)`, the rows summing to
         ## `bvd_reports_daily`. `nothing` is one patch.
         bvd_reports_matrix::Union{Nothing, AbstractMatrix} = nothing,

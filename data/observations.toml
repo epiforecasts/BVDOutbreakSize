@@ -426,9 +426,9 @@ source = "INSP situation reports 13-29 June 2026 (SitReps 030-042, 044, 046) Tab
 # day's `isolation_history` occupancy. Where it does not, the gap is a
 # between-report DHIS2 reclassification jump (e.g. the 19 June drop from
 # 416 to 342), a discontinuity the smooth inflow-through-survival demand
-# cannot reproduce. The treatment-flow submodel uses these gaps to identify
-# the break days (a material `|gap|`) and to centre a fitted break-step
-# prior; the sampled steps accumulate into a cumulative offset `Δ(t)` added
+# cannot reproduce. These gaps document the break days listed in
+# `[occupancy_break_dates]`; the treatment-flow submodel fits a zero-centred
+# step on each, and the sampled steps accumulate into a cumulative offset `Δ(t)` added
 # to the modelled occupancy mean, so the modelled occupancy tracks the
 # reclassified observed series and the residual stays smooth (the fit no
 # longer bends Rt to chase the reclassification) while still partitioning
@@ -453,8 +453,9 @@ source = "INSP situation reports 13-29 June 2026 (SitReps 030-042, 044, 046) `Ta
 # (e.g. the day the occupancy series switches from Tableau 6 provincial sums to
 # the page-1 headline, or a documented DHIS2 reclassification), not day-to-day
 # reporting noise, which the NegativeBinomial occupancy dispersion already
-# absorbs. Each step is sampled, centred on zero with a weakly informative
-# prior (`occupancy_break_sd`, default 25 beds), so the fit partitions it into
+# absorbs. Each step is sampled, centred on zero with a prior SD set from
+# the size of a province's isolation stock (`occupancy_break_sd`, default 75
+# beds; see `treatment_flow_model`), so the fit partitions it into
 # reporting artifact vs real demand. Filtered to the cut-off like the
 # histories; empty → no-op.
 [occupancy_break_dates]
