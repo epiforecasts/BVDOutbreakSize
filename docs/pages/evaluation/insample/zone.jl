@@ -209,7 +209,6 @@ MarkdownTable(zone_calibration_table) #hide
 #
 # The zone model scores compositions within each province, so it should leave each province's infections where the joint model put them.
 # The table sets the zone infections summed over each province against the joint model's infections there, as the posterior mean over each of the last four weeks to the cut-off.
-# A ratio away from one says the zone stage has moved a province's level, which no zone count measures.
 
 #md # ```@raw html
 #md # <details><summary>Zone stage against joint infections by province</summary>
