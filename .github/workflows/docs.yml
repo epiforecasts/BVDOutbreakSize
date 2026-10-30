@@ -1107,6 +1107,7 @@ jobs:
       needs.render_insample.result == 'success' &&
       needs.render_validation.result == 'success' &&
       needs.render_evaluation.result == 'success' &&
+      needs.render_zone.result == 'success' &&
       needs.render_all.result == 'success' }}
     steps:
       - uses: actions/checkout@v7
