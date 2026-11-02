@@ -151,8 +151,10 @@ end
     re = zone_reattribution_days(zh)
     @test collect(keys(re)) == ["ituri"]
     @test dates(re["ituri"]) == [Date("2026-06-18"), Date("2026-07-22")]
+    ## Deaths also fall on 30 October (SitRep 169), when the Ituri
+    ## harmonisation of 29 October empties the A ventiler row into the zones.
     @test dates(zone_reattribution_days(obs.zone_death_history)["ituri"]) ==
-        [Date("2026-06-18")]
+        [Date("2026-06-18"), Date("2026-10-30")]
     ituri = res[findfirst(r -> r.patch == "ituri", res)]
     @test dates(ituri.excluded) == [Date("2026-06-18"), Date("2026-07-22")]
     @test all(r -> r.patch == "ituri" || isempty(r.excluded), res)
@@ -324,7 +326,7 @@ end
     )[k] == 0
     ## Butembo's cases fall from 65 to 62 on 22 July with 4 printed. Nord-Kivu
     ## has no unallocated fall that day, so the cell reaches the composition,
-    ## and it is the only case cell the figures change.
+    ## and it is the only case cell the figures change before SitRep 169.
     res = zone_increment_matrix(
         obs.zone_confirmed_history, PROVINCE_NAMES;
         printed = obs.zone_confirmed_revision_24h
@@ -335,7 +337,10 @@ end
     w = findfirst(==(day("2026-07-22")), res[nk].days)
     @test base[nk].increments[i, w] == 0
     @test res[nk].increments[i, w] == 4
-    @test sum(count(r.increments .!= b.increments) for (r, b) in zip(res, base)) == 1
+    ## SitRep 169 (30 October) restates Ituri's zones without an unallocated
+    ## case fall, so Bunia, Kilo, Lita, Mambasa and Mongbwalu also take their
+    ## printed figures (Komanda's printed 0 equals the clamped 0).
+    @test sum(count(r.increments .!= b.increments) for (r, b) in zip(res, base)) == 6
 end
 
 @testitem "freeze_observations truncates the zone blocks" begin
