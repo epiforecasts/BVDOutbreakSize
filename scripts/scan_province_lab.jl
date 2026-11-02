@@ -181,7 +181,11 @@ function lab_lines(text::AbstractString)
         (startswith(strip(f), "tableau ") || startswith(strip(f), "figure ")) &&
             break
         m = match(head, l)
-        if m !== nothing && !startswith(m[1], num)
+        ## SitRep 165 numbers the section "2.1 Laboratoire" and its own
+        ## subheading "2.2.1 Principales actions", so a "Principales
+        ## actions" heading belongs to the section whatever its number.
+        if m !== nothing && !startswith(m[1], num) &&
+                !startswith(fold(m[2]), "principales actions")
             break
         end
         push!(out, String(l))
@@ -218,6 +222,25 @@ function province_entries(lines::Vector{String})
             got[current] = got[current] * " " * f
         end
     end
+    ## SitRep 168 folds one province into the bullet of another: "Haut-Uele
+    ## : 3 nouveaux resultats positifs ... ; au Bas-Uele, 15 echantillons
+    ## ont ete testes au laboratoire de Buta, tous revenus negatifs." A
+    ## clause opening on "au/en/a la <province>," starts that province's
+    ## entry, unless it already has a bullet of its own.
+    inner = Regex(
+        "[;.] (?:au|en|a la|a l.|dans la) " *
+            "(ituri|nord[ -]?kivu|sud[ -]?kivu|haut[ -]?uele|tshopo|" *
+            "bas[ -]?uele|sud[ -]?ubangi|nord[ -]?ubangi)\\s*,\\s*"
+    )
+    for name in copy(order)
+        m = match(inner, got[name])
+        m === nothing && continue
+        other = KEYS[replace(m[1], r"[ -]" => "")]
+        haskey(got, other) && continue
+        got[other] = got[name][(m.offset + ncodeunits(m.match)):end]
+        got[name] = got[name][1:(m.offset - 1)]
+        push!(order, other)
+    end
     return got, order
 end
 
@@ -233,8 +256,21 @@ a denominator wrongly dropped this way. Never guesses the other direction:
 a denominator with no readable numerator is reported by the caller and its
 whole vintage is left out.
 """
+## Counts written out in words, as SitRep 169's Tshopo bullet does: "Six
+## echantillons provenant de personnes vivantes ont ete analyses".
+const NUMBER_WORDS = Dict(
+    "un" => 1, "une" => 1, "deux" => 2, "trois" => 3, "quatre" => 4,
+    "cinq" => 5, "six" => 6, "sept" => 7, "huit" => 8, "neuf" => 9,
+    "dix" => 10, "onze" => 11, "douze" => 12, "treize" => 13,
+    "quatorze" => 14, "quinze" => 15, "seize" => 16, "vingt" => 20
+)
+
 function parse_province_entry(entry::AbstractString, name::AbstractString)
     t = replace(entry, r"\s+" => " ")
+    t = replace(
+        t, Regex("\\b(" * join(keys(NUMBER_WORDS), "|") * ") (?=" * SAMPLES * ")") =>
+            s -> string(NUMBER_WORDS[strip(s)]) * " "
+    )
     clauses = split(t, r"[;.] ")
     ## Provincial cumulatives and the closing narrative, which recaps the
     ## other provinces, sit in the same block as the daily counts. Neither

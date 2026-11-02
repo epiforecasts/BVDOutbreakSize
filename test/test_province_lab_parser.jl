@@ -155,6 +155,53 @@
     end
 end
 
+@testitem "province lab parser reads the SitRep 165 to 169 layouts" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "scan_province_lab.jl"
+        )
+    )
+
+    ## SitRep 169 writes Tshopo's count out in words.
+    @test parse_province_entry(
+        "six echantillons provenant de personnes vivantes ont ete analyses, " *
+            "tous negatifs (positivite : 0%).",
+        "tshopo"
+    ) == (6, 0)
+
+    ## SitRep 165 numbers the section "2.1 Laboratoire" and its subheading
+    ## "2.2.1 Principales actions"; the bullets under it are still the lab.
+    text = join(
+        [
+            "2.1 Laboratoire",
+            "2.2.1   Principales actions",
+            "       Ituri : 36 nouveaux résultats positifs (22 vivants et 14 décès) sur 185 nouveaux échantillons",
+            "        analysés (positivité : 19,5%)",
+            "2.3. Prévention et Contrôle de l'Infection (PCI/EDS)",
+            "       Ituri : 23 rings ouverts sur 30 (76,7 %)",
+        ],
+        "\n"
+    )
+    lines = lab_lines(text)
+    @test length(lines) == 3
+    got, order = province_entries(lines)
+    @test order == ["ituri"]
+    @test parse_province_entry(got["ituri"], "ituri") == (185, 36)
+
+    ## SitRep 168 puts Bas-Uele inside the Haut-Uele bullet.
+    lines = [
+        "          Haut-Uélé : 3 nouveaux résultats positifs (2 vivants et 1 décès) sur 19 nouveaux échantillons",
+        "           analysés au laboratoire d’Isiro (positivité : 15,8 %) ; au Bas-Uélé, 15 échantillons ont été testés au",
+        "           laboratoire de Buta, tous revenus négatifs.",
+    ]
+    got, order = province_entries(lines)
+    @test order == ["haut_uele", "bas_uele"]
+    @test parse_province_entry(got["haut_uele"], "haut_uele") == (19, 3)
+    @test parse_province_entry(got["bas_uele"], "bas_uele") == (15, 0)
+end
+
 @testitem "province lab parser refuses to guess a leading count" begin
     using BVDOutbreakSize: BVDOutbreakSize
     include(
