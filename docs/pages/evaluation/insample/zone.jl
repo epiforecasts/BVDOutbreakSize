@@ -207,7 +207,7 @@ MarkdownTable(zone_calibration_table) #hide
 
 # ## Province levels
 #
-# The zone model scores compositions within each province, so it should produced province infection estimates equivalent to the joint model.
+# The zone model scores compositions within each province, so it should produce province infection estimates equivalent to the joint model.
 # The table sets the zone infections summed over each province against the joint model's infections there, as the posterior mean over each of the last four weeks to the cut-off.
 
 #md # ```@raw html
