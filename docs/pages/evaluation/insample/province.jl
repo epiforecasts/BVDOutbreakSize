@@ -432,7 +432,7 @@ province_pairs_fig #hide
 # ## [Estimate evolution across releases](@id province-estimate-evolution)
 #
 # How each province's estimates have moved as releases accrued, read from the estimates each release published at its own cut-off.
-# Releases began publishing per-province estimates recently, so each panel fills in as releases accumulate.
+# Each panel starts at the first release that published per-province estimates.
 
 #md # ```@raw html
 #md # <details><summary>Load the per-province estimates of each release</summary>

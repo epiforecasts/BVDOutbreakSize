@@ -87,7 +87,6 @@ province_headline #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The provinces compared from the joint posterior, as equal-tailed 90% credible intervals, with shares and probabilities computed draw by draw.
-#md # The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.
 #md # </figcaption>
 #md # </figure>
 #md # ```

@@ -117,7 +117,7 @@ frozen_streams_table = streams_table(
 # It projects the confirmed-case trajectory under a low, central and high transmissibility scenario.
 #
 # Their published quantity is the cumulative confirmed-case count with the reporting fraction held at one, so it excludes the unconfirmed and unascertained cases that this analysis and McCabe et al. estimate.
-# The like-for-like comparison is therefore against our own confirmed-case projection.
+# The like-for-like comparison is against our own confirmed-case projection.
 # We take our fit frozen at 8 June, the date of their calibration anchor, and roll its confirmed cases forward to the dates Chamla report with the model's forecast, rather than refitting to their assumptions.
 
 #md # ```@raw html
