@@ -1153,17 +1153,15 @@ cfr_prior_fig #hide
 # ```math
 # \lambda_{\text{bg},t} = \lambda_\mu \exp\!\bigl(w_t\bigr), \qquad
 # w_t = \mathrm{interp}\Bigl(\sigma_{\text{bg}} \sum_{s < k} z_s\Bigr),
-# \qquad z_s \sim \mathcal N(0, 1),
+# \qquad z_s \sim \mathrm{Normal}(0, 1).
 # ```
 #
-# This rate is gated to zero before the surveillance onset, a report-to-receipt lead before the first suspected-case report, since the background does not exist before surveillance began.
+# The rate is zero before the surveillance onset, a report-to-receipt lead before the first suspected-case report.
 # It ramps in linearly over the first seven days after the onset.
 # It is shared, with one innovation SD $\sigma_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 0.3)$, between the suspected-case and suspected-death streams.
-# The background is degenerate with outbreak size, so a wide $\sigma_{\text{bg}}$ would let single windows absorb arbitrary suspected counts, and the half-normal keeps the time variation a small perturbation of the baseline.
-# Weekly knots, as in the reproduction-number walk, keep the background a gentle drift over a small number of innovations.
-# The baseline carries a half-normal $\mathrm{Normal}^{+}(0, 20)$ prior on the natural scale.
-# A log-scale level would have a heavy right tail the background/outbreak-size degeneracy could exploit, whereas the natural-scale half-normal bounds it.
-# It is wide enough that the laboratory positivity (only $210/755 \approx 0.28$ of specimens analysed to 28 May are positive) identifies the background.
+# The background is degenerate with outbreak size, so this tight prior and the weekly knots keep its time variation a small drift around the baseline.
+# The baseline $\lambda_\mu$ has a $\mathrm{Normal}^{+}(0, 20)$ prior on the natural scale, which bounds the right tail a log-scale prior would leave open to the same degeneracy.
+# The laboratory positivity identifies the background, since only $210/755 \approx 0.28$ of specimens analysed to 28 May are positive.
 # The background is inferred to be the majority of the suspect pool.
 # The daily expected suspected case count is
 #
@@ -1171,7 +1169,7 @@ cfr_prior_fig #hide
 # c_t = p_{\text{DRC}}\, \text{bvd}_t + \lambda_{\text{bg},t}.
 # ```
 #
-# With the province compositions, each patch $p$ detects a BVD onset as a suspected case with its own probability $p_{\text{DRC},p}$, defined with the [province compositions](@ref methods-province-compositions) below.
+# Each patch $p$ detects a BVD onset as a suspected case with its own probability $p_{\text{DRC},p}$, defined with the [province compositions](@ref methods-province-compositions) below.
 # Write $\text{bvd}_{p,t}$ for patch $p$'s onsets through $f_{\text{rep}}$.
 # The onsets in $\text{bvd}_t$ are then each patch's weighted by $p_{\text{DRC},p} / p_{\text{DRC}}$, so that
 #
@@ -1189,17 +1187,16 @@ cfr_prior_fig #hide
 #     \sum_{t = d_{i-1}+1}^{d_i} c_t,\ k_{\text{cases}}\Bigr). \tag{33}
 # ```
 #
-# We freeze the national cumulative suspected total at 26 May and instead fit the daily new-suspect count that the confirmed-based reports publish (the daily new-suspect count $a_j$ on report day $t_j$, from 4 June to the cut-off).
-# This is a genuine daily incidence, not a cumulative total.
-# It is scored against the modelled daily suspected count $c_{t_j}$ on that day directly (a single-day mean, not a between-vintage sum), with the same dispersion $k_{\text{cases}}$:
+# The cumulative suspected total is frozen at 26 May (see [Data](@ref methods-data)).
+# From 4 June to the cut-off the daily new-suspect count $a_j$ on report day $t_j$ is scored against the modelled daily count $c_{t_j}$ on that day, a single-day mean rather than a between-vintage sum, with the same dispersion:
 #
 # ```math
 # a_j \sim \mathrm{NegBinomial}(c_{t_j},\ k_{\text{cases}}).
 # ```
 #
-# The daily report days fall strictly after the frozen cumulative series ends, so the two suspected likelihoods cover disjoint days and do not double-count.
-# The suspected-death stream is fitted the same way.
-# The cumulative suspected-death total freezes at 26 May, and the daily new suspected-death count ("cas suspects du jour N (M deces)", 7 June to 11 July) is scored against the modelled daily suspected-death count on each report day with a NegBinomial with the suspected-death dispersion $k_{\text{deaths}}$.
+# The daily report days fall after the frozen cumulative series ends, so the two suspected likelihoods do not double-count.
+# The suspected deaths are fitted the same way.
+# Their cumulative total freezes at 26 May, and the daily new suspected-death count from 7 June to 11 July is scored against the modelled daily suspected deaths with a NegBinomial with dispersion $k_{\text{deaths}}$.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: reported_cases_model</summary>
@@ -1490,10 +1487,9 @@ cfr_prior_fig #hide
 # #### Suspected deaths
 #
 # Suspected deaths are the ascertained, CFR-weighted convolution of the daily onsets with the onset-to-death PMF $f_d$, plus a non-BVD background.
-# This is modelled on the incidence scale.
 # The cumulative death history ends at its 26 May freeze, and its last value is the final increment, so the total is not scored separately.
-# A fatal BVD infection enters the suspected-death count only when ascertained.
-# The BVD deaths therefore carry a death ascertainment $p_{\text{death}}$, the death analogue of the case ascertainment $p_{\text{DRC}}$, with an informative prior centred high (a death is more reliably reported than a living suspect).
+# A fatal BVD infection enters the count only when ascertained, with the death ascertainment $p_{\text{death}}$, the death analogue of $p_{\text{DRC}}$.
+# Its prior is centred high because a death is more reliably reported than a living suspect.
 # The non-BVD background suspected deaths are a background CFR $\mathrm{cfr}_{\text{bg}}$ applied to the per-day non-BVD suspected-case background $\lambda_{\text{bg},t}$, lagged by the same onset-to-death delay so a background death follows its background case.
 # The daily death series is
 #
