@@ -277,11 +277,11 @@ MarkdownTable(vintage_table) #hide
 # | Onset-to-hospitalisation delay | ● |  |  |  |  |  |  |
 # | Assay sensitivity / specificity |  |  |  |  | ● | ● |  |
 # | Severity enrichment $\delta_0$ |  |  |  |  | ● |  |  |
-# | Death testing intensity $\tau_{\text{death}}$ |  |  |  |  |  | ● |  |
-# | Testing fraction $\tau_{\text{test}}$ |  |  |  | ● | ● |  |  |
+# | Death testing scaling |  |  |  |  |  | ● |  |
+# | Testing fraction $\tau_{\text{test}}$ |  |  |  | ● | ● | ● |  |
 # | Background rate $\lambda_{\text{bg}}$ |  | ● | ● | ● | ● | ● |  |
 # | Surveillance dispersion |  | ● | ● | ● | ● | ● |  |
-# | Ascertainment | ● |  | ● | ● | ● |  | ● |
+# | Ascertainment | ● |  | ● | ● | ● | ● | ● |
 # | Traveller volume | ● |  |  |  |  |  | ● |
 #
 #md # ```@raw html
@@ -525,7 +525,7 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # The renewal starts on the grid day on which the renewal recursion begins and sustained transmission is treated as established.
-# We place it 14 days after the genetic TMRCA day, past the molecular-clock uncertainty, so the observed window from the renewal start to the cut-off is shorter than the TMRCA age.
+# We place it 14 days after the genetic TMRCA day, so the observed window from the renewal start to the cut-off is shorter than the TMRCA age.
 # The bound therefore stays informative on the cryptic duration, pulling the origin to sit at or before the most recent common ancestor and bounding the cryptic phase from below.
 # It is one-sided, leaving the age free above the TMRCA.
 # We take the TMRCA mean as given and carry its uncertainty only through $\sigma$.
@@ -914,6 +914,7 @@ cfr_prior_fig #hide
 # ```
 #
 # for each of the six count streams $s$, with $\tau$ setting the pooling ($\tau = 0$ collapses to one shared dispersion).
+# The streams are the suspected cases, suspected deaths, confirmed cases, confirmed deaths, treatment-centre stocks and recoveries, with dispersions $k_{\text{cases}}$, $k_{\text{deaths}}$, $k_{\text{conf}}$, $k_{\text{cd}}$, $k_{\text{iso}}$ and $k_{\text{rec}}$.
 # The population value $k = 1/\exp(\mu)^2$ is the headline dispersion.
 
 #md # ```@raw html
@@ -2800,7 +2801,7 @@ Markdown.parse(_sampler_same * _sampler_each * _sampler_both) #hide
 # | Component | [mccabe2026](@citet) | This work |
 # |---|---|---|
 # | [Infection process](@ref "Infection process") | Continuous-time closed forms | Discrete-time meta-population renewal on a daily grid, provinces coupled by importation, national incidence their sum |
-# | [Reproduction number](@ref "Reproduction number") | One constant exponential growth rate | Flat at $R_0$ until a month before the first WHO report, then a weekly log-scale random walk with a response ramp, plus a mean-reverting per-province deviation |
+# | [Reproduction number](@ref "Reproduction number") | One constant exponential growth rate | A weekly log-scale random walk from $R_0$, starting a month before the first WHO report, with a response ramp, plus a mean-reverting per-province deviation |
 # | [Seeding and growth](@ref "Seeding and growth") | Start fixed from a single seed | Two-phase seeding, a cryptic exponential phase floored from below by the [genetic bound](@ref "Genetic bound on outbreak age") |
 # | Parameter treatment | Each fixed, a set of scenarios reported | Priors on the reproduction number, case-fatality ratio, delays, traveller volume and dispersion, all sampled in one posterior |
 # | [Onset-to-death delay](@ref "Onset-to-death delay") | Isiro 2012 point estimate of [rosello2015](@citet) | Bayesian reanalysis of the same line list [bdbv_linelist_analysis_2026](@cite), so the delay carries uncertainty |

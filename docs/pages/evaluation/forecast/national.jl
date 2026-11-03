@@ -39,7 +39,7 @@ frozen_lastweek_streams = frozen_validation_stream_fits();
 #
 # How last week's forecast held up against the data since observed, from the frozen refit in [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation").
 # Only the streams the situation reports still update are validated, since a stopped stream repeats its last total and leaves nothing to score.
-# The projected bed occupancy is scored against the beds held a week later, but this check is weak at a one-week-back freeze.
+# The projected bed occupancy is scored against the beds held a week later.
 
 #md # ```@raw html
 #md # <details><summary>Fit one week back and validate the one-week-ahead forecast</summary>
