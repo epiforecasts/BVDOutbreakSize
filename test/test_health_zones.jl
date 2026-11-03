@@ -339,8 +339,12 @@ end
     @test res[nk].increments[i, w] == 4
     ## SitRep 169 (30 October) restates Ituri's zones without an unallocated
     ## case fall, so Bunia, Kilo, Lita, Mambasa and Mongbwalu also take their
-    ## printed figures (Komanda's printed 0 equals the clamped 0).
-    @test sum(count(r.increments .!= b.increments) for (r, b) in zip(res, base)) == 6
+    ## printed figures (Komanda's printed 0 equals the clamped 0). SitRep 170
+    ## (31 October) returns Ituri's zones to the SitRep 168 basis, again
+    ## without an unallocated case fall, so Mangala and Rwampara take their
+    ## printed 1 each; its other nine case falls print blank, equal to the
+    ## clamped 0.
+    @test sum(count(r.increments .!= b.increments) for (r, b) in zip(res, base)) == 8
 end
 
 @testitem "freeze_observations truncates the zone blocks" begin

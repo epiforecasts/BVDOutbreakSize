@@ -234,7 +234,7 @@ SitRep 033 gives the split as prose only, 084 to 086 (the brief format) carry no
 None of those four is scanned.
 From SitRep 124 the caption drops `de santé` and carries the date instead, reading `par province et zone du 15 septembre 2026`.
 The table itself is unchanged, so the scanner matches the caption as far as `par province et zone`.
-The series run to SitRep 169 (30 October); SitRep 142 (3 October) is not published on insp.cd.
+The series run to SitRep 170 (31 October); SitRep 142 (3 October) is not published on insp.cd.
 From SitRep 147 Dakwa (Bas-Uélé) is carried in the Bas-Uélé unallocated row, because it has no polygon in the health-zone map (see the inclusion rules below).
 SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
 SitRep 048 (1 July) is filled from the INRB-UMIE mirror under the fallback order below, since its zones sum to the national totals; SitRep 057 (10 July) is not, since the mirror's zones sum to 1 878 cases against the national 1 873.
@@ -245,7 +245,8 @@ The unallocated row is the report's own count of cases and deaths it has not att
 It is worded `Autres ZS (données non ventilées)` (018 to 032, 94 cases and 10 deaths throughout), `Autres zones non encore identifiées` (034 to 058, 17 cases), `Non identifiées` (059 to 068, 17 cases) and `A ventiler` (088 onward, deaths only).
 It is kept as `<province>.unallocated`, with a printed `NA` recorded as 0, so that the zone rows plus the unallocated row partition the province.
 Only Ituri has ever printed one; Bas-Uélé's row from 8 October holds Dakwa, a named zone the map lacks, not a count the report leaves unattributed.
-Its count falls three times: on 18 June (SitRep 035) from 94 cases and 10 deaths to 17 and 0, on 22 July (SitRep 069) from 17 cases to 0, and on 30 October (SitRep 169) from 493 deaths to none, the row no longer printed after the Ituri harmonisation of 29 October (issue #1188).
+Its count falls three times: on 18 June (SitRep 035) from 94 cases and 10 deaths to 17 and 0, on 22 July (SitRep 069) from 17 cases to 0, and on 30 October (SitRep 169) from 493 deaths to none, the row not printed after the Ituri harmonisation of 29 October (issue #1188).
+SitRep 170 (31 October) prints it again with 493 deaths, so the row rises back rather than falling.
 Each fall is a reattribution of counts the report had carried as unallocated into named zones, so on those dates the zone rows rise by more than the province (163 zone cases against a province increment of 86 on 18 June, and 374 clamped zone cases against 347 on 22 July).
 The composition model leaves those Ituri vintages out: `zone_increment_matrix` zeroes the patch's column on any date its unallocated count falls and lists the dates, and since the increments are differences of cumulative counts the next vintage is unaffected.
 
@@ -259,6 +260,7 @@ A printed negative (Katwa's `-2*` on 26 July, the harmonisation itself) is recor
 Every other zone-vintage keeps its cumulative difference, and the vintages the death composition leaves out for a zone fall stay out.
 The three falls on 11 June (SitRep 028) have no 24h column and stay clamped.
 SitRep 169 restates Ituri's zones in the same harmonisation, so six case falls (Bunia, Kilo, Komanda, Lita, Mambasa, Mongbwalu) and three death falls (Aru, Kilo, Logo) carry their printed 24h figures.
+SitRep 170 returns Ituri's zones to the SitRep 168 basis, so eleven case falls and twenty-one death falls carry its printed 24h figures, of which only Mangala's and Rwampara's single new cases change a case cell.
 
 Spelling varies between vintages.
 The scanner's alias table resolves `Gethy` to `gety`, `Nai-Nia` (SitRep 030) to `nia_nia`, `MakisoKisangani` (SitRep 064) and the wrapped `Makiso-` / `Kisangani` to `makiso_kisangani`, the wrapped `Boma` / `Mangbetu` to `boma_mangbetu`, `Bambu-mine` to `bambu` and `Mungbwalu` to `mongbwalu`, plus the variants the mirror's `aliases.csv` records from vintages this archive lacks (`Nyakunde`, `Rumba`, `Mongbalu`, `Tchomai`, `Wanierukula`, `Manguripa`).
@@ -277,7 +279,7 @@ SitRep 116 prints `1` in Buta's Létalité cell.
 
 `scripts/confirm_zone_data.jl` (`task confirm-zone-data`) cross-checks both blocks against the INRB-UMIE mirror's per-zone `cumulative_confirmed_cases` and `cumulative_confirmed_deaths` CSVs, its `NA` zone read as the unallocated row.
 Of the 5766 case cells and 5768 death cells the two transcriptions share, 5752 and 5758 agree.
-The mirror does not yet carry 7, 8, 20, 22, 23, 24 and 30 October (SitReps 146, 147, 159, 161, 162, 163 and 169).
+The mirror does not yet carry 7, 8, 20, 22, 23, 24, 30 and 31 October (SitReps 146, 147, 159, 161, 162, 163, 169 and 170).
 It carries 3 October, which INSP has not published, and the blocks leave that date out.
 Every disagreement was re-read from the PDF and the manifest matches the printed table in each case.
 On 3 June the mirror's unallocated row reads 97 cases and 1 death against the printed 94 and 10.
@@ -352,7 +354,7 @@ Against the scanned SitRep curve the observed series agrees in every vintage (Pe
 
 The page is rebuilt by CI and committed to <https://github.com/INRB-UMIE/BDBV2026-Epidemic_Dashboard>, so the git history of `trends.html` is the vintage archive.
 `scripts/extract_dashboard_onsets.py` reads every commit of that page, reads the SVG bars back through each chart's own axis labels or takes the embedded counts, and keeps one snapshot per distinct data version.
-The history holds 40 distinct snapshots from 2026-07-29 to 2026-11-01 out of 177 page builds.
+The history holds 41 distinct snapshots from 2026-07-29 to 2026-11-02 out of 178 page builds.
 On the 23 September data, built both ways, the two readings agree on every row (issue #1062).
 The snapshot cadence is irregular, 1 to 8 days between builds, so a SitRep block is compared with the nearest snapshot within two days of its report date (`task onset-cross-check`).
 At the reporting edge the dashboard's line list lagged the SitRep extract by up to 5 cases per day in early August and led it in September.
@@ -642,6 +644,13 @@ No script tracks mirror-sourced values, so this check is manual.
   It is listed in `MISPRINTED` in `scripts/province_care_manifest.jl`, which leaves that one cell out of `province_admissions_history`; both CSVs keep the printed 495.
   Bas-Uélé prints 38 patients after 92 at SitRep 163, with 14 admissions and 8 sorties, so its start-of-day stock is 32 rather than 92.
   Tableau 3 prints ND for Ituri and Nord Ubangi, and Ituri validated 183 suspects on SitRep 163, so the 249 is left out of `suspected_daily_history`, as at SitReps 147, 149 and 163.
+- **SitRep 170 (31 October)**: national confirmed deaths are printed as 5 103, 269 below SitRep 169's 5 372, against 45 deaths printed for the day.
+  5 103 is SitRep 168's 5 026 plus the 32 and 45 deaths printed on 169 and 170, so the +314 Ituri harmonisation of SitRep 169 is no longer applied.
+  Tableau 1 prints Ituri 3 483 without an asterisk, Tableau 2 prints the `A ventiler` row of 493 deaths again and returns Ituri's zones to the SitRep 168 basis, and the 29 October footnote is still printed under Tableau 2 without marking any cell.
+  No other text in the report mentions the change: searched SitRep 170 for `harmonis`, `ajust`, `correct`, `rectif`, `revis` and the 169 totals, and the footnote is the only hit.
+  `A ventiler` is printed in SitReps 160 to 168 and 170 and not in 169.
+  31 October is left out of `confirmed_death_history`, because the cumulative series must not fall, and the printed 5 103 is kept in `insp_sitrep_scanned.csv`; the province and health-zone death blocks record the printed values (issue #1188).
+  The national bed sum (608) again falls below the isolation tile (980), so 31 October has no `bed_capacity_history` entry (issue #1190).
 - **Laboratory, SitRep 157 (18 October)**: the Bas-Uélé bullet reads `12 nouveaux échantillons reçus au laboratoire de Buta dont 4 nouveaux échantillons ont été envoyés au laboratoire Isiro tous sont revenus négatifs`, and 12 is the count that closes the provinces to the page-1 500.
 - **`candidate_signals.csv` gap at SitRep 128**: the run that added SitRep 128 recorded only `poe_*`, `eds_*`, `vaccination_*`, `smsps_confirmed_coverage` and `psea_zs_signalement_awareness` for that vintage, silently dropping `alerts_total_day`, `alerts_validated_alive`, `alerts_validated_dead_community`, `alerts_investigated`, `alert_investigation_rate`, `contacts_seen`, `contacts_under_follow_up` and `contact_tracing_coverage`, all of which had been recorded continuously through SitRep 127 and are still printed at 128 (Tableau 3 and the section 2.1.1 contact-tracing prose). This run resumes all of them from SitRep 129 onward without backfilling 128's own single-day gap; a future update could close it directly from the already-cached `SitRep_MVE_128_2026.pdf`.
 
