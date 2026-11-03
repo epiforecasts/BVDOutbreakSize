@@ -107,6 +107,8 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Data
 
+- A `[skip_dates]` manifest block leaves listed vintages out of a loaded history while keeping them in the manifest as printed, so a report whose cumulative a later report withdraws merges into the next window rather than reading as a fall (#1191).
+  No vintage is listed yet, so fitted values do not change.
 - The model cut-off advances to SitRep 169, 30 October.
   SitRep 169 harmonises Ituri's deaths, so national confirmed deaths step 346 against 32 printed.
   The step is recorded as printed, and whether 30 October becomes a break day is raised in #1188.
