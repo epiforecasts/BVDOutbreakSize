@@ -459,10 +459,10 @@ When the forecast carries the confirmed/suspect ward split
 the cut-off confirmed share), the two ward occupancy levels are archived too
 as `treatment beds` (confirmed) and `isolation beds (suspected)`, each scored
 against its own Tableau 6 occupancy sub-stock. The total `isolation beds`
-occupancy stays as its own stream. [`forecast_reported`](@ref) projects the
-total occupancy alone, so only a forecast a caller has partitioned itself
-carries the two ward columns. Streams a forecast does not carry are
-skipped. `thin` keeps every
+occupancy stays as its own stream. Nothing produces those two columns yet:
+[`forecast_reported`](@ref) projects the total occupancy alone, so only a
+forecast a caller has partitioned itself carries them, which today is the
+tests. Streams a forecast does not carry are skipped. `thin` keeps every
 `thin`-th draw so the archive stays compact when it is saved as a release
 asset.
 """
@@ -561,8 +561,8 @@ one row per confirmed stream (laboratory-confirmed cases and confirmed
 deaths) and quantity (cumulative total by the cut-off plus the horizon, or
 new this week), reporting the equal-tailed 30/60/90% credible interval
 endpoints (`lower_90 … upper_90`) used by the other summary tables. The
-suspected reported-case and suspected-death streams, which the situation
-reports stopped publishing, are not shown as forecast targets.
+suspected reported-case and suspected-death streams are not shown as
+forecast targets.
 """
 function forecast_table(fc::DataFrame; digits::Integer = 0)
     _row(

@@ -569,6 +569,7 @@ end
 [`forecast_score_by_horizon`](@ref) or [`forecast_score_by_release`](@ref))
 with its `fit` column dropped. Only for a table whose `fit` column is
 single-valued by construction rather than by the data on hand.
+No table in this report is structurally single-fit.
 
 Every other column is left untouched. `table` is returned with `fit` still
 present when it is empty, since an empty table carries no evidence either
