@@ -4,7 +4,7 @@
 
 - The model is fitted to aggregate counts: the DRC situation-report totals read from the published PDFs, and three Uganda export cases with one death from WHO reports.
   We do not have a line list, information on case definitions or reporting completeness, or access to the response's internal data, so every estimate is a model-based extrapolation under strong assumptions, not a measurement.
-- The work is done outside the outbreak response, so changes in reporting practice are inferred from the reports rather than known.
+- The work is done outside the outbreak response, so changes in reporting practice are inferred from the reports alone.
 - The code and analysis were drafted by a language model and reviewed by people and by language models ([authors](@ref "Authors, funding and acknowledgements")).
 - The report is re-run as new data arrive, so the estimates change between updates, and it has not been peer reviewed.
   Every release is signed off by a person before it is published.
@@ -41,9 +41,9 @@
 
 ### Evaluation
 
-- The interval on the [onset forecast](@ref "Symptom-onset nowcast and forecast") is dominated by per-scan error rather than the epidemic.
+- The interval on the [onset forecast](@ref "Symptom-onset nowcast and forecast") is dominated by per-scan error.
 - The persistence baseline for a frozen re-fit reads a data snapshot that can post-date the forecast by weeks, so it can see later corrections ([details](@ref "Forecast scoring against a persistence baseline")).
-- Past forecasts that were not stored are rebuilt from each release's own code but with current dependency versions, so they are not exact.
+- Past forecasts that were not stored are rebuilt from each release's own code with current dependency versions, so they approximate the original forecasts.
 
 ## Provinces
 

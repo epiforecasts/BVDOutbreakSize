@@ -26,7 +26,9 @@
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
         zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
-        sum_to_zero_basis, _embedded_sum_to_zero_basis,
+        convolve_rows, _share_out, _admission_centred_shares,
+        _background_admission_shares, sum_to_zero_basis,
+        _embedded_sum_to_zero_basis, knot_days,
         discretise_censored, lognormal_meansd, cdf_nmax
     using Distributions: Gamma, LogNormal, Weibull
 
@@ -201,6 +203,51 @@
         add!("1 ⊕ 1", convolve_pmf, [0.4], [0.7])
         add!("empty ⊕ 5", convolve_pmf, Float64[], pmf(rng, 5))
         add!("45 ⊕ 45", convolve_pmf, pmf(rng, 45), pmf(rng, 45); perf = true)
+
+        ## The per-patch treatment kernels on the province grid: rows through
+        ## a delay longer and shorter than the grid, the national demand
+        ## shared on the patch stocks with a day of no stock, and the daily
+        ## patch shares, capacity on cumulative admissions and background on
+        ## a knot walk over the printed patches.
+        Mr = rand(rng, 4, 30) .+ 0.1
+        add!("D = 8", convolve_rows, Mr, pmf(rng, 8))
+        add!("D > n", convolve_rows, Mr, pmf(rng, 40))
+        add!(
+            "8 × 260, D = 42", convolve_rows, rand(rng, 8, 260) .+ 0.1,
+            pmf(rng, 42); perf = true
+        )
+        add!("4 × 30", _share_out, rand(rng, 4, 30) .+ 0.1, 100 .* rand(rng, 30))
+        add!(
+            "8 × 260", _share_out, rand(rng, 8, 260) .+ 0.1,
+            100 .* rand(rng, 260); perf = true
+        )
+        add!(
+            "4 × 30", _admission_centred_shares, 5 .* rand(rng, 4, 30),
+            0.5 .* randn(rng, 4), 1.0
+        )
+        add!(
+            "8 × 260", _admission_centred_shares, 5 .* rand(rng, 8, 260),
+            0.5 .* randn(rng, 8), 1.0; perf = true
+        )
+        printed = [1, 2, 4]
+        Qb = _embedded_sum_to_zero_basis(5, printed)
+        kd = knot_days(28; week = 7, start = 6)
+        add!(
+            "5 patches, 3 printed", _background_admission_shares,
+            pmf(rng, 5), Qb, 0.3 .* randn(rng, 2),
+            0.1 .* randn(rng, 2 * (length(kd) - 1)), kd, 30
+        )
+        add!(
+            "one knot", _background_admission_shares, pmf(rng, 5), Qb,
+            0.3 .* randn(rng, 2), Float64[], [9], 30
+        )
+        Q8 = _embedded_sum_to_zero_basis(8, [1, 2, 3, 4, 5, 6, 7])
+        kd8 = knot_days(260; week = 7, start = 104)
+        add!(
+            "8 patches, 260 days", _background_admission_shares, pmf(rng, 8),
+            Q8, 0.3 .* randn(rng, 6), 0.05 .* randn(rng, 6 * (length(kd8) - 1)),
+            kd8, 260; perf = true
+        )
 
         ## Every knot layout the model builds: a regular weekly grid, a
         ## two-knot span, an irregular grid, and the single-knot window.
@@ -826,7 +873,7 @@ end
     using Mooncake: Mooncake
     using Distributions: logpdf, Gamma, LogNormal, Weibull
     using BVDOutbreakSize: NegBinomialVector, StudentTVector,
-        zone_share_renewal_kernel, discretise_censored
+        zone_share_renewal_kernel, _share_out, discretise_censored
 
     function mgrad(f, args...)
         rule = Mooncake.build_rrule(f, args...)
@@ -873,6 +920,18 @@ end
     )
     @test all(iszero, gIb)
     @test all(iszero, gδ)
+
+    ## A day with no patch stock splits its demand equally, so the stocks
+    ## take no derivative there and the demand takes the mean cotangent.
+    stock = rand(rng, 4, 10) .+ 0.1
+    stock[:, 5] .= 0
+    weights = rand(rng, 4, 10)
+    gs, gd = mgrad(
+        (s, d) -> sum(weights .* _share_out(s, d)), stock, 50 .* rand(rng, 10)
+    )
+    @test all(iszero, gs[:, 5])
+    @test all(!iszero, gs[:, 4])
+    @test gd[5] ≈ sum(weights[:, 5]) / 4
 
     ## Delays a warm-up proposal can reach. Those on the uniform fallback
     ## pass no derivative. A shape too large for the incomplete gamma
