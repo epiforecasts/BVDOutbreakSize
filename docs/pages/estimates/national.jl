@@ -309,7 +309,7 @@ cumulative_traj_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Cumulative infections, symptom onsets and deaths over time, with their densities at the cut-off.
-#md # The infection density is the headline outbreak size, counted in infections rather than reported cases.
+#md # The infection density is the headline outbreak size, a count of all infections, reported and unreported.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -668,7 +668,7 @@ surveillance_pair_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Joint posterior of the main surveillance parameters, with the prior overlaid.
-#md # The DRC ascertainment here is the logit-scale centre of the province detection probabilities rather than the national reporting fraction.
+#md # The DRC ascertainment here is the logit-scale centre of the province detection probabilities.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -1312,7 +1312,7 @@ CSV.write(
 
 # ### Summary-page assets
 #
-# The one-page [Summary dashboard](@ref) reuses the results above rather than refitting.
+# The one-page [Summary dashboard](@ref) reuses the results above.
 # This step saves its headline text, tables and figures for the dashboard page to embed.
 
 #md # ```@raw html

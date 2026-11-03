@@ -1088,7 +1088,7 @@ evolution_fig #hide
 #md # <figcaption>
 #md # The outbreak size published at each release (blue), from the current model frozen at earlier cut-offs (red) and from the current model on current data (green band), with dotted rules at the release dates.
 #md # Each release is its own fit, so it is drawn as a median with 30%, 60% and 90% interval bars.
-#md # The published series switches from a closed-form integral model to a renewal model on 7 June, so a step there can reflect the change of method rather than of data.
+#md # The published series switches from a closed-form integral model to a renewal model on 7 June, so a step there can reflect the change of method.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -1759,7 +1759,7 @@ joint_worst_groups #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The same diagnostics grouped by parameter rather than by element.
+#md # The same diagnostics grouped by parameter.
 #md # </figcaption>
 #md # </figure>
 #md # <details><summary>Mixing over time-varying parameters</summary>
