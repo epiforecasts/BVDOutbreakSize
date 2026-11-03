@@ -46,24 +46,17 @@ end
     # the check looks for.
     #
     # The probe conflates two outcomes. When the subprocess exits without
-    # writing the sentinel — a failed or killed precompilation, nothing to do
-    # with tasks — Aqua logs `<file> was not created, but precompilation
-    # exited` and reports a persistent task regardless. `tmax` does not cover
-    # that phase: the wait for the sentinel has no timeout at all, so raising
-    # `tmax` cannot help. The durations seen, 1m39 and 8m48 against
-    # `tmax = 600`, were the precompilation dying rather than a timeout.
+    # writing the sentinel (a failed or killed precompilation), Aqua logs
+    # `<file> was not created, but precompilation exited` and reports a
+    # persistent task regardless. The wait for the sentinel has no timeout,
+    # so raising `tmax` cannot help. Rebuilding this package's dependency
+    # stack in a fresh project while this process holds it loaded makes the
+    # subprocess die intermittently on the runners.
     #
-    # Rebuilding this package's dependency stack in a fresh project while this
-    # process already holds it loaded is heavy enough that the subprocess dies
-    # intermittently on the runners: two of three concluded
-    # `Julia 1 - ubuntu-latest` runs on 27 July 2026, one of them on main.
+    # A genuine detection still fails. A probe that could not run is skipped
+    # with its reason visible.
     #
-    # So the two outcomes are separated here. A genuine detection still fails.
-    # A probe that could not run is skipped with its reason visible, rather
-    # than reported as a package defect. Issue #495 tracks the root cause,
-    # which this does not address.
-    #
-    # macOS is excluded outright: that runner leaves a background task alive
+    # macOS is excluded: that runner leaves a background task alive
     # after loading the graphics stack (CairoMakie/Makie), so the check cannot
     # pass there.
     if Sys.isapple()

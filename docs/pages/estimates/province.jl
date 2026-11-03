@@ -87,7 +87,6 @@ province_headline #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The provinces compared from the joint posterior, as equal-tailed 90% credible intervals, with shares and probabilities computed draw by draw.
-#md # The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -222,7 +221,8 @@ province_bed_overview #hide
 #md # <figcaption>
 #md # Beds, bed demand, occupied beds, utilisation and patients above the beds by province at the cut-off, from the occupancy and bed counts in the situation reports.
 #md # Each province's beds are its modelled share of the national capacity, and its occupied beds are its demand share of the national modelled occupancy.
-#md # Patients above the beds are the occupied beds in excess of them, and the provinces sum to the national figures.
+#md # Patients above the beds are the occupied beds in excess of them.
+#md # The provinces' beds and occupied beds sum to the national figures, but their patients above the beds can exceed the national shortfall.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -358,14 +358,13 @@ province_rt_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The reproduction number of each province, with the national trajectory in grey.
-#md # The deviations sum to zero, so the grey band is the incidence-weighted middle of the panels rather than any one province.
+#md # The grey band is the central trend the provinces pool toward, net of depletion, rather than any one province.
 #md # Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi hold few confirmed cases, so their panels are carried mostly by the deviation prior and their widths are not measurements.
 #md # </figcaption>
 #md # </figure>
 #md # ```
 
 # The spread of the provinces' log-Rt deviations is the spatial diagnostic.
-# Its prior gives a 26% probability that the Ituri to Nord-Kivu ratio moves by more than 25% over the window.
 # With eight patches and five of them carrying little signal, the cross-province correlation is not identified and tracks its prior.
 
 #md # ```@raw html
@@ -661,7 +660,7 @@ province_diagnostics_table #hide
 
 # ## Saving province assets
 #
-# The summary dashboard shows the province comparison, the province map, the reproduction number by province and the weekly cases against the reproduction number, so they are written here.
+# The summary dashboard shows the province summary table, the province map, the reproduction number by province and the weekly cases against the reproduction number, so they are written here.
 
 #md # ```@raw html
 #md # <details><summary>Write the province dashboard assets</summary>
@@ -685,9 +684,6 @@ CairoMakie.save(
         [province_infections_panel]; ncols = 1, panel_size = (680, 500)
     )
 )
-open(joinpath(dashboard_dir, "provinces.md"), "w") do io
-    print(io, province_headline_md)
-end
 ## The summary's compact province table: infections to date, R at the
 ## cut-off and the confirmed cases over the latest week of reports, the
 ## same week the cases against R figure ends on.

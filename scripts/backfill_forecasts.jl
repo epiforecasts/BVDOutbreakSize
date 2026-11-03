@@ -6,9 +6,9 @@
 # the forecast was never saved (only the posterior summaries and thinned draws
 # were, and those do not carry the per-stream and reproduction-number-walk
 # deterministics the forecast needs). To score past forecasts we reconstruct
-# them honestly: check out the code as it was at each release, re-run its fit
-# on that release's data, and export the forecast in the same archive schema
-# the live build now writes (`forecast_archive` in `src/forecast.jl`).
+# them: check out the code as it was at each release, re-run its fit on that
+# release's data, and export the forecast in the same archive schema the live
+# build writes (`forecast_archive` in `src/forecast.jl`).
 #
 # The reconstructions are collected under `output/backfill/` and are meant to
 # be published as a dedicated `forecasts-backfill` release, which
@@ -41,10 +41,9 @@
 # package, so `integral_driver` reproduces each one's calls inline; they are
 # listed in `INTEGRAL_TAGS` and added to the run. v1.3.0 forecasts the confirmed
 # streams, v1.2.0 the reported/suspected/export streams. The earlier v1.0.0 and
-# v1.1.0 define their model inline in that tag's analysis.jl, so once
-# smoke-validated they get standalone driver files under
-# `scripts/backfill_drivers/` that `backfill_one` runs directly, rather than
-# inlining hundreds of lines of old model code here.
+# v1.1.0 define their model inline in that tag's analysis.jl, so they have
+# standalone driver files under `scripts/backfill_drivers/`, run by hand in a
+# worktree checked out at the tag rather than by `backfill_one`.
 #
 # The published reports only ever showed the 7-day horizon. The longer horizons
 # reconstruct forecasts that tag's code would have made but never displayed.
@@ -81,8 +80,8 @@ const PREREGISTRY_TAGS = ("v1.4.0", "v1.5.0", "v1.6.0")
 ## own joint and forecast calls inline. v1.3.0 forecasts the confirmed streams;
 ## v1.2.0 forecasts the reported/suspected/export streams. The earlier
 ## v1.0.0/v1.1.0 define their model inline in that tag's own analysis.jl, so
-## they are not inlined here: once smoke-validated they get standalone driver
-## files under `scripts/backfill_drivers/` that `backfill_one` runs directly.
+## they are not inlined here: their standalone driver files under
+## `scripts/backfill_drivers/` are run by hand in a worktree at the tag.
 ## Extending this tuple is the single place to grow integral coverage.
 const INTEGRAL_TAGS = ("v1.2.0", "v1.3.0")
 ## Each fit samples with this many threads, so the default concurrency stays
@@ -195,8 +194,7 @@ function backfill_one(code_tag; keep)
         ## keeps tags off each other's depot precompile locks and leaves the
         ## driver nothing to build, so it can load modules normally. Resolving
         ## with a stale image instead (`--compiled-modules=existing`) surfaces
-        ## as an `UndefVarError` for a binding the loaded package really does
-        ## define.
+        ## as an `UndefVarError` for a binding the loaded package does define.
         run(`julia --project=$(joinpath(wt, "docs"))
              -e "using Pkg; Pkg.instantiate(); Pkg.precompile()"`)
     end
@@ -517,7 +515,7 @@ function integral_driver(dest, code_tag; samples = 1000, chains = 2)
     ## Guarded stream superset. v1.3.0 emits the two confirmed streams
     ## (recovered and isolation did not exist yet); v1.2.0 emits the
     ## reported/suspected/export streams. The `propertynames` guard keeps each
-    ## tag to the columns its `forecast_reported` actually produces. Labels
+    ## tag to the columns its `forecast_reported` produces. Labels
     ## match the scorer's `STREAM_HISTORY`/`STREAM_ASSEMBLED` in
     ## `scripts/score_releases.jl`.
     tail = """

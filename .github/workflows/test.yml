@@ -78,9 +78,8 @@ jobs:
       # runs the cell. The hosted fleets are mixed and Julia discards a
       # pkgimage built for a microarchitecture the host does not match, so a
       # depot cache restored from an earlier run is thrown away and the whole
-      # stack recompiles. See docs.yml, where that cost the render jobs
-      # ~16 min each. macOS-latest is arm64 and takes `native`, which is the
-      # default and so leaves that cell as it was.
+      # stack recompiles. macOS-latest is arm64 and takes the default
+      # `native`.
       JULIA_CPU_TARGET: >-
         ${{ matrix.os == 'macOS-latest' && 'native' ||
         'generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)' }}
@@ -102,9 +101,7 @@ jobs:
           save-always: false
           # Namespaces the depot cache. Bump it to discard every stored
           # depot, which is the only way out once a bad one is restored,
-          # because the failing job saves no replacement. This was
-          # `key-prefix`, an input julia-actions/cache does not accept,
-          # so the earlier bumps never reached the cache key.
+          # because the failing job saves no replacement.
           cache-name: test-2026-09-17
       - uses: julia-actions/julia-runtest@v1
         with:
@@ -114,9 +111,8 @@ jobs:
           # the fits on the older Julia. Everything tagged `:quality` or
           # `:ad` runs once in the `quality` and `ad-gradients` jobs below
           # rather than on any matrix cell: those items do not vary by
-          # platform or Julia version, and carrying them made the one cell
-          # that ran them outgrow the timeout. The `:ad` items are ~19 min of
-          # Mooncake gradient compilation, which every cell was paying.
+          # platform or Julia version. The `:ad` items are ~19 min of
+          # Mooncake gradient compilation.
           # See test/runtests.jl.
           test_args: ${{ matrix.julia-version == 'lts' && 'skip_quality' || 'fast' }}
           # Only the `coverage` job uploads coverage. Instrumented code
@@ -195,8 +191,8 @@ jobs:
       - uses: julia-actions/julia-downgrade-compat@v2.7.0
         with:
           # Mooncake skipped: DynamicPPLMooncakeExt fails to precompile
-          # at the bottom of Mooncake's 0.5 range — an upstream extension
-          # issue, not a BVD compat bound that's wrong.
+          # at the bottom of Mooncake's 0.5 range. This is an upstream
+          # extension issue, not a wrong BVD compat bound.
           skip: Pkg,TOML,Dates,Printf,Random,Statistics,Test,Mooncake
       - uses: julia-actions/julia-runtest@v1
         with:

@@ -1,6 +1,6 @@
 ## Literate runs a code chunk as one block and shows only its last value, so
 ## a hidden display line followed by more code in the same chunk never
-## reaches the page (#735). Each hidden display ends its chunk (`#-`).
+## reaches the page. Each hidden display ends its chunk (`#-`).
 
 @testitem "report pages: one hidden display per code chunk" tags = [
     :quality,
@@ -39,7 +39,7 @@ end
 
 ## A `<details>` fold meant for construction code can swallow the display
 ## it should reveal: when a fold's only code line is a hidden display, that
-## figure or table stays collapsed by default (#1056).
+## figure or table stays collapsed by default.
 
 @testitem "forecast pages: a shown result is not left folded" tags = [
     :quality,

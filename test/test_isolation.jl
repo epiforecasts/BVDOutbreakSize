@@ -18,7 +18,7 @@
     @test all(cap .>= iso_obs)
 
     ## A capacity below the count is floored at the count, so the censored NB
-    ## never has zero probability on the observation (the -Inf wall is removed).
+    ## never has zero probability on the observation.
     low_cap = (; days = [9], counts = [200])
     @test censoring_cap([9], [260], low_cap) == [260.0]
 
@@ -265,7 +265,7 @@ end
     @test all(acc_d.O_conf .<= acc_d.O_bvd .+ 1.0e-9)
     @test all(acc_d.O_bvd .<= acc_d.demand .+ 1.0e-9)
     @test all(abs.(acc_d.O_conf .+ acc_d.O_susp .- acc_d.demand) .< 1.0e-6)
-    ## The series genuinely declines, so the tail exercises the regime where a
+    ## The series declines, so the tail exercises the regime where a
     ## total-only accounting would lose mass.
     peak = argmax(acc_d.demand)
     @test peak < m
@@ -357,7 +357,7 @@ end
 
     ## Fast-death tail: against the proportional-share split, the two-clock
     ## confirmed share is lower early because cases that die before confirming
-    ## are excluded from the confirmed pool (the comparator's whole point).
+    ## are excluded from the confirmed pool.
     ## The proportional split drains the confirmed pool at the pool-average
     ## discharge rate, over-attributing confirmed deaths in the early
     ## fast-death window.
@@ -406,15 +406,14 @@ end
     ## Day 1 has no prior stock, so no abscond outflow.
     @test ab[1] == 0
     ## Every later day is exactly the two-clock suspect lagged one day, scaled
-    ## by the abscond fraction — the definitional link to the two-clock split.
+    ## by the abscond fraction.
     @test all(abs(ab[i] - κ * O_susp[i - 1]) < 1.0e-9 for i in 2:n)
     ## With no occupancy break the returned suspect census is that same stock.
     @test st.suspect_incare ≈ O_susp
-    ## The flow genuinely responds to the two-clock confirmed pool: with a
-    ## non-zero hazard the confirmed sub-stock is populated, so the suspect
-    ## stock sits strictly below the total demand and the abscond outflow is
-    ## below `κ · demand(t-1)` — it consumes the two-clock, not the total,
-    ## occupancy.
+    ## The flow responds to the two-clock confirmed pool: with a non-zero
+    ## hazard the confirmed sub-stock is populated, so the suspect stock sits
+    ## strictly below the total demand and the abscond outflow is below
+    ## `κ · demand(t-1)`.
     @test any(>(0), st.confirmed_incare)
     @test any(O_susp[i] < st.demand[i] - 1.0e-9 for i in 1:n)
 end
@@ -679,7 +678,7 @@ end
     ## Tableau 6 split). The occupancy backbone and the daily flows run to the
     ## grid end (day 35) while the split census and the flow histories stop two
     ## days short (day 33). The per-day flow / split likelihoods must score only
-    ## the days each history actually reports and skip the two trailing
+    ## the days each history reports and skip the two trailing
     ## occupancy-only days cleanly: no day index reaches past the end of a
     ## shorter history, the split day-set is the census days alone (so the
     ## trailing occupancy days stay on the total-occupancy backbone), and the
