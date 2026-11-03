@@ -1026,13 +1026,7 @@ the onsets through the onset-to-confirmation kernel, so [`bvd_joint`](@ref)
 carries them once and hands the matrix to both.
 """
 function _patch_carried(onsets_matrix::AbstractMatrix, kernel::AbstractVector)
-    np, n = size(onsets_matrix)
-    T = promote_type(eltype(onsets_matrix), eltype(kernel))
-    out = Matrix{T}(undef, np, n)
-    @inbounds for p in 1:np
-        out[p, :] = convolve_delay(onsets_matrix[p, :], kernel)
-    end
-    return out
+    return convolve_rows(onsets_matrix, kernel)
 end
 
 ## A positive vector over its geometric mean, so its logs sum to zero.
