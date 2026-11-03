@@ -1,9 +1,8 @@
-# Streamed full-joint fit for sanity-checking the renewal model after the
-# shared-σ background + 75% ascertainment changes. Writes live progress
-# (iteration, log-density, divergences) to logs/joint_fit.log via
-# `progress_callback` — tail it with `tail -f logs/joint_fit.log` — and
-# prints a posterior summary of the headline quantities, with C_T (the
-# cumulative-infection outbreak size) front and centre.
+# Streamed full-joint fit for sanity-checking the renewal model. Writes live
+# progress (iteration, log-density, divergences) to logs/joint_fit.log via
+# `progress_callback` (tail it with `tail -f logs/joint_fit.log`) and
+# prints a posterior summary of the headline quantities, including C_T (the
+# cumulative-infection outbreak size).
 #
 # Run: JULIA_NUM_THREADS=4 julia --project=. scripts/fit_joint_stream.jl [samples] [chains]
 
@@ -16,7 +15,7 @@ const SAMPLES = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 500
 const CHAINS = length(ARGS) >= 2 ? parse(Int, ARGS[2]) : 4
 const AD = length(ARGS) >= 3 ? ARGS[3] : "mooncake"
 
-## Enzyme is opt-in (~3x faster than the Mooncake default on the joint).
+## Enzyme is opt-in.
 ## Its weak-dep extension registers only once `Enzyme` is loaded.
 adtype = if AD == "enzyme"
     @eval using Enzyme

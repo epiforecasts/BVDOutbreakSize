@@ -460,10 +460,9 @@ the cut-off confirmed share), the two ward occupancy levels are archived too
 as `treatment beds` (confirmed) and `isolation beds (suspected)`, each scored
 against its own Tableau 6 occupancy sub-stock. The total `isolation beds`
 occupancy stays as its own stream. Nothing produces those two columns yet:
-[`forecast_reported`](@ref) projects the total occupancy alone, so the two
-ward entries are reachable only from a forecast a caller has partitioned
-itself, which today is the tests. Streams a forecast does not carry are
-skipped, so this costs a real forecast nothing. `thin` keeps every
+[`forecast_reported`](@ref) projects the total occupancy alone, so only a
+forecast a caller has partitioned itself carries them, which today is the
+tests. Streams a forecast does not carry are skipped. `thin` keeps every
 `thin`-th draw so the archive stays compact when it is saved as a release
 asset.
 """
@@ -562,8 +561,8 @@ one row per confirmed stream (laboratory-confirmed cases and confirmed
 deaths) and quantity (cumulative total by the cut-off plus the horizon, or
 new this week), reporting the equal-tailed 30/60/90% credible interval
 endpoints (`lower_90 … upper_90`) used by the other summary tables. The
-suspected reported-case and suspected-death streams are no longer reported,
-so they are not shown as forecast targets.
+suspected reported-case and suspected-death streams are not shown as
+forecast targets.
 """
 function forecast_table(fc::DataFrame; digits::Integer = 0)
     _row(
@@ -715,7 +714,7 @@ observed count, the equal-tailed 30/60/90% predictive intervals (the same
 endpoints as the other summary tables), and whether the observed count falls
 inside the 90% interval.
 
-Note that at a one-week-back freeze the bed capacity is weakly informed (the
+At a one-week-back freeze the bed capacity is weakly informed (the
 reported occupancy rate starts only on 9 June), so the projected bed
 occupancy rides the capacity random walk back to the freeze date and its
 interval is wide.

@@ -38,11 +38,10 @@
 # per-province incidence split, and the gap between the death split and the
 # case split is what identifies the relative case ascertainment.
 #
-# The signal is large and sustained: over the scanned window Nord-Kivu holds
-# 8.0-17.6% of confirmed cases but 13.6-22.6% of confirmed deaths, with a
-# confirmed CFR of 53.2-71.4% against Ituri's 19.8-45.6%. Its case share has
-# risen across the window while its death share has not, so the gap between
-# the two narrows; the script prints both ranges on every run.
+# The signal is sustained: over the scanned window Nord-Kivu holds a larger
+# share of confirmed deaths than of confirmed cases, and its confirmed CFR is
+# above Ituri's. Its case share has risen faster than its death share, so the
+# gap between the two narrows; the script prints both ranges on every run.
 #
 # Part of that gap is not ascertainment: in a fast-growing epidemic the
 # observed CFR is biased down, because recent cases have not yet died. Ituri

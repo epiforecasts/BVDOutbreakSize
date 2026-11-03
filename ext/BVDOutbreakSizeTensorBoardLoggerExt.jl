@@ -11,7 +11,7 @@ using TensorBoardLogger: TBLogger, log_value, log_histogram
 # `AbstractMCMC.ParamsWithStats(model, sampler, transition, state; params,
 # stats)` interface (so the callback tracks Turing's transition format rather
 # than a fixed field layout), then logged to the `TBLogger` at `logdir` under
-# two grouped tag prefixes so the TensorBoard dashboard stays navigable:
+# two grouped tag prefixes:
 #
 #   * `params/<name>`      every sampled parameter
 #   * `diagnostics/<name>` log-density (`logjoint`), divergence flag
@@ -26,7 +26,7 @@ using TensorBoardLogger: TBLogger, log_value, log_histogram
 # AbstractMCMC callback signature and is passed straight to
 # `nuts_sample(model; callback = ...)`. A single `TBLogger` is shared across
 # the threads `MCMCThreads()` spawns. Writes are guarded by a `ReentrantLock`
-# and the whole body is wrapped in `try`/`catch` so a fit is never aborted by
+# and the body is wrapped in `try`/`catch` so a fit is never aborted by
 # the callback. View the run with `tensorboard --logdir <logdir>`.
 function BVDOutbreakSize.tensorboard_callback(
         logdir::AbstractString;

@@ -18,7 +18,7 @@ per component rather than the full joint: the observation submodels from
 process on its own, and the single-stream composers from
 `src/models/joint.jl` that attach one observation submodel each to that
 latent. The difference between a composer and the latent baseline is the
-cost that stream's likelihood adds, which is what guides optimisation.
+cost that stream's likelihood adds.
 `bvd_joint` itself is a scenario only on request ([`scenarios`](@ref)): its
 gradient is ~14 ms over 76 parameters behind a ~18 min cold compile, too
 slow for an unattended run. The health-zone model `bvd_zone` is one on
@@ -128,9 +128,9 @@ AD backends to time, as `(name, adtype)` pairs. Mooncake is the package
 default and differentiates every model. Enzyme is the opt-in backend from
 the package's Enzyme extension and is included only when Enzyme is loaded,
 so this module carries no Enzyme dependency of its own and stays usable
-from the main test environment, which deliberately excludes it.
+from the main test environment, which excludes it.
 
-Which Enzyme pairs actually register is left to
+Which Enzyme pairs register is left to
 [`gradient_is_finite`](@ref): Enzyme differentiates the single-stream
 composers but not `bvd_joint` (epiforecasts/BVDOutbreakSize#445).
 """
@@ -144,8 +144,8 @@ function backends()
     try
         push!(out, (name = "Enzyme", adtype = enzyme_adtype()))
     catch err
-        ## No Enzyme extension loaded. Said out loud rather than swallowed,
-        ## so a run that quietly halves its backends is visible in the log.
+        ## No Enzyme extension loaded. Logged so a run without the Enzyme
+        ## backend is visible.
         println(
             stderr, "[fixtures] no Enzyme backend: ",
             sprint(showerror, err)

@@ -299,8 +299,7 @@ function parse_province_entry(entry::AbstractString, name::AbstractString)
     ## loosely the collection itself is worded. From SitRep 119 the brief
     ## format says "reveles" at least as often as "revenus" ("tous se sont
     ## reveles negatifs" at 119/121/122/123, "tous reveles negatifs" with
-    ## no parenthetical at 124), which the "revenus" spelling alone never
-    ## reached, so every one of those vintages was dropped whole.
+    ## no parenthetical at 124), so both spellings are matched.
     completed = !norendu &&
         (
         occursin(r"(?:revenus?|reveles?) negatifs?", text) ||
@@ -348,9 +347,7 @@ function parse_province_entry(entry::AbstractString, name::AbstractString)
     ## "sur l'echantillon analyse": a definite singular names exactly one
     ## sample, the only denominator in this stream printed without a digit.
     ## SitRep 119's Sud Ubangi entry uses it, and that date's national
-    ## total counts the sample, so dropping it silently broke the
-    ## partition rather than failing loudly the way an unreadable
-    ## numerator does.
+    ## total counts the sample.
     if analysed === nothing &&
             occursin(Regex("sur l." * SAMPLES * " (?:analyse|teste)"), text)
         analysed = 1

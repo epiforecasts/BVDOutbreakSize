@@ -1,5 +1,5 @@
 ## Smoke tests for the plotting functions. We do not compare
-## pixels — we only check that each call returns a renderable object
+## pixels. We only check that each call returns a renderable object
 ## without throwing. CairoMakie is activated headless via the
 ## HeadlessMakie testsnippet.
 
@@ -505,7 +505,7 @@ end
     ) == "Nothing yet."
     ## Filled with the fit roles: confirmed_cases carries baseline, its
     ## individual fit and the joint; recovered carries only baseline and the
-    ## joint, so its individual role is simply absent.
+    ## joint, so its individual role is absent.
     rows = NamedTuple[]
     spec = [
         "confirmed_cases" => ["baseline", "confirmed", "joint"],
@@ -800,7 +800,6 @@ end
     rng = MersenneTwister(16)
     n = 200
     vals = hcat(abs.(randn(rng, n)) .+ 7, abs.(randn(rng, n)) .* 30)
-    ## :doubling_time replaces the removed :τ parameter
     chn = FlexiChains.FlexiChain{Symbol}(
         n,
         1,
@@ -1080,8 +1079,7 @@ end
     @test fig isa CairoMakie.Makie.Figure
     @test naxes(fig) == 5
     ## A single-stream fit that carries only the confirmed columns still
-    ## draws just those two panels (backward-compatible with the
-    ## confirmed-only frame).
+    ## draws just those two panels.
     fc_conf = DataFrame(
         confirmed_new = rand(rng, 0:15, n),
         confirmed_deaths_new = rand(rng, 0:5, n)
@@ -1431,7 +1429,7 @@ end
     rng = MersenneTwister(24)
     ## Bed occupancy is a census stock: a level at the end of each report
     ## day, not a count of new events. It shares `cumulative = false` with
-    ## the genuine per-day flows, so without its own `ylabel` it would be
+    ## the per-day flows, so without its own `ylabel` it would be
     ## labelled "Daily count" here and "New per vintage" in the incidence
     ## view, both of which read as an accumulating total.
     dates = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Check the path patterns the workflows gate on against a table of realistic
 # changes. The patterns are read out of the workflow files themselves, so
-# this tests what CI actually runs rather than a second copy of it.
+# this tests what CI runs rather than a second copy of it.
 #
 # A wrong pattern is silent in both directions and neither shows up as a
 # failure: too narrow and a change skips the work that would have caught it,

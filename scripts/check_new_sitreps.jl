@@ -9,8 +9,7 @@
 # transcribed in data/insp_sitrep_scanned.csv, and prints the gap plus the
 # INSP post page for each missing report.
 #
-# Run it before an analysis refresh (and it is what the maintenance bot
-# calls) so the manifest never drifts weeks behind again.
+# Run it before an analysis refresh. The maintenance bot calls it too.
 #
 # Usage:
 #
@@ -29,24 +28,20 @@
 #    decode to get a direct, fetchable PDF link.
 #  - Exit code is 0 when up to date, 1 when one or more reports are missing
 #    (so a caller / cron can branch on it). Exit code is unaffected by the
-#    mirror-lead warning below - a mirror lead never licenses treating a
-#    SitRep as missing when insp.cd itself has published nothing new.
+#    mirror-lead warning below.
 #
 # Mirror-lead check: insp.cd being "up to date" only means no new
-# SitRep-numbered post/PDF exists yet. It does not mean the outbreak has
-# stopped moving - INSP's own SitRep pipeline can fall behind INRB-UMIE's
-# internal transcription pipeline for days at a time, and a silent "up to
-# date" on a day like that reads as nothing happening when the response has
-# in fact continued, just without a public PDF yet. So after the insp.cd
-# comparison, this script also fetches the mirror's national cumulative
-# confirmed-case CSV (one extra request) and compares its latest date
-# against the manifest's `as_of_date`. If the mirror is ahead, it prints a
-# loud warning - it does NOT change the exit code and does NOT license
-# updating data/observations.toml from the mirror alone (see
+# SitRep-numbered post/PDF exists yet. INSP's own SitRep pipeline can fall
+# behind INRB-UMIE's internal transcription pipeline for days at a time.
+# So after the insp.cd comparison, this script also fetches the mirror's
+# national cumulative confirmed-case CSV (one extra request) and compares
+# its latest date against the manifest's `as_of_date`. If the mirror is
+# ahead, it prints a warning. It does not change the exit code and does not
+# license updating data/observations.toml from the mirror alone (see
 # data/README.md's insp.cd-unreachable clause): that still requires either
 # an insp.cd PDF or an explicit decision to record a mirror-only point. The
-# point of the check is visibility, not automation. The fetch is best-effort
-# and never allowed to crash the script - see check_mirror_lead().
+# fetch is best-effort and never crashes the script (see
+# check_mirror_lead()).
 
 using Dates
 using Downloads
