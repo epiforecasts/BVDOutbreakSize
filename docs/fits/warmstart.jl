@@ -17,7 +17,6 @@
 # for its key. The key does carry the warm-start settings, and the state each
 # fit writes records the parent it started from.
 
-using Base.ScopedValues: ScopedValue, with
 using Serialization: serialize, deserialize
 using LinearAlgebra: Symmetric, cholesky, issuccess, diag, I
 using Statistics: mean, median
@@ -81,7 +80,7 @@ mutable struct FitWarmStart
 end
 
 ## The warm start the current fit's sampler reads through `fit_sampler_args`.
-const CURRENT_WARM_START = ScopedValue{Any}(nothing)
+const CURRENT_WARM_START = Ref{Any}(nothing)
 
 """
 The registry's sampler settings, with the current fit's warm start. Use in
@@ -222,7 +221,7 @@ function BVDOutbreakSize.warm_start_record(ws::FitWarmStart, model, chn, alg)
             chain_index = ld.chain_index, warm_up = ws.path,
             parent = ws.parent === nothing ? "" : ws.parent.key,
             reason = ws.reason, coverage = ws.coverage,
-            traces = fixed ? alg.step_size_traces :
+            traces = fixed ? step_size_traces(alg) :
                 Vector{NTuple{2, Float64}}[],
             created = string(now()),
         )

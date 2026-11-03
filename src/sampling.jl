@@ -472,6 +472,17 @@ warm_start_record(::Nothing, model, chain, sampler) = nothing
 
 const AHMC = Turing.Inference.AHMC
 
+## Where every chain's dual-averaging trace goes. Sampling chains in
+## parallel deep-copies the sampler once per chain, so a deep copy returns
+## the same store and the traces of all chains reach the caller's sampler.
+struct _StepSizeTraces
+    traces::Vector{Vector{NTuple{2, Float64}}}
+    lock::ReentrantLock
+end
+_StepSizeTraces() =
+    _StepSizeTraces(Vector{NTuple{2, Float64}}[], ReentrantLock())
+Base.deepcopy_internal(s::_StepSizeTraces, ::IdDict) = s
+
 """
     FixedMetricNUTS(n_adapts, δ, inverse_metric; max_depth = 10,
                     Δ_max = 1000.0, ϵ = 0.0, adtype = default_adtype())
@@ -484,7 +495,8 @@ warm-up estimate. The trajectories and the chain's statistics are those of
 `NUTS`.
 
 Each chain's dual-averaging trace, the log step size and its running
-average after every warm-up iteration, is pushed to `step_size_traces`.
+average after every warm-up iteration, is kept, and
+[`step_size_traces`](@ref) returns them.
 """
 struct FixedMetricNUTS{AD} <: Turing.Inference.AdaptiveHamiltonian
     n_adapts::Int
@@ -494,9 +506,17 @@ struct FixedMetricNUTS{AD} <: Turing.Inference.AdaptiveHamiltonian
     ϵ::Float64
     adtype::AD
     inverse_metric::Matrix{Float64}
-    step_size_traces::Vector{Vector{NTuple{2, Float64}}}
-    trace_lock::ReentrantLock
+    traces::_StepSizeTraces
 end
+
+
+"""
+    step_size_traces(alg::FixedMetricNUTS)
+
+The dual-averaging trace of each chain `alg` has sampled: per warm-up
+iteration, the log step size and its running average.
+"""
+step_size_traces(alg::FixedMetricNUTS) = alg.traces.traces
 
 function FixedMetricNUTS(
         n_adapts::Integer, δ::Real, inverse_metric::AbstractMatrix;
@@ -509,7 +529,7 @@ function FixedMetricNUTS(
     return FixedMetricNUTS(
         Int(n_adapts), Float64(δ), Int(max_depth), Float64(Δ_max),
         Float64(ϵ), adtype, Matrix{Float64}(inverse_metric),
-        Vector{NTuple{2, Float64}}[], ReentrantLock()
+        _StepSizeTraces()
     )
 end
 
@@ -557,7 +577,7 @@ function Turing.Inference.AHMCAdaptor(
     )
     iszero(alg.n_adapts) && return AHMC.Adaptation.NoAdaptation()
     trace = NTuple{2, Float64}[]
-    lock(() -> push!(alg.step_size_traces, trace), alg.trace_lock)
+    lock(() -> push!(alg.traces.traces, trace), alg.traces.lock)
     adaptor = _TracedStepSize(AHMC.StepSizeAdaptor(alg.δ, ϵ), trace)
     AHMC.Adaptation.initialize!(adaptor, nadapts)
     return adaptor

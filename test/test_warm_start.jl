@@ -11,7 +11,7 @@
     using Turing: @model, sample, NUTS
     using BVDOutbreakSize: FlexiChains
     import BVDOutbreakSize
-    using BVDOutbreakSize: FixedMetricNUTS
+    using BVDOutbreakSize: FixedMetricNUTS, step_size_traces
 
     @model function _correlated()
         x ~ MvNormal([0.0, 0.0], [1.0 0.8; 0.8 1.0])
@@ -28,7 +28,7 @@
     @test state.adaptor isa BVDOutbreakSize._TracedStepSize
     ## One trace for the one chain, one entry per warm-up iteration, and the
     ## final step size is the averaged one.
-    trace = only(alg.step_size_traces)
+    trace = only(step_size_traces(alg))
     @test length(trace) == 40
     @test exp(last(trace)[2]) ≈ state.kernel.τ.integrator.ϵ
     ## The chain carries the statistics `NUTS` gives it.
@@ -214,7 +214,7 @@ end
     using LinearAlgebra: BLAS
     using Turing: @model
     import BVDOutbreakSize
-    using BVDOutbreakSize: nuts_sample, FixedMetricNUTS
+    using BVDOutbreakSize: nuts_sample, FixedMetricNUTS, step_size_traces
 
     @model function _two()
         x ~ Normal(0.0, 1.0)
@@ -239,8 +239,10 @@ end
     alg = w.seen[]
     @test alg isa FixedMetricNUTS
     @test alg.n_adapts == 30
-    @test length(alg.step_size_traces) == 2
-    @test all(t -> length(t) == 30, alg.step_size_traces)
+    @test length(step_size_traces(alg)) == 2
+    @test all(t -> length(t) == 30, step_size_traces(alg))
+    ## Parallel chains deep-copy the sampler; every copy shares the store.
+    @test deepcopy(alg).traces === alg.traces
     ## The BLAS thread count set for the dense metric is restored.
     @test BLAS.get_num_threads() == before
     @test size(chn) == (20, 2)

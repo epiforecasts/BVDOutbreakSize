@@ -58,8 +58,11 @@ if DRYRUN
 else
     ## The parent state is read only on a miss, inside the thunk's sampler.
     warm_start = fit_warm_start(ID, key)
-    result = with(CURRENT_WARM_START => warm_start) do
+    CURRENT_WARM_START[] = warm_start
+    result = try
         fit_or_load(key, specs[i].thunk; cache_dir = CACHE, refit = REFIT)
+    finally
+        CURRENT_WARM_START[] = nothing
     end
     @info "cached" id = ID key = key
     ## Keys are rebuilt before the diagnostics read them: a chain that came
