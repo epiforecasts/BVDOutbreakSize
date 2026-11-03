@@ -2586,8 +2586,8 @@ That window runs from `rt_start`, the renewal start where the random walk
 begins, to the cut-off. Only that period is drawn, as 30%, 60% and 90%
 credible ribbons with no median line, with about `n_traj` thinned sampled
 trajectories overlaid faint to show the per-draw spread. The intervention
-breakpoint, the end of the scale-up (`breakpoint + ramp`, dotted) and the
-cut-off are marked. `seeding` is the calendar date of grid day 1, so day `d`
+breakpoint, one ramp time scale after it (`breakpoint + ramp`, dotted) and
+the cut-off are marked. `seeding` is the calendar date of grid day 1, so day `d`
 is `seeding + (d - 1)`.
 """
 function plot_rt(
@@ -2743,8 +2743,8 @@ that fit used. The per-stream fits walk from day 1, the joint from the
 breakpoint lead. `display_start` is the shared grid day the panels draw from,
 so every stream reads over the same window. `seeding` is the calendar date of
 grid day 1, so day `d` is `seeding + (d - 1)`. The intervention breakpoint,
-the end of the scale-up (`breakpoint + ramp`, dotted) and the cut-off are
-marked as in [`plot_rt`](@ref).
+one ramp time scale after it (`breakpoint + ramp`, dotted) and the cut-off
+are marked as in [`plot_rt`](@ref).
 
 `title`, `reference_label` and `panel_label` name what the figure is showing.
 They default to the per-stream reading, and the province in-sample page passes its
@@ -2934,13 +2934,12 @@ is rebuilt by [`reconstruct_patch_rt`](@ref). The national reference is
 
 Every panel draws 30/60/90% credible ribbons with no median line, on a shared
 y-axis so the provinces are compared rather than each rescaled to its own
-range. The intervention breakpoint (dashed), the end of the scale-up (dotted)
-and the cut-off are marked as in [`plot_rt`](@ref).
+range. The intervention breakpoint (dashed), one ramp time scale after it
+(dotted) and the cut-off are marked as in [`plot_rt`](@ref).
 
-The grey reference is the reproduction number implied by the summed
-provinces, the incidence-weighted mean of the panels rather than any one
-province or the central trend they pool toward. A panel tracking the grey
-band says that province moves with the country. Separation between panels is
+The grey reference is the central trend the provinces pool toward, net of
+depletion, rather than any one province. A panel tracking the grey band says
+that province moves with the trend. Separation between panels is
 the spatial signal, and `region_drift_sd`, the sd of each province's
 weekly deviation innovation, measures it.
 """
@@ -4265,10 +4264,6 @@ from [`forecast_stream`](@ref), overlaid as a dotted step outline on
 the joint's own bins so both bed
 forecasts are visible against the observed occupancy.
 
-At a one-week-back freeze the bed capacity has no implied-capacity anchor,
-the reported occupancy rate starting only on 9 June, so the projected
-occupancy rides the capacity random walk back to the freeze date and the
-interval is wide.
 """
 function plot_forecast_beds_vs_truth(
         fc::DataFrame;
