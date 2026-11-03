@@ -204,15 +204,17 @@
 
         ## Per-patch rows binned to vintage days: a first bin reaching back
         ## to day one, single-day bins, a repeated day (an empty bin) and a
-        ## day past the grid end, which clamps.
+        ## day past the grid end, which clamps. They draw from their own
+        ## stream so the cases after them keep their inputs.
+        brng = Xoshiro(260)
         add!(
-            "vintage bins", bin_row_increments, rand(rng, 3, 40),
+            "vintage bins", bin_row_increments, rand(brng, 3, 40),
             [10, 11, 12, 12, 20, 33, 45]
         )
-        add!("no vintages", bin_row_increments, rand(rng, 3, 40), Int[])
+        add!("no vintages", bin_row_increments, rand(brng, 3, 40), Int[])
         add!(
             "8 patches, n = 260, daily vintages", bin_row_increments,
-            rand(rng, 8, 260), collect(130:260); perf = true
+            rand(brng, 8, 260), collect(130:260); perf = true
         )
 
         ## The per-patch treatment kernels on the province grid: rows through
