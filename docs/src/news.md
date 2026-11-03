@@ -11,6 +11,8 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Performance
 
+- The censored delay PMFs (Gamma, LogNormal and Weibull) have a closed-form Mooncake rule, about 1.5% off the joint gradient (#1228).
+  The model does not change.
 - The treatment flow no longer re-splits each patch's BVD admissions by weights of one when the per-patch reports carry the suspected-case detection (#1212).
   The model does not change.
 - The sum-to-zero bases the patch submodels build on every evaluation pass no derivative, so Mooncake no longer tapes them (#1213).
