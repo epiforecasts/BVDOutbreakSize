@@ -247,3 +247,14 @@ end
     @test BLAS.get_num_threads() == before
     @test size(chn) == (20, 2)
 end
+
+@testitem "FixedMetricNUTS copies share one step-size trace store" begin
+    using BVDOutbreakSize: FixedMetricNUTS, step_size_traces
+    ## Parallel chains each sample a deep copy of the sampler, so a trace
+    ## a copy records must reach the original.
+    alg = FixedMetricNUTS(10, 0.8, [1.0 0.0; 0.0 1.0])
+    copy_ = deepcopy(alg)
+    push!(step_size_traces(copy_), [(log(0.1), log(0.1))])
+    @test length(step_size_traces(alg)) == 1
+    @test copy_.inverse_metric == alg.inverse_metric
+end
