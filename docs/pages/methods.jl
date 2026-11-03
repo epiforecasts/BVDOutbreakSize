@@ -1317,6 +1317,7 @@ cfr_prior_fig #hide
 # the probability an admitted case is still in a bed after $d$ days, built from the death and recovery stays the discharge flows use and thinned by the abscond survival $(1 - \kappa)^j$.
 #
 # Cohort tracking is needed because deaths and recoveries are reported across both labels, so the data do not say which departing patients had been confirmed.
+# Carrying the confirmation and stay clocks separately keeps cases that die before their test returns out of the confirmed pool.
 # The suspected sub-stock is the remainder $O_{\text{susp},t} = D_t - O_{\text{conf},t}$, holding the not-yet-confirmed BVD occupancy together with the non-case occupancy awaiting rule-out.
 # The published recoveries among the confirmed are a separate stream, [recovered among confirmed](@ref "Recovered among confirmed").
 #
@@ -1544,6 +1545,7 @@ cfr_prior_fig #hide
 # Where INSP publishes a 24h analysed count after the cumulative series stops, that count is scored as a NegBinomial of the modelled volume $v_t$ on that day with the same dispersion.
 #
 # The confirmed positives in each laboratory window $v$ are scored as a beta-binomial of the observed specimens-analysed denominator $A_v$ with a per-window tested-positive probability $p_{\text{pos},v}$.
+# Where no analysed count is observed, the modelled volume is the denominator instead, as set out below.
 # We tie that probability to the composition of the tested pool, so the confirmed data help identify the non-BVD background.
 # The suspect-pool composition $\varphi_v$ is the BVD share among the specimens analysed in the window, carried through the same delay as the volume so composition and volume share one clock:
 #
@@ -2061,7 +2063,7 @@ cfr_prior_fig #hide
 # ```
 #
 # The national testing fraction multiplies every term, so it cancels, and the term samples no contrast of its own.
-# The weeks are allocated by the stick-breaking of equation (54) with an overdispersion $\rho^{\text{lab}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
+# The weeks are allocated by the stick-breaking of Equation (54) with an overdispersion $\rho^{\text{lab}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
 # The per-province positives are not fitted.
 #
 # The background share $w_p$ is a simplex centred on population share, with sum-to-zero deviations as for the bed shares:
