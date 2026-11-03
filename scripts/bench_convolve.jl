@@ -3,14 +3,12 @@
 # Two questions, each isolated to a pure function so the gradient is the
 # real model cost without the Turing machinery:
 #
-#  1. Is `convolve_delay` worth restructuring? A vectorised lag-AXPY form
-#     was tried against the scalar double loop. Mooncake differentiates the
-#     scalar loop about as fast (≈parity), so the convolution is not the
-#     bottleneck and the simple loop stays.
-#  2. Where does the per-gradient cost actually sit? The delay discretisation
+#  1. Is `convolve_delay` worth restructuring? This times a vectorised
+#     lag-AXPY form against the scalar double loop. Mooncake differentiates
+#     the scalar loop about as fast (≈parity).
+#  2. Where does the per-gradient cost sit? The delay discretisation
 #     (`discretise_censored`, censored-distribution CDF evaluations over
-#     0:nmax lags) dominates, and its cost scales with `nmax` — which is why
-#     trimming the oversized onset-to-death `nmax` (60→40) is the real win.
+#     0:nmax lags) dominates, and its cost scales with `nmax`.
 #
 # Run: julia --project=. scripts/bench_convolve.jl
 

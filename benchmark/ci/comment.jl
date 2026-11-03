@@ -7,7 +7,7 @@
 # `run_pair.jl` runs the suite; this turns what it wrote into the comment.
 # AirspeedVelocity's own table is a flat list of every leaf with a median
 # ratio, no neutral band, no threshold and no way to set one. Two things
-# this repository needs are therefore not in it.
+# this repository needs are not in it.
 #
 # The first is a band measured from the run rather than chosen. A band
 # fixed below the harness's own resolution reports noise as regression.
@@ -33,7 +33,7 @@ const LOAD_KEY = "time_to_load"
 
 ## Band floor and ceiling. The floor keeps a quiet run from claiming a
 ## precision no repeated timing has; the ceiling keeps the bucket edges
-## ordered and says plainly that a run this noisy is not reporting.
+## ordered and says that a run this noisy is not reporting.
 const BAND_FLOOR = 0.02
 const BAND_CEILING = 0.2
 const BAND_UNMEASURED = 0.05

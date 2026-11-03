@@ -316,6 +316,7 @@ A minor version: every affected province is its own patch, the importation kerne
   The zone tests and the benchmark build that dataset from one shared fixture.
   The kernels take their inputs from the zone model's own draw construction, so they follow any change to the model.
 - Test comments and the comments and docstrings of the report-side source drop filler, emphasis caps and development narrative (#1197).
+- The repository docs, workflow comments, Taskfile descriptions and script comments drop filler, emphasis caps and development narrative (#1196).
   Fitted values do not change.
 
 ### Fixed

@@ -107,8 +107,7 @@ skill = isempty(forecasts) ? "No forecast was scored." :
 
 ## Each chain's step size, and the three parameters with the highest R-hat
 ## (a quantity the model names twice counted once), from the per-seed files
-## `scripts/recovery.jl` writes. A seed run before those files existed shows
-## a dash.
+## `scripts/recovery.jl` writes. A seed without those files shows a dash.
 function seed_file(name, seed)
     path = joinpath(dir, "$(name)_$(seed).csv")
     return isfile(path) ? CSV.read(path, DataFrame) : nothing
