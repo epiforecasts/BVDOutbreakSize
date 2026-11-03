@@ -68,6 +68,26 @@ end
     end
 end
 
+@testitem "discretise_censored: proper PMF at near-zero delay draws" begin
+    using Distributions: Gamma
+    using BVDOutbreakSize: discretise_censored, lognormal_meansd
+
+    ## The delay priors are truncated at zero, so a draw can sit arbitrarily
+    ## close to it: a near-zero SD, mean, shape or scale.
+    dists = (
+        lognormal_meansd(4.5, 1.0e-10), lognormal_meansd(1.0e-10, 4.0),
+        lognormal_meansd(6.3, 1.0e-6), Gamma(1.0e-6, 3.9),
+        Gamma(2.15, 1.0e-6), Gamma((15.3 / 1.0e-3)^2, 1.0e-3^2 / 15.3),
+    )
+    for dist in dists
+        pmf = discretise_censored(dist, 30)
+        @test length(pmf) == 31
+        @test all(isfinite, pmf)
+        @test all(pmf .>= 0)
+        @test isapprox(sum(pmf), 1.0; atol = 1.0e-10)
+    end
+end
+
 @testitem "discretise_censored: PMF contract (non-negative, sums to 1)" begin
     using BVDOutbreakSize: discretise_censored, lognormal_meansd
     using Distributions: LogNormal

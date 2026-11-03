@@ -420,10 +420,10 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \mu_g \sim \mathrm{Normal}(15.3,\ 0.97), \qquad
-# \sigma_g \sim \mathrm{Normal}(9.3,\ 1.0), \tag{8}
+# \sigma_g \sim \mathrm{Normal}^{+}(9.3,\ 1.0), \tag{8}
 # ```
 #
-# both truncated below at one day.
+# with the mean truncated below at one day.
 # That puts 95% of the prior mean between 13.4 and 17.2 d and of the prior SD between 7.3 and 11.3 d.
 # The Gamma shape $(\mu_g/\sigma_g)^2$ and scale $\sigma_g^2/\mu_g$ follow from them.
 #
@@ -726,11 +726,9 @@ MarkdownTable(vintage_table) #hide
 # The source reports no interval on the spread, so the SD prior is our own choice:
 #
 # ```math
-# \mu_{\text{inc}} \sim \mathrm{Normal}(6.3,\ 0.54), \qquad
-# \sigma_{\text{inc}} \sim \mathrm{Normal}(3.5,\ 0.8), \tag{21}
+# \mu_{\text{inc}} \sim \mathrm{Normal}^{+}(6.3,\ 0.54), \qquad
+# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(3.5,\ 0.8). \tag{21}
 # ```
-#
-# both truncated below at one day.
 #
 # Every delay is discretised to a daily PMF over lags $0,\dots,n_{\max}$ by double interval censoring [charniga2024](@cite).
 # The delays the companion line-list reanalysis reports are the onset-to-admission delay (used for both suspected-case reporting and export detection) and the two onset-to-death components.
@@ -808,11 +806,10 @@ MarkdownTable(vintage_table) #hide
 # ```math
 # \alpha_{\text{oa}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \quad
 # \theta_{\text{oa}} \sim \mathrm{LogNormal}(\log 3.69,\ 0.32), \\
-# \alpha_{\text{ad}} \sim \mathrm{Normal}(2.15,\ 0.60), \quad
-# \theta_{\text{ad}} \sim \mathrm{Normal}(3.91,\ 1.38). \tag{24}
+# \alpha_{\text{ad}} \sim \mathrm{Normal}^{+}(2.15,\ 0.60), \quad
+# \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38). \tag{24}
 # ```
 #
-# The admission-to-death shape is truncated below at 0.01 and its scale at 0.1.
 # The onset-to-death PMF is the convolution of the two discretised components (implied mean about 13 d).
 # The source is shown with the deaths submodel below, where the delay is injected.
 #
@@ -835,11 +832,10 @@ MarkdownTable(vintage_table) #hide
 # Its prior is our own choice:
 #
 # ```math
-# \mu_{\text{rec}} \sim \mathrm{Normal}(4.5,\ 1.0), \qquad
-# \sigma_{\text{rec}} \sim \mathrm{Normal}(4.0,\ 0.75), \tag{26}
+# \mu_{\text{rec}} \sim \mathrm{Normal}^{+}(4.5,\ 1.0), \qquad
+# \sigma_{\text{rec}} \sim \mathrm{Normal}^{+}(4.0,\ 0.75). \tag{26}
 # ```
 #
-# both truncated below at one day.
 # It drives the laboratory analysed-specimen volume, the confirmed cases and the confirmed deaths.
 # Its source is shown with the laboratory submodel below.
 # The onset-to-sample cohort of [akilimali2026](@cite) grounds the sum of the onset-to-report and report-to-analysed delays.

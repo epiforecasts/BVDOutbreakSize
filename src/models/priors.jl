@@ -64,7 +64,7 @@ so an infectee is infected strictly after its infector. Returns
 @model function generation_interval_model(
         nmax::Integer;
         mean_prior = truncated(Normal(15.3, 0.97); lower = 1),
-        sd_prior = truncated(Normal(9.3, 1.0); lower = 1)
+        sd_prior = truncated(Normal(9.3, 1.0); lower = 0)
     )
     gi_mean ~ mean_prior
     gi_sd ~ sd_prior
@@ -92,7 +92,9 @@ the reported posterior uncertainty. Returns
 @model function gamma_delay_model(nmax::Integer; alpha_prior, theta_prior)
     α ~ alpha_prior
     θ ~ theta_prior
-    dist = Gamma(α, θ)
+    ## Unchecked, so a draw that underflows to zero gives a non-finite PMF
+    ## total, which `discretise_censored` maps to its uniform fallback.
+    dist = Gamma(α, θ; check_args = false)
     return (;
         pmf = discretise_censored(dist, nmax), dist,
         mean = α * θ, sd = sqrt(α) * θ, alpha = α, theta = θ,
@@ -499,8 +501,8 @@ SD prior is a weakly-informative choice centred on the CV-implied spread
         infections::AbstractVector;
         incubation = (nmax) -> censored_delay_model(
             nmax;
-            mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
-            sd_prior = truncated(Normal(3.5, 0.8); lower = 1)
+            mean_prior = truncated(Normal(6.3, 0.54); lower = 0),
+            sd_prior = truncated(Normal(3.5, 0.8); lower = 0)
         ),
         incubation_nmax::Integer = cdf_nmax(lognormal_meansd(6.3, 3.5))
     )
@@ -1314,8 +1316,8 @@ from it. Returns `(; pmf, dist, mean, sd)`.
 """
 @model function lab_delay_model(
         nmax::Integer = cdf_nmax(lognormal_meansd(4.5, 4.0));
-        mean_prior = truncated(Normal(4.5, 1.0); lower = 1),
-        sd_prior = truncated(Normal(4.0, 0.75); lower = 1)
+        mean_prior = truncated(Normal(4.5, 1.0); lower = 0),
+        sd_prior = truncated(Normal(4.0, 0.75); lower = 0)
     )
     d ~ to_submodel(censored_delay_model(nmax; mean_prior, sd_prior))
     return (; pmf = d.pmf, dist = d.dist, mean = d.mean, sd = d.sd)
@@ -1919,8 +1921,8 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         flow_basis = flow_pair_basis(n_patches),
         incubation = (nmax) -> censored_delay_model(
             nmax;
-            mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
-            sd_prior = truncated(Normal(3.5, 0.8); lower = 1)
+            mean_prior = truncated(Normal(6.3, 0.54); lower = 0),
+            sd_prior = truncated(Normal(3.5, 0.8); lower = 0)
         ),
         incubation_nmax::Integer = cdf_nmax(lognormal_meansd(6.3, 3.5)),
         populations::AbstractVector{<:Real} = n_patches == 1 ?

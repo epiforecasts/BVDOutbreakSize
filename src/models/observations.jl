@@ -457,8 +457,8 @@ ascertainment and the background CFR for reuse by
             cdf_nmax(Gamma(3.33, 3.83));
             oa_alpha_prior = LogNormal(log(1.178), 0.25),
             oa_theta_prior = ONSET_ADMISSION_THETA_PRIOR,
-            ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
-            ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
+            ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0),
+            ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0)
         ),
         cutoff::Union{Nothing, Integer} = nothing,
         simulated = nothing
@@ -2238,8 +2238,8 @@ function treatment_flow_defaults()
         ## elementwise mixture.
         death_los = gamma_delay_model(
             cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
-            alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
-            theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
+            alpha_prior = truncated(Normal(2.151, 0.604); lower = 0),
+            theta_prior = truncated(Normal(3.906, 1.381); lower = 0)
         ),
         recovery_los = censored_delay_model(
             cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
