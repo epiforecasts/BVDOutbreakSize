@@ -1093,9 +1093,11 @@ posterior mode in which the background explains the majority of suspected
 cases, and regularising `σ_bg` toward zero keeps the time variation a
 perturbation of the informative scalar baselines.
 
-With the daily new-suspect series carried to the cut-off the posterior
-sits at 0.17 to 0.22. At 0.3 that posterior sits below the scale, so the
-data set the time variation rather than the prior. Returns
+The scale was 0.1, which the data have outgrown. With the daily
+new-suspect series carried to the cut-off the posterior sits at 0.17 to
+0.22, about twice that scale, and the walk mixes badly against a prior
+pulling the other way. At 0.3 the same posterior sits below the scale, so
+the data set the time variation rather than the prior. Returns
 `(; σ_bg)`.
 """
 @model function background_pooling_model(;
@@ -1134,10 +1136,20 @@ The default is the centred form, each knot step drawn directly at
 `Normal(0, σ_rw)`. The daily new-suspect series runs to the cut-off, so
 the walk is strongly informed, and the non-centred form
 `steps = σ_rw .* z` funnels, with `z` diverging as `σ_rw → 0` and
-stretching NUTS trajectories. Pass `centred = false` for the non-centred
-form, the better choice when the walk is weakly informed and
-prior-dominated. Both forms carry the same prior, a cumulative sum of
-`Normal(0, σ_rw)` steps, so only the sampled coordinates differ.
+stretching NUTS trajectories. That funnel is what broke the joint fit
+when the series resumed. The worst R-hat went to 1.6 with 5 bulk
+effective samples, against 1.05 and 65 on the vintage before.
+
+The funnel shows in the draws. Divergences concentrate at the small end
+of `σ_rw`, at a median of 0.147 against 0.185 over all draws, and the
+correlation between `σ_rw` and its own innovations doubles, mean absolute
+0.159 to 0.323. The walk fails along its whole length rather than at its
+newly informed tail. R-hat runs 1.11 to 1.60 across the knots, against
+1.00 to 1.01 before, and the weakest mixing sits in the middle knots as
+much as the last. Pass `centred = false` for the non-centred form, the
+better choice when the walk is weakly informed and prior-dominated. Both
+forms carry the same prior, a cumulative sum of `Normal(0, σ_rw)` steps,
+so only the sampled coordinates differ.
 [`pooled_dispersion_model`](@ref) carries the same switch for the same
 reason.
 
