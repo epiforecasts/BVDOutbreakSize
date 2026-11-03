@@ -685,9 +685,6 @@ CairoMakie.save(
         [province_infections_panel]; ncols = 1, panel_size = (680, 500)
     )
 )
-open(joinpath(dashboard_dir, "provinces.md"), "w") do io
-    print(io, province_headline_md)
-end
 ## The summary's compact province table: infections to date, R at the
 ## cut-off and the confirmed cases over the latest week of reports, the
 ## same week the cases against R figure ends on.
