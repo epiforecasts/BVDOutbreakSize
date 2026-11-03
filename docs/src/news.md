@@ -289,6 +289,7 @@ A minor version: every affected province is its own patch, the importation kerne
   They are the only streams with truth to score from those cut-offs, so the frozen comparison of the joint against each stream's own model now covers every May cut-off rather than the one-week-back cut-off alone.
   Existing fitted values do not change.
 - The methods page, captions and limitations match the model code on priors, dispersions, likelihood terms, delays and the genetic bound (#1205).
+- The write-up drops prose that repeats the methods page or another section, and development narrative (#1207).
 
 ### Infrastructure
 
