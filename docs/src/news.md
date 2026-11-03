@@ -11,6 +11,7 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Performance
 
+- The province compositions skip stick-breaking rows with no trials and no count, which score exactly zero, so the composition gradient is about 27% faster with bit-identical results (#1195).
 - Hand-written Mooncake rules for the health-zone pre-grid convolution and vintage window weights keep the per-draw rebuild of the zone delays to about 5% of the full zone gradient, from 24% without them (local timings in #1085).
 - The health-zone relative ascertainment and fatality multipliers take their sum-to-zero basis from the model inputs, built once per fit rather than on every gradient (#1081, resolves #1048).
   This cuts the zone gradient by about 5%, with the timings in #1081.
