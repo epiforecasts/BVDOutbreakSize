@@ -40,8 +40,10 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "pages", "_setup.jl"))
 #
 # We extracted these figures from the INSP PDFs with a language model and a second reading pass.
 # The per-zone CSVs of the INRB-UMIE mirror [inrb_umie_2026](@cite) serve only as a cross-check, because their zone sums drop counts not yet attributed to a zone and so understate the national totals.
+#
 # The Uganda data are the cases and the one death exported across the border, from the WHO situation reports and Disease Outbreak News [who_don_2026_602](@cite).
 # The cross-border traveller volume and source population come from [mccabe2026](@citet).
+#
 # Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020* (March 2021), as tabulated on the Wikipedia page for the provinces of the DRC (accessed 20 October 2026).
 # Their relative sizes set the importation kernel and centre the background share, and their absolute sizes are the susceptible pools the renewal depletes.
 # The kernel distances are between provincial population centres, the mean of each province's health-zone centroids weighted by WorldPop population [worldpop_2025](@cite), from the INRB-UMIE health-zone map [inrb_umie_health_zones_2026](@cite).
@@ -355,14 +357,16 @@ MarkdownTable(vintage_table) #hide
 #
 # with $\mathbf{u} \sim \mathrm{Normal}(0, \sigma_{\text{lvl}}^2 I_{P-1})$, $\mathbf{z}_k \sim \mathrm{Normal}(0, I_{P-1})$, $A$ the lower-triangular Bartlett factor of the Wishart draw [bartlett1934, smith1972](@cite) and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
 # $Q$ is a Helmert basis, the isometric log-ratio basis of compositional data analysis [egozcue2003](@cite) that Stan uses for its sum-to-zero vector [carpenter2017stan, stan_refman_2026](@cite).
+# Daily $\delta_{p,t}$ is the interpolation of the knot series, as for the trend.
+#
 # $A$ sets the shape of the innovation covariance and $\sigma_{\text{drift}}$ its size, since the covariance has trace $\sigma_{\text{drift}}^2 (P - 1)$ whatever $A$ is.
 # With $\sigma_{\text{drift}} \to 0$ each patch's deviation decays from its first-knot level toward the trend.
 # The Wishart prior does not change under a rotation of the basis, so every patch and every pair of patches has the same prior whatever order the patches come in.
 # Each patch's innovation then has expected variance $0.05^2 (P - 1)/P$, as it would with a scale $s \sim \mathrm{Normal}^{+}(0, 0.05)$ on independent patch innovations with their mean removed.
+#
 # We report the per-patch innovation standard deviations $\sigma_{\delta,p}$ and their $P \times P$ correlation $\Omega$ derived from it.
 # Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi carry little signal, so $\Omega$ and their deviations rest mostly on the prior, which is why the covariance takes a proper shrinkage prior.
 # The correlations of a sum-to-zero vector cannot all be positive, and with equal standard deviations each patch's correlations with the others average $-1/(P - 1)$.
-# Daily $\delta_{p,t}$ is the interpolation of the knot series, as for the trend.
 #
 
 #md # ```@raw html
@@ -699,7 +703,8 @@ MarkdownTable(vintage_table) #hide
 # both truncated below at one day.
 #
 # Every delay is discretised to a daily PMF over lags $0,\dots,n_{\max}$ by double interval censoring [charniga2024](@cite).
-# The delays from the line-list reanalysis (onset to admission, used for both suspected-case reporting and export detection, and the two onset-to-death components) are Gammas sampled on their natural shape and scale.
+# The line-list reanalysis gives the onset-to-admission delay, used for both suspected-case reporting and export detection, and the two onset-to-death components.
+# These are Gammas sampled on their natural shape and scale.
 # The incubation period and the laboratory receipt delay are not in the line list, so they take mean-and-SD priors moment-matched to a LogNormal.
 # The maximum lag $n_{\max}$ of each delay is the 98th percentile of its prior-centre distribution, or the 99th for the treatment-centre and recovery delays, clamped to 5 to 120 days and computed once outside the model.
 #
