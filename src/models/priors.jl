@@ -2032,15 +2032,9 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         β_ε ~ importation_effect_prior
         log_ε_dev = sum_to_zero(sum_to_zero_factor(basis, σ_ε), z_ε)
         ramp = sigmoid_ramp(ng, breakpoint)
-        @inbounds for q in 1:n_patches
-            lvl = ε_bar * exp(log_ε_dev[q])
-            for t in 1:ng
-                ## Capped at one: the origin cannot send away more than it
-                ## generates. The prior sits four orders of magnitude below
-                ## the cap, so this binds only in the far tail.
-                ε_matrix[q, t] = min(lvl * exp(β_ε * ramp[t]), one(Tp))
-            end
-        end
+        ## The prior sits four orders of magnitude below the cap at one, so
+        ## the cap binds only in the far tail.
+        ε_matrix = importation_epsilon_matrix(ε_bar, log_ε_dev, β_ε, ramp)
         importation_epsilon := ε_bar
         importation_epsilon_sd := σ_ε
         importation_epsilon_effect := β_ε

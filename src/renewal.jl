@@ -667,6 +667,26 @@ function sigmoid_ramp(n::Integer, day::Real; ramp::Real = RT_INTERVENTION_RAMP)
 end
 
 """
+Importation fraction by origin and day: `ε_bar · exp(dev[q]) · exp(β ramp[t])`
+for origin `q` on day `t`, capped at one so an origin cannot send away more
+than it generates. Returns a `(length(dev) × length(ramp))` matrix.
+"""
+function importation_epsilon_matrix(
+        ε_bar::Real, dev::AbstractVector, β::Real, ramp::AbstractVector
+    )
+    T = promote_type(typeof(ε_bar), eltype(dev), typeof(β), eltype(ramp))
+    w = exp.(β .* ramp)
+    E = Matrix{T}(undef, length(dev), length(ramp))
+    @inbounds for (i, q) in enumerate(eachindex(dev))
+        lvl = ε_bar * exp(dev[q])
+        for j in eachindex(w)
+            E[i, j] = min(lvl * w[j], one(T))
+        end
+    end
+    return E
+end
+
+"""
 Gaussian random walk in centred form, shifted by a known offset: entry `i`
 is the walk's level `i` plus `offset[i]`. The walk starts at `start`, and
 each level is `Normal` about the one before it with SD `σ`. The shifted
