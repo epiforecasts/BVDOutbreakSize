@@ -146,8 +146,8 @@ end
 
     ## `data/observations.toml` is the single source of truth for every
     ## observation the model conditions on. A data update can touch it alone
-    ## and change no hashed CSV, so a digest over `*.csv` only would serve
-    ## every fit from cache against the previous data.
+    ## and change no hashed CSV, so a digest over `*.csv` only would keep
+    ## serving cached fits after the data changed.
     d = mktempdir()
     write(joinpath(d, "observations.toml"), "cases = 1\n")
     write(joinpath(d, "onset_curve_scanned.csv"), "day,count\n1,1\n")
