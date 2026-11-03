@@ -2094,7 +2094,6 @@ cfr_prior_fig #hide
 # With one patch it is the single-population model, with no deviations, importation or composition terms.
 #
 # Single-stream models fit the exported cases and the deaths among exports together, the suspected deaths, the suspected cases, the laboratory-confirmed cases, the confirmed deaths, the treatment-centre streams and the symptom-onset reporting triangle.
-# Each stream's posterior over the outbreak size can then be compared with the joint.
 # Other variants reuse these models with the data cut to an earlier date or with counts dropped.
 
 #md # ```@raw html
@@ -2245,9 +2244,7 @@ cfr_prior_fig #hide
 # The parameters are the mean and standard deviation of the generation interval and of the incubation period, the shape and scale of the onset-to-report delay, the mean and standard deviation of the report-to-receipt delay, and the shapes and scales of the two onset-to-death components.
 # Each draw rebuilds its delay distributions from them as the joint model does.
 # Where the covariance does not factorise, as when the joint model has fewer draws than cells, it is shrunk toward its own diagonal by the least weight that factorises.
-#
-# A draw moves whole patch trajectories, and moves patches and intensities together where the joint posterior correlates them.
-# $p_1$ is the only term from the joint posterior, since the zone infections of a patch sum to its sampled infections and scoring those sums again would count it twice.
+# $p_1$ is the only term from the joint posterior.
 #
 # #### Zone data
 #
@@ -2258,7 +2255,7 @@ cfr_prior_fig #hide
 # Where a zone's cumulative count falls by more than one and the report prints its 24h count, the increment is that printed count.
 # The patch total $N_{p,v} = \sum_{z \in p} y_{z,v}$ leaves out the report's unallocated row.
 #
-# A vintage can move earlier counts into named zones rather than add new ones.
+# A vintage can move earlier counts into named zones.
 # The case composition leaves out a patch on a vintage on which the unallocated count of one of its provinces falls in either table.
 # The death composition leaves out a patch on a vintage on which its unallocated deaths fall or a named zone loses more than one death.
 #
@@ -2314,8 +2311,7 @@ cfr_prior_fig #hide
 # ```
 #
 # with $\bar o_{p,t}$ the joint posterior mean log odds that an infection in $p$ was imported.
-# Within a patch, zone $q$ keeps $1 - \varepsilon_q$ of its force and spreads $\varepsilon_q$ over the other zones of its patch.
-# The patch's own infections are shared in proportion to the result, and its imports in proportion to the pull $h_{z,t}$ of zones in other patches:
+# The patch's own infections are shared in proportion to each zone's force after movement within the patch, $v_{z,t}$, and its imports in proportion to the pull $h_{z,t}$ of zones in other patches:
 #
 # ```math
 # v_{z,t} = (1 - \varepsilon_z) u_{z,t}
@@ -2333,7 +2329,7 @@ cfr_prior_fig #hide
 # ```
 #
 # The origin intensities $\varepsilon_{p(q)}$ are the sampled ones of Equation (56), and the zone infections of a patch sum to $I_{p,t}$ exactly.
-# The within-patch intensity has one level and a pooled deviation for each origin zone, with priors of our choice:
+# The within-patch intensity has one level and a pooled deviation for each origin zone:
 #
 # ```math
 # \operatorname{logit} \varepsilon_z = \operatorname{logit} \varepsilon_{\text{w}}
@@ -2361,7 +2357,7 @@ cfr_prior_fig #hide
 # The other zones keep a level that decays toward zero.
 # We use a prior of $\sigma_L \sim \mathrm{Normal}^{+}(0, 0.3)$ for the level scale, twice the province one, and keep the province half-life prior.
 # The drift scale of each patch and $\rho_{\text{corr}}$ take log-normal and beta priors fitted to the joint model's draws, as do the composition overdispersions and the ascertainment scale below.
-# A negative province correlation enters as zero, since provinces moving apart says nothing about how neighbouring zones move.
+# A negative province correlation enters as zero.
 #
 # #### Zone observations
 #
@@ -2378,7 +2374,7 @@ cfr_prior_fig #hide
 #
 # Expected confirmed deaths $D_{z,v}$ use the incubation period convolved with the draw's onset-to-death and report-to-receipt delays.
 # They follow a second Dirichlet-multinomial with its own intra-class correlation $\rho_{\text{death}}$.
-# Cases scale with case-finding and deaths with lethality, so the two compositions are
+# The two compositions are
 #
 # ```math
 # \pi^{C}_{z,v} = \frac{a_z C_{z,v}}{\sum_{z' \in p} a_{z'} C_{z',v}},
@@ -2399,14 +2395,12 @@ cfr_prior_fig #hide
 # ```
 #
 # Here $\bar{\mathrm{CFR}}_p$ is the province case-fatality ratio at the joint posterior mean on the logit scale, so each zone case-fatality ratio $\mathrm{CFR}_z$ lies between zero and one.
-# Both multipliers are relative to the zone's own province, because a factor common to a patch cancels within it.
+# Both multipliers are relative to the zone's own province.
 # We report their product with the province multipliers as each zone's ascertainment and fatality against the national average.
 #
-# Two compositions carry three unknowns per zone, so one has to be pinned.
-# We use a tight prior $\sigma_\theta \sim \mathrm{Normal}^{+}(0, 0.15)$, which assumes that deaths per infection vary little between the zones of a patch.
+# We pin the fatality scale with a tight prior $\sigma_\theta \sim \mathrm{Normal}^{+}(0, 0.15)$, which assumes that deaths per infection vary little between the zones of a patch.
 # As for the provinces, this is about $0.1$ on the log scale at the prior mean case-fatality ratio of $0.33$.
 # The death composition then sets the split of incidence and the case composition gives ascertainment as the residual.
-# Zones differ in how far a patient travels to a treatment centre, so the results report $\sigma_\theta$ against its prior.
 #
 # #### Zone reproduction number
 #
@@ -2419,7 +2413,6 @@ cfr_prior_fig #hide
 # It is reported from the day the zone's cumulative infections reach ten in the median draw.
 # For a zone without innovations it is the patch value scaled by the zone's decaying deviation level.
 # This is exact when zones do not mix and approximate when they do, since imported infections also enter the zone.
-# The results rank zones by the posterior probability that it exceeds one.
 #
 # #### Zone model assumptions
 #
@@ -2472,9 +2465,7 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # ### Delay-corrected confirmed case-fatality ratio
 #
 # The case-fatality ratio above is the onset-level CFR, the share of symptomatic infections that die.
-# It is hard to read off the data because the case and death streams are ascertained differently.
-# The naive confirmed ratio, the cumulative confirmed deaths over the cumulative confirmed cases, is anchored in the counts but biased low in real time.
-# A case confirmed close to the cut-off enters the denominator before it has had time to die.
+# The naive confirmed ratio, the cumulative confirmed deaths over the cumulative confirmed cases, is biased low in real time, because a case confirmed close to the cut-off has not yet had time to die.
 #
 # We report a delay-corrected confirmed CFR following [nishiura2009](@citet).
 # Each day of confirmed-case incidence in the denominator is weighted by the probability that a case confirmed that day, if it is going to die, has had its death confirmed by the cut-off:
@@ -2489,7 +2480,6 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # with $D_{\text{conf}}(T)$ the modelled cumulative confirmed deaths, $c_{\text{conf}}(t)$ the modelled daily confirmed-case incidence scaled to the modelled cumulative confirmed cases, and $X_d - X_c$ the residual delay between a confirmed case and its confirmed death.
 # $X_d$ is the onset-to-death-confirmation lag (onset-to-death convolved with the report-to-receipt laboratory delay), and $X_c$ is the onset-to-confirmation lag (onset-to-report convolved with the same laboratory delay).
 # Both lags and the confirmed trajectories are taken per posterior draw from the joint fit, so the corrected ratio carries the joint uncertainty.
-# The gap between the corrected ratio and the structural CFR is the difference in case and death ascertainment that the structural CFR absorbs.
 # The result is shown in the [confirmed case-fatality ratio results](@ref "Confirmed case-fatality ratio").
 #
 # ### One-week-ahead forecast
@@ -2502,14 +2492,12 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # The reproduction number continues its weekly walk with fresh innovations at its fitted step size, the intervention ramp carries on, and the walks for the non-BVD background and the bed capacity continue the same way.
 # The test positivity and the onset hazard's calendar effect and ascertainment are held at their last fitted values.
 # The model defines them only over the laboratory windows and the triangle's grid, and already holds them flat beyond those up to the cut-off.
-#
-# Two smaller departures remain.
-# Exports accrue at the full modelled rate every future day, and the onset figure's increment is drawn once per future vintage on its total rather than per onset date.
+# Exports accrue at the full modelled rate every future day, and the onset figure's increment is drawn once per future vintage on its total.
 #
 # We forecast the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the recovered total, the patients in isolation and the beds.
 # A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
 # The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
-# Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
+# Exports are forecast only for the per-stream comparison.
 # The results are in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results").
 #
 # The occupied beds, admissions and in-care flows are the fitted treatment model run forward, so the latent stock is not capped.
@@ -2523,7 +2511,7 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 #
 # Each release saves its forecast as an asset so it can later be scored against what is observed.
 # For a release that did not store one, the forecast is reconstructed by re-running that release's own model code on its own data and fit, in the same archive schema.
-# Dependencies are re-resolved at current versions, since the release manifests were not pinned, so a reconstruction is not an exact rebuild.
+# Dependencies are re-resolved at current versions, so a reconstruction is not an exact rebuild.
 # Reconstructed forecasts are published as a separate backfill release and scored with the stored ones in [forecast scoring across releases](@ref "Forecast scoring across releases").
 #
 # The backfill holds every release that carried a forecast, each with the streams its own model covered.
@@ -2531,9 +2519,7 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 #
 # #### Symptom-onset nowcast and forecast
 #
-# The symptom-onset reporting triangle separates two things the other streams cannot tell apart.
-# Cases whose symptoms have begun but whose report has not yet arrived are a nowcast, and cases whose symptoms have not begun are a forecast.
-#
+# The symptom-onset reporting triangle separates a nowcast of cases whose symptoms have begun but whose report has not yet arrived from a forecast of cases whose symptoms have not yet begun.
 # The separation comes from the same cumulative reported proportion $F(u, \delta)$ the likelihood is built on (see [symptom-onset reporting delay](@ref "Symptom-onset reporting delay")).
 # The expected reported total as of day $a$ is
 #
@@ -2560,16 +2546,11 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # The increment is drawn with the Student-t the scored cells take.
 #
 # Its scale is that of a correction read off two bars, plus the calibration error of each figure's total, $\sigma_{\text{scan}}^2 \bigl(S(T + h)^2 + S(T)^2\bigr)$ added to the variance.
-# The scan error dominates the interval on the increment.
 # $\sigma_{\text{scan}}$ is not fitted, since the scored cells carry no per-figure level.
 # Its prior is centred on 0.41% (0.09% to 0.75%), the estimate from a fit with a per-figure level.
 #
-# We score the sum of the two terms, the increment the triangle should add over the horizon, rather than its cumulative level.
-# Every vintage rereads the whole figure, so the printed total moves with the read error on each bar as well as with late reporting.
-# It falls between consecutive vintages more than once in the current data.
-# Scoring the level would charge the forecast for a rescan of cases it had already predicted and would count the same revision again at every later horizon.
-#
-# The forecast is worth more as a check that the fitted delay and ascertainment reproduce the next vintage than as a case-count prediction.
+# We score the sum of the two terms, the increment the triangle should add over the horizon.
+# Every vintage rereads the whole figure, so its printed total moves with the read error on each bar and can fall between vintages.
 #
 # #### Province forecast
 #
@@ -2608,9 +2589,8 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # ```
 #
 # Each draw pairs with a joint-model forecast draw chosen at random and splits that draw's forecast confirmed cases in each patch over its zones by the Dirichlet-multinomial of Equation (64) at $\pi^{\text{fc}}$.
-#
-# The probability that a zone reports at least $K$ confirmed cases over the week follows from the same composition.
-# Given its patch's forecast total $N$, a zone's count is Beta-binomial, the marginal of the Dirichlet-multinomial of Equation (64), so for forecast draw $i$ with patch total $N_i$, share $\pi_{z,i}$ and concentration $\kappa_i$:
+# Given its patch's forecast total, a zone's count is Beta-binomial, the marginal of the Dirichlet-multinomial of Equation (64).
+# For forecast draw $i$ with patch total $N_i$, share $\pi_{z,i}$ and concentration $\kappa_i$, the probability that the zone reports at least $K$ confirmed cases over the week is
 #
 # ```math
 # P(y_z \ge K) = \frac{1}{n}\sum_i \Bigl[1 - F_{\mathrm{BB}(N_i,\, \kappa_i \pi_{z,i},\, \kappa_i (1 - \pi_{z,i}))}(K - 1)\Bigr]. \tag{71}
@@ -2621,14 +2601,13 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # ### Forecast-versus-frozen evaluation
 #
 # We freeze the data to about one week before the current cut-off, re-fit, forecast one week ahead from the frozen model in the same way, and compare that projection with the counts observed by the current cut-off.
-# This separates a change driven by newer data from one driven by a change of method.
 # Every re-fit uses the headline sampler settings.
 # The one-week-back re-fit keeps the province patches, and the re-fits at earlier cut-offs are single-population.
 # The same frozen re-fit procedure is used to compare against McCabe et al. at the cut-offs they used.
 
 # ### Forecast scoring against a persistence baseline
 #
-# Every forecast above, and every stored forecast from a past release, is scored with the continuous ranked probability score (CRPS), on the count scale and on a log scale that stops the largest counts dominating.
+# Every forecast above, and every stored forecast from a past release, is scored with the continuous ranked probability score (CRPS), on the count scale and on a log scale.
 # We report the score split into the predictive spread and the cost of reading high or low.
 # We also report the share of observations inside the 50% and 90% predictive intervals, and a bias running from $-1$ when every forecast sits below the observation to $1$ when every one sits above it.
 # Relative skill between fits $A$ and $B$ is
@@ -2640,12 +2619,9 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # ```
 #
 # each mean taken over the forecasts both fits scored.
-# It is a ratio of means rather than a mean of per-forecast ratios, so one forecast the comparator scores at zero cannot send it to infinity.
 #
-# The count streams are running cumulative totals, so each is scored on its increment over the forecast window rather than on the level it reaches.
-# Bed occupancy is a level and is scored as one.
+# Each count stream is scored on its increment over the forecast window, and bed occupancy on its level.
 # A stream is scored only where its own reporting covers the window, from the day it was first reported to the day it was last updated.
-# Outside that period, a cumulative total that has not moved is the absence of a series rather than an observed zero.
 # On the two confirmed streams, a reported step that is mostly a retrospective integration of harmonised provincial records has that backfill removed from both the target and the baseline.
 #
 # Each forecast is also compared against a persistence baseline built from the same stream.
@@ -2668,9 +2644,7 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 #     \ :\ i = 2, \dots, m \Bigr\}. \tag{74}
 # ```
 #
-# Here $X_i$ is $Y_i$ for occupancy and the window total $\max\{Y(d_i) - Y(d_i - h),\ 0\}$ for a count stream, so the walk steps on the quantity the centre measures.
-# Under a driftless walk a change over $w$ days has $w$ times the one-day variance, so dividing by $\sqrt{w}$ puts vintages at different spacings on a common one-day scale.
-# Holding both signs makes the pool mean zero, so a record that only rises gives the walk no direction.
+# Here $X_i$ is $Y_i$ for occupancy and the window total $\max\{Y(d_i) - Y(d_i - h),\ 0\}$ for a count stream.
 # One predictive draw iterates the walk to the horizon,
 #
 # ```math
@@ -2680,18 +2654,16 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # ```
 #
 # so before the floor it has mean $\mu$ and variance $h \sigma^2$ for $\sigma^2 = |S|^{-1} \sum_{s \in S} s^2$.
-# This follows the COVID-19 Forecast Hub baseline, except that a count stream's centre pools the whole window rather than the latest increment, since these vintages are sparse and irregularly spaced.
+# This follows the COVID-19 Forecast Hub baseline, with a count stream's centre pooled over the whole window.
 # Fewer than three recorded differences leaves no usable pool and the baseline falls back to a Poisson draw around the centre.
 #
 # The baseline reads only the vintages recorded by the day the forecast was made, from the archived data snapshot the release was built on, so no later correction or backfill reaches it.
 # This holds exactly for a forecast made at a release's own cut-off.
 # The frozen re-fits forecast from fixed historical cut-offs reused across later releases, so their snapshot can post-date the forecast by weeks and already hold a later correction.
-# Closing the gap would need a snapshot archived per frozen cut-off, which does not exist.
 #
 # A baseline is drawn only where the stream's own record covers the window it is centred on.
 # For a count stream that is the horizon-length window ending on the day the forecast was made, and for occupancy it is that day alone.
-# A window opening before the stream's first recorded vintage would read that absence as a zero and centre the baseline on the whole cumulative total.
-# The earliest releases archived their cut-off totals without the dated vintage record, so they have no history to centre on either.
+# The earliest releases archived their cut-off totals without the dated vintage record, so their forecasts have no baseline either.
 # Neither case is scored, so those forecasts keep their own scores and carry no relative skill.
 
 # ### [Point prevalence](@id methods-prevalence)
