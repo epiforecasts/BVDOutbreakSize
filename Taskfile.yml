@@ -45,7 +45,7 @@ tasks:
     desc: >
       Regenerate the [province_confirmed_history] and [province_death_history]
       blocks for data/observations.toml by scanning Tableau 1 of the INSP
-      situation reports (per-province confirmed cases AND deaths). Fails
+      situation reports (per-province confirmed cases and deaths). Fails
       unless the per-province figures sum exactly to the national
       confirmed_case_history and confirmed_death_history on every date. The
       deaths column is what makes the per-province ascertainment identifiable.
@@ -176,10 +176,9 @@ tasks:
   benchmark-rules:
     desc: >
       Time every component with the hand-written Mooncake rules loaded and again
-      without them, to show whether they still earn their place. Run this
-      when the AD backend is upgraded: if the gap has closed, the rules in
-      src/mooncake_rules.jl are dead weight and should be deleted rather than
-      maintained. The rules are selected by a load-time preference, so each
+      without them. Run this when the AD backend is upgraded: if the gap has
+      closed, delete the rules in src/mooncake_rules.jl. The rules are
+      selected by a load-time preference, so each
       arm is its own process.
     cmds:
       - julia --project=benchmark -e 'using Pkg; Pkg.instantiate()'
@@ -229,7 +228,7 @@ tasks:
 
   docs-main:
     desc: >
-      Render just the national estimates page
+      Render the national estimates page
       (docs/src/estimates/national.md) from the cached fits, without
       assembling the site. Fast iteration on the main page.
     cmds:
@@ -238,7 +237,7 @@ tasks:
 
   docs-comparisons:
     desc: >
-      Render just the comparisons page (docs/src/comparisons.md) from the
+      Render the comparisons page (docs/src/comparisons.md) from the
       cached fits, without assembling the site.
     cmds:
       - BVD_DOC_PAGE=comparisons julia --project=docs docs/execute.jl
@@ -246,7 +245,7 @@ tasks:
 
   docs-zone:
     desc: >
-      Render just the health-zone estimates page (docs/src/estimates/zone.md) from the
+      Render the health-zone estimates page (docs/src/estimates/zone.md) from the
       cached fits, without assembling the site.
     cmds:
       - BVD_DOC_PAGE=estimates/zone julia --project=docs docs/execute.jl

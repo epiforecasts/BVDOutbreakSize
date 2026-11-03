@@ -14,7 +14,7 @@ jobs:
     - uses: actions/setup-python@v7
     - uses: julia-actions/setup-julia@v3
     - uses: julia-actions/cache@v3
-    # Runic is deliberately not installed here. The hook uses pre-commit's
+    # Runic is not installed here. The hook uses pre-commit's
     # native `language: julia`, which builds its own environment from the
     # `additional_dependencies` pin in `.pre-commit-config.yaml` and never
     # consults the runner's package environment. A `Pkg.add` step here would

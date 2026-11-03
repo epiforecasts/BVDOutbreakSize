@@ -18,12 +18,12 @@ Development history belongs in `docs/src/news.md` and nowhere else.
 ## Push early rather than waiting locally
 
 Everything here is slow.
-The full test suite takes a long time and a full docs build fits every model, which has hit GitHub's six-hour ceiling.
+The full test suite takes a long time and a full docs build fits every model, which can reach GitHub's six-hour ceiling.
 
 Do not sit on a branch waiting for a local full run.
 Open the pull request early, push updates to it, and let CI do the long work while you carry on.
 
-Run `task format` before every push, because a formatting failure wastes a whole CI run.
+Run `task format` before every push, because a formatting failure wastes a CI run.
 Beyond that run only narrow checks: `task test-quick`, a single filtered TestItem run, or `task docs-main` for the report page alone.
 Scope a TestItem filter to the `test/` root, or stale copies in sibling worktrees are collected too.
 Read the summary line rather than the exit code.

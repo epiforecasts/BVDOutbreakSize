@@ -86,7 +86,7 @@ obs = load_observations()
 ```
 
 This gives you the exported model components, constants and data loaders, enough to build your own analysis on top of the package.
-Reproducing the full report (fitting the models and writing the result tables and plots) can be done in a few ways, described next.
+Reproducing the full report (fitting the models and writing the result tables and plots) can be done in a few ways.
 
 ## Running
 

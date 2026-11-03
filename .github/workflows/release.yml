@@ -3,9 +3,8 @@ name: Release
 # Cut a release from a comment. `@release` on any issue or pull request tags
 # the current `main`, publishes a GitHub release whose notes are the newest
 # section of `docs/src/news.md`, and opens a pull request bumping the version
-# and starting the next section. The notes have always been that section
-# copied across by hand; this does the copying, so the release and the news
-# cannot say different things.
+# and starting the next section. Copying the section means the release and
+# the news cannot say different things.
 #
 #   @release          -> patch (2.1.0 -> 2.1.1)
 #   @release minor    -> 2.2.0
@@ -23,7 +22,7 @@ jobs:
   release:
     name: Cut a release
     # Cheap pre-filter so an ordinary comment does not start a job. The step
-    # below is what actually decides, on the first line only.
+    # below is what decides, on the first line only.
     if: contains(github.event.comment.body, '@release')
     # A release writes a tag, a release and a branch. Two at once race on all
     # three, and a cancelled one leaves a tag with no release behind it.
@@ -117,8 +116,7 @@ jobs:
 
       # `release_notes.jl` reads the version from Project.toml and the notes
       # from news.md, and fails when the newest section is for some other
-      # version. That mismatch is the failure worth catching: it means the
-      # release and the notes written for it have come apart.
+      # version.
       - name: Read the version and its notes
         id: notes
         if: steps.parse.outputs.run == 'true' && steps.permission.outputs.allowed == 'true'
@@ -168,11 +166,10 @@ jobs:
           echo "Convergence verdict on the last main build: $VERDICT"
           echo "Convergence verdict: \`$VERDICT\`" >> "$GITHUB_STEP_SUMMARY"
           # `failure` is a judged bad fit. `cancelled` or `timed_out` is a
-          # build that never reached a verdict, which main docs builds have
-          # done before at GitHub's six-hour cap, and says nothing about the
-          # fits either way. Those are different things and the notes say
-          # which. `unknown` stays silent: that is the state before the
-          # convergence job exists at all.
+          # build that never reached a verdict (as at GitHub's six-hour cap),
+          # and says nothing about the fits either way. The notes say which.
+          # `unknown` stays silent: that is the state before the convergence
+          # job exists.
           BANNER=""
           case "$VERDICT" in
             failure)
@@ -190,7 +187,7 @@ jobs:
             mv release_notes.tmp release_notes.md
           fi
 
-      # `--latest=false` deliberately. The docs workflow publishes a
+      # `--latest=false`. The docs workflow publishes a
       # `results-*` release on every push to `main` with `make_latest: true`,
       # and README.md links the rendered site at
       # `releases/latest/download/site.zip`. A version release taking the
