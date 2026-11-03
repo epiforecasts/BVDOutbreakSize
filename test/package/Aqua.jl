@@ -54,7 +54,7 @@ end
     # subprocess die intermittently on the runners.
     #
     # A genuine detection still fails. A probe that could not run is skipped
-    # with its reason visible. Issue #495 records the intermittent failure.
+    # with its reason visible.
     #
     # macOS is excluded: that runner leaves a background task alive
     # after loading the graphics stack (CairoMakie/Makie), so the check cannot
