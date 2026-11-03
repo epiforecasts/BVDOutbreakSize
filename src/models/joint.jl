@@ -1047,13 +1047,7 @@ onset-to-report delay, the rows summing to the national `bvd_reports_daily`
 of [`reported_cases_model`](@ref). Returns an `(n_patches × n)` matrix.
 """
 function _patch_reports(onsets_matrix::AbstractMatrix, report_pmf::AbstractVector)
-    np, n = size(onsets_matrix)
-    T = promote_type(eltype(onsets_matrix), eltype(report_pmf))
-    out = Matrix{T}(undef, np, n)
-    @inbounds for p in 1:np
-        out[p, :] = convolve_delay(onsets_matrix[p, :], report_pmf)
-    end
-    return out
+    return convolve_rows(onsets_matrix, report_pmf)
 end
 
 """
@@ -1586,7 +1580,9 @@ cut-off, and the density there, is the fitted model's.
     bvd_reports_matrix = n_patches > 1 ?
         _patch_reports(detected_onsets_matrix, cases_state.report_pmf) :
         nothing
-    care_asc = by_detection ? one.(patch_asc) : patch_asc
+    ## With the detection contrast in the reports, the care split takes them
+    ## as they are.
+    care_asc = suspected_ascertainment === nothing ? patch_asc : nothing
     treatment_state ~ to_submodel(
         treatment(
             isolation_history, cases_state.bvd_reports_daily,

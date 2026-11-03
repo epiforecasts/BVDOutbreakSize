@@ -4,7 +4,7 @@
 
 - The model is fitted to aggregate counts: the DRC situation-report totals read from the published PDFs, and three Uganda export cases with one death from WHO reports.
   We do not have a line list, information on case definitions or reporting completeness, or access to the response's internal data, so every estimate is a model-based extrapolation under strong assumptions, not a measurement.
-- The work is done outside the outbreak response, so changes in reporting practice are inferred from the reports rather than known.
+- The work is done outside the outbreak response, so changes in reporting practice are inferred from the reports alone.
 - The code and analysis were drafted by a language model and reviewed by people and by language models ([authors](@ref "Authors, funding and acknowledgements")).
 - The report is re-run as new data arrive, so the estimates change between updates, and it has not been peer reviewed.
   Every release is signed off by a person before it is published.
@@ -41,9 +41,9 @@
 
 ### Evaluation
 
-- The interval on the [onset forecast](@ref "Symptom-onset nowcast and forecast") is dominated by per-scan error rather than the epidemic.
+- The interval on the [onset forecast](@ref "Symptom-onset nowcast and forecast") is dominated by per-scan error.
 - The persistence baseline for a frozen re-fit reads a data snapshot that can post-date the forecast by weeks, so it can see later corrections ([details](@ref "Forecast scoring against a persistence baseline")).
-- Past forecasts that were not stored are rebuilt from each release's own code but with current dependency versions, so they are not exact.
+- Past forecasts that were not stored are rebuilt from each release's own code with current dependency versions, so they approximate the original forecasts.
 
 ## Provinces
 
@@ -56,7 +56,8 @@
 
 ### Model
 
-- Each affected province is one well-mixed patch, so spread inside a province is not represented. Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi hold few confirmed cases, so their estimates are informed mostly by the priors their parameters share with the other patches.
+- Each affected province is one well-mixed patch, so spread inside a province is not represented.
+  Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi hold few confirmed cases, so their estimates are informed mostly by the priors their parameters share with the other patches.
 - There is no mobility or origin-destination data for this outbreak, so the [gravity kernel](@ref "Mixing and importation") coupling the provinces is assumed, not measured.
 - The province laboratory data enter only as the split of analysed specimens, with a national testing fraction, so the deaths do most of the work in separating a province's incidence from its case-finding and the prior strongly influences the rest ([province parameters](@ref "Province parameters against their priors")).
 - The treatment-centre model censors bed demand at the national capacity only, and each province's demand and beds are shares of the national ones.
