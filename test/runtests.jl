@@ -15,10 +15,8 @@ if "downgrade" in ARGS
     test_filter = ti -> isdisjoint(ti.tags, (:quality, :ad, :slow, :enzyme))
 elseif "fast" in ARGS
     # Platform-portability cell. The `:slow` NUTS fits do not vary by
-    # platform and already run on the Linux cells, so a slower runner
-    # re-running them buys no signal and spends hours doing it. What is
-    # left still loads the package, the data and every model, which is what
-    # a platform check is for.
+    # platform and already run on the Linux cells. What is left still loads
+    # the package, the data and every model.
     test_filter = ti -> isdisjoint(ti.tags, (:quality, :ad, :slow, :enzyme))
 elseif "skip_quality" in ARGS
     test_filter = ti -> isdisjoint(ti.tags, (:quality, :ad, :enzyme))

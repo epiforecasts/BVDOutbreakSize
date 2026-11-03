@@ -1,5 +1,5 @@
 ## The estimates across past releases are checks on the fit, so they sit on
-## the in-sample pages (#1058): the national page, and the province and zone
+## the in-sample pages: the national page, and the province and zone
 ## pages for their own areas. These pages read the release overlays, so their
 ## CI render jobs must collect the rescored ones rather than fall back to the
 ## committed copies.

@@ -9,8 +9,7 @@
     ## that type is the key Mooncake caches a reverse rule against. Equal
     ## types mean the workload compiles the rule the fit reuses; unequal
     ## types mean the workload compiles a rule nothing reaches and every fit
-    ## pays the cold build. This is the assertion that stops the two drifting
-    ## apart: an argument added to one call alone fails here.
+    ## pays the cold build. An argument added to one call alone fails here.
     @test typeof(precompile_workload_joint()) ==
         typeof(production_joint(obs; breakpoint = bp))
 end

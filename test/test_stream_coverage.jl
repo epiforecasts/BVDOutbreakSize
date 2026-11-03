@@ -1,7 +1,7 @@
 ## Tests for the stream-reporting-coverage rule in scripts/score_releases.jl
 ## (stream_coverage_end, truth_at): a forecast is scorable only when its
 ## target falls inside the period its own truth source was still being
-## reported, distinct from a target that is simply not yet observed.
+## reported, distinct from a target that is not yet observed.
 
 @testitem "stream_coverage_end is the last vintage of a history stream" begin
     using Dates: Date, Day

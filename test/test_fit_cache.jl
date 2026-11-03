@@ -145,11 +145,9 @@ end
     include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
 
     ## `data/observations.toml` is the single source of truth for every
-    ## observation the model conditions on. The digest once covered `*.csv`
-    ## only, so the manifest never entered the key: a data update that touched
-    ## it alone served every fit from cache against the previous data. Four of
-    ## the twenty-five most recent commits to the manifest changed no hashed
-    ## CSV, one of them adding a month of fitted daily new-suspect history.
+    ## observation the model conditions on. A data update can touch it alone
+    ## and change no hashed CSV, so a digest over `*.csv` only would serve
+    ## every fit from cache against the previous data.
     d = mktempdir()
     write(joinpath(d, "observations.toml"), "cases = 1\n")
     write(joinpath(d, "onset_curve_scanned.csv"), "day,count\n1,1\n")
