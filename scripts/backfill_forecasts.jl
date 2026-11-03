@@ -6,9 +6,9 @@
 # the forecast was never saved (only the posterior summaries and thinned draws
 # were, and those do not carry the per-stream and reproduction-number-walk
 # deterministics the forecast needs). To score past forecasts we reconstruct
-# them honestly: check out the code as it was at each release, re-run its fit
-# on that release's data, and export the forecast in the same archive schema
-# the live build now writes (`forecast_archive` in `src/forecast.jl`).
+# them: check out the code as it was at each release, re-run its fit on that
+# release's data, and export the forecast in the same archive schema the live
+# build writes (`forecast_archive` in `src/forecast.jl`).
 #
 # The reconstructions are collected under `output/backfill/` and are meant to
 # be published as a dedicated `forecasts-backfill` release, which
@@ -43,8 +43,7 @@
 # streams, v1.2.0 the reported/suspected/export streams. The earlier v1.0.0 and
 # v1.1.0 define their model inline in that tag's analysis.jl, so once
 # smoke-validated they get standalone driver files under
-# `scripts/backfill_drivers/` that `backfill_one` runs directly, rather than
-# inlining hundreds of lines of old model code here.
+# `scripts/backfill_drivers/` that `backfill_one` runs directly.
 #
 # The published reports only ever showed the 7-day horizon. The longer horizons
 # reconstruct forecasts that tag's code would have made but never displayed.
@@ -195,8 +194,7 @@ function backfill_one(code_tag; keep)
         ## keeps tags off each other's depot precompile locks and leaves the
         ## driver nothing to build, so it can load modules normally. Resolving
         ## with a stale image instead (`--compiled-modules=existing`) surfaces
-        ## as an `UndefVarError` for a binding the loaded package really does
-        ## define.
+        ## as an `UndefVarError` for a binding the loaded package does define.
         run(`julia --project=$(joinpath(wt, "docs"))
              -e "using Pkg; Pkg.instantiate(); Pkg.precompile()"`)
     end
@@ -517,7 +515,7 @@ function integral_driver(dest, code_tag; samples = 1000, chains = 2)
     ## Guarded stream superset. v1.3.0 emits the two confirmed streams
     ## (recovered and isolation did not exist yet); v1.2.0 emits the
     ## reported/suspected/export streams. The `propertynames` guard keeps each
-    ## tag to the columns its `forecast_reported` actually produces. Labels
+    ## tag to the columns its `forecast_reported` produces. Labels
     ## match the scorer's `STREAM_HISTORY`/`STREAM_ASSEMBLED` in
     ## `scripts/score_releases.jl`.
     tail = """

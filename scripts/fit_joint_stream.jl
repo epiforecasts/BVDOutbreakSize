@@ -1,9 +1,8 @@
-# Streamed full-joint fit for sanity-checking the renewal model after the
-# shared-σ background + 75% ascertainment changes. Writes live progress
-# (iteration, log-density, divergences) to logs/joint_fit.log via
-# `progress_callback` — tail it with `tail -f logs/joint_fit.log` — and
-# prints a posterior summary of the headline quantities, with C_T (the
-# cumulative-infection outbreak size) front and centre.
+# Streamed full-joint fit for sanity-checking the renewal model. Writes live
+# progress (iteration, log-density, divergences) to logs/joint_fit.log via
+# `progress_callback` (tail it with `tail -f logs/joint_fit.log`) and
+# prints a posterior summary of the headline quantities, including C_T (the
+# cumulative-infection outbreak size).
 #
 # Run: JULIA_NUM_THREADS=4 julia --project=. scripts/fit_joint_stream.jl [samples] [chains]
 
