@@ -476,7 +476,6 @@ MarkdownTable(vintage_table) #hide
 # r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.30\right). \tag{11}
 # ```
 #
-# This single growth rate fills the cryptic phase and, through the forward Euler–Lotka derivation above, sets the established reproduction number.
 # The genetic report's own established reproduction number of about $1.31$ to $1.55$ uses its own generation interval.
 #
 # The outbreak is assumed to have begun in Ituri, so the primary patch carries the whole cryptic seed and the others start empty:
@@ -524,7 +523,6 @@ MarkdownTable(vintage_table) #hide
 # The renewal starts on the grid day on which the renewal recursion begins and sustained transmission is treated as established.
 # We place it 14 days after the genetic TMRCA day, so the observed window from the renewal start to the cut-off is shorter than the TMRCA age.
 # The bound therefore stays informative on the cryptic duration, pulling the origin to sit at or before the most recent common ancestor and bounding the cryptic phase from below.
-# It is one-sided, leaving the age free above the TMRCA.
 # We take the TMRCA mean as given and carry its uncertainty only through $\sigma$.
 
 #md # ```@raw html
@@ -858,7 +856,7 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # with mean $0.33$ and $95\%$ interval roughly $0.15$-$0.54$.
-# The mean matches the CDC $55/169 \approx 33\%$ figure and the corrected central CFR in the 20 May report [mccabe2026update](@cite).
+# The mean also matches the corrected central CFR in the 20 May report [mccabe2026update](@cite).
 
 #md # ```@raw html
 #md # <details><summary>Submodel: cfr_model</summary>
@@ -2794,8 +2792,8 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 #
 # ### Comparison with published estimates
 #
-# This work began as a replication of [mccabe2026](@citet), and the estimates are checked against theirs.
-# The table sets out what the two share and what has changed, each row linking to the section that specifies it.
+# The estimates are checked against those of [mccabe2026](@citet).
+# The table sets out what the two share and what differs, each row linking to the section that specifies it.
 #
 # | Component | [mccabe2026](@citet) | This work |
 # |---|---|---|
