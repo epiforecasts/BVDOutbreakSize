@@ -2316,7 +2316,7 @@ cfr_prior_fig #hide
 # The other zones keep a level that decays toward zero.
 # We use a prior of $\sigma_L \sim \mathrm{Normal}^{+}(0, 0.3)$ for the level scale, twice the province one, and keep the province half-life prior.
 # The drift scale of each patch and $\rho_{\text{corr}}$ take log-normal and beta priors fitted to the joint model's draws, as do the composition overdispersions and the ascertainment scale below.
-# A negative province correlation enters as zero.
+# The beta prior on $\rho_{\text{corr}}$ is moment-matched to the joint draws of the Ituri–Nord-Kivu entry of $\Omega$, each clamped to $[0, 1]$.
 #
 # #### Zone observations
 #
