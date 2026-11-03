@@ -14,7 +14,9 @@
         p = joinpath(mktempdir(), "observations.toml");
         open(io -> TOML.print(io, r), p, "w"); p
     )
-    base = load_observations(path)
+    ## The baseline carries no skip, whatever the manifest lists.
+    delete!(raw, "skip_dates")
+    base = load_observations(write_manifest(raw))
 
     deaths = raw["confirmed_death_history"]
     skip_date = String(deaths["dates"][end - 1])
@@ -88,6 +90,12 @@ end
     ## is the latest one carrying a revision figure in the manifest.
     path = joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
     raw = TOML.parsefile(path)
+    delete!(raw, "skip_dates")
+    write_manifest(r) = (
+        p = joinpath(mktempdir(), "observations.toml");
+        open(io -> TOML.print(io, r), p, "w"); p
+    )
+    base = load_observations(write_manifest(raw))
     rev_dates = String[
         String(d) for (prov, zones) in raw["zone_death_revision_24h"]
             if zones isa AbstractDict
@@ -98,10 +106,7 @@ end
         "zone_confirmed_history" => [date],
         "zone_death_history" => [date],
     )
-    p = joinpath(mktempdir(), "observations.toml")
-    open(io -> TOML.print(io, raw), p, "w")
-    base = load_observations(path)
-    obs = load_observations(p)
+    obs = load_observations(write_manifest(raw))
     day = only(
         setdiff(
             first(values(first(values(base.zone_death_history)))).days,

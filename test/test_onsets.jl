@@ -34,7 +34,7 @@
     )
     blocks = _dedup_onset_blocks(_read_onset_curve_blocks(path))
     ## 001/002 reprint the same figure: collapse to 001, the earlier report
-    ## date. 003 and 004 are genuinely new content and both survive.
+    ## date. 003 and 004 are new content and both survive.
     @test [b.sitrep for b in blocks] == ["001", "003", "004"]
     @test [b.report_date for b in blocks] ==
         [Date("2026-03-01"), Date("2026-03-04"), Date("2026-03-06")]
@@ -103,9 +103,8 @@ end
     @test !isempty(early.onset_days)
     @test length(unique(early.report_days)) == 2
 
-    ## Advancing the cut-off past 004's report date recovers it: the same
-    ## loader call, no code change, exactly the self-correcting behaviour
-    ## the manifest `as_of_date` advance relies on.
+    ## Advancing the cut-off past 004's report date recovers it with the same
+    ## loader call, which the manifest `as_of_date` advance relies on.
     late = load_onset_curve(path; cutoff = Date("2026-03-06"), seeding)
     @test length(unique(late.report_days)) == 3
     @test length(late.onset_days) > length(early.onset_days)
@@ -401,9 +400,9 @@ end
 end
 
 @testitem "onset_report_moments: a later snapshot sees more of one date" begin
-    ## The literal right-truncation proof: for the same onset date and fixed
-    ## hazards, the modelled current-cumulative level is non-decreasing as
-    ## the report day moves later.
+    ## Right truncation: for the same onset date and fixed hazards, the
+    ## modelled current-cumulative level is non-decreasing as the report day
+    ## moves later.
     using BVDOutbreakSize: onset_report_moments
     using StatsFuns: logit
 
@@ -934,8 +933,8 @@ end
 @testitem "onset_report_hazard_model holds the report-date walk at zero before walk_start" begin
     ## The walk changes the reporting delay by report date, so it can only
     ## move where a snapshot sees a delay. Before `walk_start` it sits at
-    ## zero on the same calendar grid, so every consumer indexes it as
-    ## before.
+    ## zero on the same calendar grid, so every consumer indexes it on that
+    ## grid.
     using BVDOutbreakSize: onset_report_hazard_model
     using Random: seed!
 
@@ -978,8 +977,8 @@ end
 @testitem "onset_report_hazard_model draws the delay deviations centred" begin
     ## The basis coordinates are drawn on the scale `σ_h0` and enter the
     ## hazard unscaled, so the sampled name is `y_h0` and not a standard
-    ## `z_h0`. Their prior is unchanged: with `σ_h0 ~ N⁺(0, 1)`, so
-    ## `E[σ_h0²] = 1`, the deviations have covariance `I - J / D`.
+    ## `z_h0`. With `σ_h0 ~ N⁺(0, 1)`, `E[σ_h0²] = 1` and the deviations
+    ## have covariance `I - J / D`.
     using BVDOutbreakSize: onset_report_hazard_model, sum_to_zero_basis
     using Turing: returned
     using Random: MersenneTwister
@@ -1038,7 +1037,7 @@ end
     ## turns every cell into a latent parameter, drops the likelihood, and
     ## still samples, differentiates and runs NUTS without complaint. Two
     ## checks: no cell appears as a random variable, and the log-density
-    ## actually responds to the data.
+    ## responds to the data.
     using BVDOutbreakSize: onsets_only_model
     using Turing: DynamicPPL
     using LogDensityProblems: logdensity

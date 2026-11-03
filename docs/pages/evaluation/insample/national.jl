@@ -1304,7 +1304,7 @@ rt_stream_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The reproduction number at each release with one panel per dataset, on a shared calendar axis and the fixed range of the figure above.
-#md # A dataset the report also fits alone carries that fit's current-model band, and confirmed deaths carries none.
+#md # A dataset the report also fits alone carries that fit's current-model band.
 #md # Only the most recent releases published these estimates, so the panels span a shorter window than the overview.
 #md # </figcaption>
 #md # </figure>
@@ -1385,7 +1385,7 @@ r0_evolution_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The basic reproduction number published at each release (blue) and from the current model frozen at earlier cut-offs (red), as medians with 30%, 60% and 90% interval bars, with the current fit as a flat band.
-#md # Releases began publishing this quantity recently, so the blue history is short.
+#md # The blue history starts at the first release that published this quantity.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -1465,7 +1465,7 @@ r0_stream_fig #hide
 # ### Delay sensitivity
 #
 # The death stream dates the outbreak from how far deaths lag symptom onset, so the assumed onset-to-death delay sets the implied infection count.
-# The baseline uses the hospital-pathway delay from the Isiro 2012 line-list reanalysis (onset to admission then admission to death, implied mean about 12 d).
+# The baseline uses the hospital-pathway delay from the line-list reanalysis in the [onset-to-death delay](@ref "Onset-to-death delay") Methods section (implied mean about 13 d).
 # We refit the joint model under the community-pathway delay from the same reanalysis, for deaths in the community without a recorded admission (implied mean about 8 d).
 # The refit is the headline model with the headline's sampler settings and changes only the delay.
 
@@ -1554,7 +1554,8 @@ T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : no
 #md # </details>
 #md # ```
 
-# A slightly earlier common ancestor (Exponential growth) permits a marginally older outbreak, though the difference is small because the evolutionary rates are nearly identical.
+# A slightly earlier common ancestor (Exponential growth) permits a marginally older outbreak.
+# The re-fit moves the genetic bound seven days earlier, against an uncertainty of 16 days on the bound.
 
 #md # ```@raw html
 #md # <details><summary>Tree-prior infection-count table</summary>
@@ -1920,7 +1921,7 @@ frozen_contrast_fig #hide
 # ## Parameter recovery
 #
 # Whether the model recovers known values when fitted to data it simulated itself.
-# Each seed is one prior draw of the model run past the cut-off, kept when its outbreak size is within a factor of five of the one observed, and fitted with the headline joint's sampler settings.
+# Each seed is one prior draw of the model run past the cut-off, kept when its infection count is within a factor of five of the observed confirmed cases, and fitted with the headline joint's sampler settings.
 
 #md # ```@raw html
 #md # <details><summary>Recovery figure</summary>

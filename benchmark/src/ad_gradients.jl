@@ -3,10 +3,10 @@
 # Each (component, backend) pair is smoke-tested first: the gradient is taken
 # once and checked finite and non-trivial (`ADFixtures.gradient_is_finite`).
 # A pair that throws or returns a degenerate gradient is omitted rather than
-# aborting the run, so a known-broken combination — Enzyme on `bvd_joint`
-# (epiforecasts/BVDOutbreakSize#445) is the standing example — leaves the
-# rest of the suite reporting. Omitted pairs are listed on stderr so a
-# newly-broken one is visible in the run log rather than silently missing.
+# aborting the run, so a known-broken combination (Enzyme on `bvd_joint`,
+# epiforecasts/BVDOutbreakSize#445) leaves the rest of the suite reporting.
+# Omitted pairs are listed on stderr so a newly broken one shows in the run
+# log.
 #
 # The gradient is benchmarked through the same `LogDensityFunction` the NUTS
 # sampler calls, so the numbers are the sampler's per-leapfrog cost.

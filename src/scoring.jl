@@ -61,9 +61,7 @@ width, weighted so the sum matches the CRPS the ensemble would score
 against its own median. `overprediction` and `underprediction` are the
 extra cost of scoring against `obs` rather than that best case, split by
 which side of each pair `obs` falls on. All three are non-negative and sum
-exactly to [`crps_sample`](@ref) at the same `obs` and `samples`, being an
-exact re-partition of the same order-statistic sum rather than an
-approximation.
+exactly to [`crps_sample`](@ref) at the same `obs` and `samples`.
 
 With no draws (`isempty(samples)`), every component is `NaN`.
 """
@@ -570,19 +568,15 @@ end
 `table` (from [`forecast_score_overview`](@ref),
 [`forecast_score_by_horizon`](@ref) or [`forecast_score_by_release`](@ref))
 with its `fit` column dropped. Only for a table whose `fit` column is
-single-valued by construction rather than by the data currently on hand.
-No table in this report is structurally single-fit any more. The frozen
-evaluation was, until its archive gained a `fit` column and began carrying
-each stream's own frozen single-stream fit alongside the joint.
+single-valued by construction rather than by the data on hand.
+No table in this report is structurally single-fit.
 
 Every other column is left untouched. `table` is returned with `fit` still
 present when it is empty, since an empty table carries no evidence either
 way. State which model a de-columned table refers to in the surrounding
 prose, so the table stays self-describing once the column is gone.
 
-Errors when `table`'s `fit` column carries more than one distinct value. A
-column that vanishes only when it happens to be constant, and reappears
-once a second model is scored, is worse than one that never varies.
+Errors when `table`'s `fit` column carries more than one distinct value.
 """
 function drop_degenerate_fit_column(table::DataFrame)
     isempty(table.fit) && return table
@@ -724,12 +718,11 @@ triangle's per-vintage cumulative total (`onset_report_history`, as dates
 rather than grid days), in date order.
 
 The onset truth is the increment between the vintages at the two ends of a
-window. Each vintage rereads the whole figure, and on fourteen of them the
+window. Each vintage rereads the whole figure, and on some of them the
 total comes back lower than the one before, which a cumulative onset curve
 cannot do. A window containing such a vintage is scored against an
 increment the situation reports did not add, so it is left unscored rather
-than charged to the forecast. The fit itself needs no such rule: it carries
-a per-vintage scan level.
+than charged to the forecast.
 
 A vintage inside the window matters as much as one at its end, which is why
 the test is on the window rather than on the target vintage alone. A reread
@@ -740,11 +733,8 @@ is of exactly that shape: an increment of 82 against a typical 400 to 500,
 where the fall sits two days inside the window and neither endpoint is a
 falling vintage.
 
-This is the rule province windows holding a harmonisation-break day already
-follow. It bites hardest at the longer horizons, a four-week window being
-more likely to contain a reread than a one-week one. A window anchored on a
-falling vintage but containing none is kept: its increment is measured from
-the reread rather than across it.
+A window anchored on a falling vintage but containing none is kept: its
+increment is measured from the reread rather than across it.
 
 Every fit over a dropped window goes, the persistence baseline included, so
 a relative skill is never taken against a baseline whose own window was
@@ -777,18 +767,10 @@ end
 streams that carry a persistence baseline, dropping every row of a stream
 that carries none.
 
-This is the rule the score summaries already apply. `_stream_fit_stats`
-drops a fit whose matched set against the baseline is empty, so a stream
-with no baseline row never reaches [`forecast_score_overview`](@ref) or
-its by-horizon and by-release counterparts. Applying it to the overlay
-figure too puts the tables and the figure on one definition of what has
-been scored. A stream the situation reports have stopped publishing then
-leaves both together, rather than holding a row of near-empty panels open
-long after its last scored window.
-
-The rule is stated on the baseline rather than on a count of made dates
-because the baseline is what makes a window scoreable at all. A stream
-with no baseline has nothing to be scored against, whatever its history.
+This is the rule the score summaries apply. `_stream_fit_stats` drops a
+fit whose matched set against the baseline is empty, so a stream with no
+baseline row never reaches [`forecast_score_overview`](@ref) or its
+by-horizon and by-release counterparts.
 
 Nothing is dropped from the scored data itself. The rows stay in
 `data/forecast_scores.csv` and `data/forecast_overlay.csv`, which record

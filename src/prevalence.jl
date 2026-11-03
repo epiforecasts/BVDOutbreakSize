@@ -1,7 +1,7 @@
 # Point prevalence of infection: the people infected at the cut-off who are
 # still in the community, by stage of infection. An infection's stage follows
 # from its age and the model's delays (incubation, onset to detection, onset
-# to death or recovery). Prevalence is therefore a weighted sum of the recent
+# to death or recovery). Prevalence is a weighted sum of the recent
 # daily infections, computed for each posterior draw of the joint fit and of
 # the health-zone stage.
 

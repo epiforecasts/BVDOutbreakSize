@@ -76,6 +76,15 @@ Mooncake.@is_primitive(
 Mooncake.@zero_derivative(
     Mooncake.MinimalCtx, Tuple{typeof(censoring_cap), Vararg}
 )
+## The sum-to-zero bases, built from the patch count and the printed
+## patches alone each time a patch submodel is called.
+Mooncake.@zero_derivative(
+    Mooncake.MinimalCtx, Tuple{typeof(sum_to_zero_basis), Integer}
+)
+Mooncake.@zero_derivative(
+    Mooncake.MinimalCtx,
+    Tuple{typeof(_embedded_sum_to_zero_basis), Integer, AbstractVector{<:Integer}}
+)
 ## Work that reaches only reported quantities (see `_detached`).
 Mooncake.@zero_derivative(Mooncake.MinimalCtx, Tuple{typeof(_detached), Vararg})
 

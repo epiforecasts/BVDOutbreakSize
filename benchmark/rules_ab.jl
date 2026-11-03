@@ -1,11 +1,11 @@
 # Times the same components with `src/mooncake_rules.jl` loaded and not loaded,
-# so the hand-written rules can be shown to still earn their place. The
+# to measure what the hand-written rules gain. The
 # rules are chosen by a package preference read at load time, so each arm
 # needs its own process; this script is one arm, and `task benchmark-rules`
 # runs both.
 #
 # Run it when the AD backend is upgraded. If an arm's advantage has gone,
-# the rules are dead weight and should be deleted rather than maintained.
+# delete the rules.
 
 using BVDOutbreakSize
 using BVDOutbreakSize: default_adtype

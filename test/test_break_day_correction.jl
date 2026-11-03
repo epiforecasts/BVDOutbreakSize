@@ -329,12 +329,8 @@ end
 
     include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
 
-    ## A realism check against the manifest as it actually stands, stated as
-    ## identities that hold for any manifest rather than as the values this
-    ## week's data happens to give. The manifest advances with each
-    ## situation report and gains break days as they are found, so an
-    ## assertion on a particular count would go red on a data update with no
-    ## code having changed.
+    ## A check against the manifest as it stands, stated as identities that
+    ## hold for any manifest so a data update cannot turn it red.
     obs = load_observations()
     grid_date(day) = obs.cutoff - Day(obs.n - day)
     for (stream, deaths, hist, gross) in (
