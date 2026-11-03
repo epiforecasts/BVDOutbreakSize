@@ -718,12 +718,11 @@ triangle's per-vintage cumulative total (`onset_report_history`, as dates
 rather than grid days), in date order.
 
 The onset truth is the increment between the vintages at the two ends of a
-window. Each vintage rereads the whole figure, and on fourteen of them the
+window. Each vintage rereads the whole figure, and on some of them the
 total comes back lower than the one before, which a cumulative onset curve
 cannot do. A window containing such a vintage is scored against an
 increment the situation reports did not add, so it is left unscored rather
-than charged to the forecast. The fit itself needs no such rule: it carries
-a per-vintage scan level.
+than charged to the forecast.
 
 A vintage inside the window matters as much as one at its end, which is why
 the test is on the window rather than on the target vintage alone. A reread

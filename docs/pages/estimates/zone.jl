@@ -1,6 +1,6 @@
 # # Health-zone estimates
 #
-# This page splits each patch of the joint fit across its health zones, giving each zone's reproduction number, share of the patch, one-week forecast and probability of at least a few cases.
+# This page splits each patch of the joint fit across its health zones, giving each zone's reproduction number, share of the patch and one-week forecast.
 # The [health-zone model](@ref "Health-zone model") on the methods page gives the maths, and the interactive map is on the [dashboard](@ref "Dashboard").
 # The one-week zone forecast is on the [health-zone forecasts](@ref "Health-zone forecasts") page and its scores in the [health-zone forecast evaluation](@ref "Health-zone forecast evaluation").
 
@@ -176,7 +176,7 @@ MarkdownTable(zone_overview_display) #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Every health zone, highest-ranked first.
+#md # Every health zone, the zones whose reproduction number is modelled separately first, each group by decreasing probability that it exceeds one.
 #md # The share is of the patch's infections at the cut-off, in percent, and the share, reproduction number and deviation are medians with 90% intervals.
 #md # A zone whose reproduction number is not modelled separately takes it from its province.
 #md # </figcaption>

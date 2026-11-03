@@ -2240,8 +2240,7 @@ One-row, two-panel figure summarising when the outbreak began. The left
 panel is the posterior density of the outbreak start date, the calendar date
 of the import that started the outbreak, from the outbreak age `T` as
 `as_of_date` minus `T`. The right panel is the joint `(doubling_time, T)`
-posterior pair plot. Shorter doubling times mean faster early growth, which
-reaches the same epidemic size in less time.
+posterior pair plot, with `doubling_time` the doubling time at the cut-off.
 """
 function plot_start_date_pair(
         chn;
@@ -2587,8 +2586,8 @@ That window runs from `rt_start`, the renewal start where the random walk
 begins, to the cut-off. Only that period is drawn, as 30%, 60% and 90%
 credible ribbons with no median line, with about `n_traj` thinned sampled
 trajectories overlaid faint to show the per-draw spread. The intervention
-breakpoint, the end of the scale-up (`breakpoint + ramp`, dotted) and the
-cut-off are marked. `seeding` is the calendar date of grid day 1, so day `d`
+breakpoint, one ramp time scale after it (`breakpoint + ramp`, dotted) and
+the cut-off are marked. `seeding` is the calendar date of grid day 1, so day `d`
 is `seeding + (d - 1)`.
 """
 function plot_rt(
@@ -2744,8 +2743,8 @@ that fit used. The per-stream fits walk from day 1, the joint from the
 breakpoint lead. `display_start` is the shared grid day the panels draw from,
 so every stream reads over the same window. `seeding` is the calendar date of
 grid day 1, so day `d` is `seeding + (d - 1)`. The intervention breakpoint,
-the end of the scale-up (`breakpoint + ramp`, dotted) and the cut-off are
-marked as in [`plot_rt`](@ref).
+one ramp time scale after it (`breakpoint + ramp`, dotted) and the cut-off
+are marked as in [`plot_rt`](@ref).
 
 `title`, `reference_label` and `panel_label` name what the figure is showing.
 They default to the per-stream reading, and the province in-sample page passes its
@@ -2935,13 +2934,12 @@ is rebuilt by [`reconstruct_patch_rt`](@ref). The national reference is
 
 Every panel draws 30/60/90% credible ribbons with no median line, on a shared
 y-axis so the provinces are compared rather than each rescaled to its own
-range. The intervention breakpoint (dashed), the end of the scale-up (dotted)
-and the cut-off are marked as in [`plot_rt`](@ref).
+range. The intervention breakpoint (dashed), one ramp time scale after it
+(dotted) and the cut-off are marked as in [`plot_rt`](@ref).
 
-The grey reference is the reproduction number implied by the summed
-provinces, the incidence-weighted mean of the panels rather than any one
-province or the central trend they pool toward. A panel tracking the grey
-band says that province moves with the country. Separation between panels is
+The grey reference is the central trend the provinces pool toward, net of
+depletion, rather than any one province. A panel tracking the grey band says
+that province moves with the trend. Separation between panels is
 the spatial signal, and `region_drift_sd`, the sd of each province's
 weekly deviation innovation, measures it.
 """
@@ -3678,7 +3676,7 @@ end
 Two-panel density of the no-onward-transmission counterfactual from
 [`predict_no_onward_deaths`](@ref). The left panel shows the *still expected*
 deaths (`:delta_deaths`, the future deaths in cases already infected by `T`,
-net of the `obs_deaths` already observed). The right panel shows the
+net of the deaths the model expects by `T`). The right panel shows the
 *projected total* (`:total_projected = obs_deaths + delta_deaths`), whose
 axis starts at `obs_deaths`. Both are lower bounds, assuming every onward
 transmission stops at time `T`.
@@ -3690,7 +3688,7 @@ function plot_no_onward_deaths(df::DataFrame; obs_deaths::Real)
     ## projected total cannot fall below the deaths already observed.
     ax1 = Axis(
         fig[1, 1];
-        xlabel = "Still expected deaths (beyond those already observed)",
+        xlabel = "Still expected deaths (beyond those expected by the cut-off)",
         ylabel = "Posterior density",
         title = "Still expected (future)"
     )
@@ -4207,8 +4205,7 @@ densities, since the occupancy carries the fitted reporting-basis offset and
 the shortfall does not. Drawn only when the forecast carries the bed streams
 (`bed_demand` and `isolation_level`).
 
-This shortfall is national, so it cannot show local saturation. On 13 June
-Ituri was at 93.9% occupancy while Sud-Kivu was at 21.9%, and beds free in
+This shortfall is national, so it cannot show local saturation. Beds free in
 one province cannot serve patients in another, so the national shortfall
 understates the local unmet need.
 """
@@ -4267,10 +4264,6 @@ from [`forecast_stream`](@ref), overlaid as a dotted step outline on
 the joint's own bins so both bed
 forecasts are visible against the observed occupancy.
 
-At a one-week-back freeze the bed capacity has no implied-capacity anchor,
-the reported occupancy rate starting only on 9 June, so the projected
-occupancy rides the capacity random walk back to the freeze date and the
-interval is wide.
 """
 function plot_forecast_beds_vs_truth(
         fc::DataFrame;
