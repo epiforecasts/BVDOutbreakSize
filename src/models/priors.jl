@@ -1783,16 +1783,7 @@ and `Rt_matrix` covers the horizon.
         knots_all = δ_knots
         days_all = days
     end
-    Rt_matrix = zeros(
-        promote_type(eltype(knots_all), eltype(Rt_national)), n_patches, ng
-    )
-    @inbounds for p in 1:n_patches
-        ## A view, not a copy: `interpolate_knots` only reads its knots.
-        δ_daily = interpolate_knots(view(knots_all, p, :), days_all, ng)
-        for t in 1:ng
-            Rt_matrix[p, t] = Rt_national[t] * exp(δ_daily[t])
-        end
-    end
+    Rt_matrix = patch_rt_matrix(Rt_national, knots_all, days_all)
     δ_patch = _detached(_daily_deviations, δ_knots, days, n)
     drift_moments = _detached(sum_to_zero_moments, F_drift)
     σ_δ = drift_moments.sd

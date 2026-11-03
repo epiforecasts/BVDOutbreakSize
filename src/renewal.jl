@@ -792,6 +792,27 @@ function interpolate_knots(
     return out
 end
 
+"""
+Each patch's reproduction number on the grid of the national series `R`:
+`R[t] · exp(δ[p, t])`, with `δ[p, :]` the patch's knot deviations
+`knots[p, :]` on the days `days` interpolated onto `1:length(R)`
+([`interpolate_knots`](@ref)). Returns an `(n_patches × length(R))` matrix.
+"""
+function patch_rt_matrix(
+        R::AbstractVector, knots::AbstractMatrix,
+        days::AbstractVector{<:Integer}
+    )
+    ng = length(R)
+    out = zeros(promote_type(eltype(R), eltype(knots)), size(knots, 1), ng)
+    @inbounds for p in axes(knots, 1)
+        δ = interpolate_knots(view(knots, p, :), days, ng)
+        for t in 1:ng
+            out[p, t] = R[t] * exp(δ[t])
+        end
+    end
+    return out
+end
+
 ## The knot segment `b` that day `t` falls in, between `days[b]` and
 ## `days[b + 1]`, and the fraction of the way along it. The fraction is
 ## clamped to `[0, 1]` so days outside the knot span hold flat at the nearest
