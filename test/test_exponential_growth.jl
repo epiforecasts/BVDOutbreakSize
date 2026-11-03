@@ -106,7 +106,7 @@ end
 
     ## The renewal-start seed `C_T = exp(r·m·G)` under the joint's growth
     ## and generation-interval priors. A growth-rate log-SD of 0.40 puts its
-    ## 99th percentile at about 2,000 infections a day (#926).
+    ## 99th percentile at about 2,000 infections a day.
     @model function _wrap()
         gi ~ to_submodel(generation_interval_model(cdf_nmax(Gamma(2.71, 5.65))))
         st ~ to_submodel(exponential_growth_model(gi.g))

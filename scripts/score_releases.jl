@@ -1392,8 +1392,8 @@ end
 ## The quantities a release's `stream_estimates.csv` carries, mapped to the
 ## per-release-by-stream table each is collected into. "R0" is the per-fit
 ## basic reproduction number, `exp(rt_state.log_R0)`, the by-dataset
-## analogue of `r0_row` below. Releases published before
-## `stream_estimates.csv` carried it have no R0 rows.
+## analogue of `r0_row` below. A release without the column gives no R0
+## rows.
 const STREAM_QUANTITY_DEST = Dict(
     "R_T" => "rt_by_release_by_stream.csv",
     "C_T" => "size_by_release_by_stream.csv",
@@ -1930,7 +1930,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         )
 
         ## Per-fit R_T, C_T and R0 estimates, split into their own tables.
-        ## Absent on releases published before the asset existed, a clean skip.
+        ## A release without the asset is skipped.
         est_path = fetch_asset(repo, tag, STREAM_ESTIMATES_ASSET, tagdir(tag))
         byqty = try
             stream_estimate_rows(tag, est_path, cutoffs[tag])
