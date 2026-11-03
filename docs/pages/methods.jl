@@ -1269,7 +1269,8 @@ cfr_prior_fig #hide
 #
 # and likewise for recoveries and rule-outs.
 # The discount runs on stay-day rather than calendar day.
-# Only the suspected pool absconds, so $U_{t,j} = \prod_{u<j}(1 - h_{\text{conf},\,t+u})$ is the probability a cohort admitted on day $t$ is still unconfirmed at stay-day $j$, with $h_{\text{conf}}$ the in-care confirmation hazard, and the discount stops once a cohort is confirmed.
+# Only the suspected pool absconds.
+# $U_{t,j} = \prod_{u<j}(1 - h_{\text{conf},\,t+u})$ is the probability a cohort admitted on day $t$ is still unconfirmed at stay-day $j$, with $h_{\text{conf}}$ the in-care confirmation hazard, so the discount stops once a cohort is confirmed.
 # Background admissions are never confirmed, so $U \equiv 1$ there and the rule-out schedule thins by $(1-\kappa)^d$.
 #
 # The report records in-care deaths under both labels together.
@@ -2048,7 +2049,8 @@ cfr_prior_fig #hide
 #
 # A third composition scores the per-province analysed-specimen volume by calendar week, conditional on the national analysed total the laboratory pipeline already scores.
 # Write $c_{p,t}$ for patch $p$'s onsets carried through the onset-to-report and report-to-receipt delays, and $\lambda^{\text{rec}}_t = (\lambda_{\text{bg}} * f_{\text{rec}})_t$ for the national non-BVD background carried to receipt.
-# The national BVD volume $\sum_q p_{\text{DRC},q}\, c_{q,t}$ is split by the relative case ascertainment times incidence, so the two compositions agree on how many of a patch's cases reach the laboratory, and each patch adds its share $w_p$ of the background.
+# The national BVD volume $\sum_q p_{\text{DRC},q}\, c_{q,t}$ is split by the relative case ascertainment times incidence, so the two compositions agree on how many of a patch's cases reach the laboratory.
+# Each patch also adds its share $w_p$ of the background.
 # Summed over the printed days $t$ of week $i$, the modelled split is
 #
 # ```math
