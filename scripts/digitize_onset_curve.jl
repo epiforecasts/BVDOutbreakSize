@@ -90,8 +90,8 @@
 # almost always by a single case, so a between-vintage increment of one is
 # at the noise floor and anything larger is signal.
 #
-# The values are approximate and are not fitted by the model; they are captured
-# for later use (see data/README.md and #488).
+# The values are approximate. The model fits them as the symptom-onset
+# stream (see data/README.md and #488).
 #
 # Dependencies: poppler (`pdfimages`, `pdftotext`, `pdfinfo`) on PATH. No
 # Julia packages beyond stdlib.

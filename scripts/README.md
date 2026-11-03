@@ -187,7 +187,7 @@ CI uses `--project=docs` because that environment is already instantiated at tha
 | `run.jl` | `.` | Regenerates the published results by running the report pages. |
 | `reproduce.jl` | none | Bootstraps a full reproduction from a fresh clone; run with `curl -fsSL https://raw.githubusercontent.com/epiforecasts/BVDOutbreakSize/main/scripts/reproduce.jl \| julia`. |
 | `backfill_forecasts.jl` | none | Reconstructs the one-week-ahead forecast each past release made but never saved, for `score_releases.jl` to score. Needs only `Dates` itself: it checks out each release tag into its own worktree and runs there under that tag's own project. |
-| `backfill_drivers/driver_v1.0.0.jl`, `driver_v1.1.0.jl` | that tag's own `docs` | Standalone drivers for the two release tags whose model predates the fit registry. Run by `backfill_forecasts.jl`, not directly. |
+| `backfill_drivers/driver_v1.0.0.jl`, `driver_v1.1.0.jl` | that tag's own `docs` | Standalone drivers for the two release tags whose model is defined inline in that tag's `analysis.jl`. Run by hand in a worktree checked out at the tag; `backfill_forecasts.jl` does not call them. |
 
 ## Formatting
 

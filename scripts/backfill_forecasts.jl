@@ -41,9 +41,9 @@
 # package, so `integral_driver` reproduces each one's calls inline; they are
 # listed in `INTEGRAL_TAGS` and added to the run. v1.3.0 forecasts the confirmed
 # streams, v1.2.0 the reported/suspected/export streams. The earlier v1.0.0 and
-# v1.1.0 define their model inline in that tag's analysis.jl, so once
-# smoke-validated they get standalone driver files under
-# `scripts/backfill_drivers/` that `backfill_one` runs directly.
+# v1.1.0 define their model inline in that tag's analysis.jl, so they have
+# standalone driver files under `scripts/backfill_drivers/`, run by hand in a
+# worktree checked out at the tag rather than by `backfill_one`.
 #
 # The published reports only ever showed the 7-day horizon. The longer horizons
 # reconstruct forecasts that tag's code would have made but never displayed.
@@ -80,8 +80,8 @@ const PREREGISTRY_TAGS = ("v1.4.0", "v1.5.0", "v1.6.0")
 ## own joint and forecast calls inline. v1.3.0 forecasts the confirmed streams;
 ## v1.2.0 forecasts the reported/suspected/export streams. The earlier
 ## v1.0.0/v1.1.0 define their model inline in that tag's own analysis.jl, so
-## they are not inlined here: once smoke-validated they get standalone driver
-## files under `scripts/backfill_drivers/` that `backfill_one` runs directly.
+## they are not inlined here: their standalone driver files under
+## `scripts/backfill_drivers/` are run by hand in a worktree at the tag.
 ## Extending this tuple is the single place to grow integral coverage.
 const INTEGRAL_TAGS = ("v1.2.0", "v1.3.0")
 ## Each fit samples with this many threads, so the default concurrency stays

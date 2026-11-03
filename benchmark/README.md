@@ -6,7 +6,7 @@ Each benchmark times one unconstrained log-density evaluation, and one gradient 
 ## Why per component
 
 The sampler's cost is the gradient of `bvd_joint`, but on its own that is not a useful benchmark.
-One gradient is about 14 ms over 76 parameters, behind a cold compile of roughly 18 minutes, most of it type inference rather than Mooncake.
+One gradient is about 14 ms over 76 parameters, behind a cold compile of roughly 18 minutes, most of it Mooncake rule construction (see [Compile cost](#compile-cost)).
 A full-joint number alone says nothing about where the time went.
 
 The components are the units the joint is built from.

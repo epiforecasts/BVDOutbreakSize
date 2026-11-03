@@ -522,9 +522,8 @@ No script tracks mirror-sourced values, so this check is manual.
   **2026-08-25 (SitRep 103), deaths, mirror 2755 against our 2744**: SitRep 103 gives 2744 in its page-1 headline, in its Total row and as its province sum (2133+512+89+8+1+1), three independent agreements.
   The value 2755 appears nowhere in SitReps 101-104, so it is a mirror transcription error with no basis in any adjacent vintage.
   This closes the cross-check the SitRep 103 addition deferred in its `source =` string.
-  **The mirror is a cross-check for the national series, not a source**: it carries 86 of the 102 report dates the manifest holds and four values the PDFs settle against it, so its series is never pasted into the manifest wholesale.
+  **The mirror is a cross-check for the national series, not a source**: it misses some of the report dates the manifest holds and carries values the PDFs settle against it, so its series is never pasted into the manifest wholesale.
   Province and health-zone values the PDF does not print follow the fallback order in the section above.
-  `scripts/confirm_insp_data.jl` no longer prints ready-to-paste TOML blocks; its stale "upstream-primary" header, and the matching prose in the root README, `scripts/README.md`, `Taskfile.yml` and the manifest's own header, are corrected to match section 2 above and the header of `scripts/download_sitreps.jl`.
 - **No break-date entry for SitRep 090's mixed-direction harmonisation (12 August)**: the open question in issue #569, resolved against the SitRep 065 precedent already recorded under `confirmed_break_dates`.
   The whole national discrepancy is 2 cases and 3 deaths, localised to Wamba (cases 43 → 41) and Pawa (deaths 11 → 14) in the bullet above.
   065 was deliberately left off the break-date list at 6 cases and 3 deaths, on the stated ground that both gaps sit well inside the surveillance dispersion and the increment likelihood is if anything under-fed rather than over-fed.

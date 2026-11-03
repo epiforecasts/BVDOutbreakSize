@@ -15,7 +15,7 @@ const SAMPLES = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 500
 const CHAINS = length(ARGS) >= 2 ? parse(Int, ARGS[2]) : 4
 const AD = length(ARGS) >= 3 ? ARGS[3] : "mooncake"
 
-## Enzyme is opt-in (~3x faster than the Mooncake default on the joint).
+## Enzyme is opt-in.
 ## Its weak-dep extension registers only once `Enzyme` is loaded.
 adtype = if AD == "enzyme"
     @eval using Enzyme

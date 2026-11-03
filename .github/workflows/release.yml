@@ -168,8 +168,8 @@ jobs:
           # `failure` is a judged bad fit. `cancelled` or `timed_out` is a
           # build that never reached a verdict (as at GitHub's six-hour cap),
           # and says nothing about the fits either way. The notes say which.
-          # `unknown` stays silent: that is the state before the convergence
-          # job exists.
+          # `unknown` stays silent: there is no completed main build, or it has
+          # no convergence job.
           BANNER=""
           case "$VERDICT" in
             failure)
