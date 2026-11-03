@@ -818,10 +818,8 @@ and population, so the deviations left for the pool are modest.
 The basis coordinates `y_cap` are drawn centred, on the scale `τ_cap`,
 because the province bed and occupancy counts inform them. The data then
 pin each deviation rather than `τ_cap`, and the non-centred
-`τ_cap Q z` would tie `z` to `τ_cap` along a funnel. On the joint
-posterior `log τ_cap` correlates at −0.96 with the log mean square of the
-`z`. Both forms carry the same prior, so only the sampled coordinates
-differ.
+`τ_cap Q z` would tie `z` to `τ_cap` along a funnel. Both forms carry the
+same prior, so only the sampled coordinates differ.
 
 The cumulative admissions differ from the stock that splits the bed demand
 in [`treatment_flow_model`](@ref). The stock counts
@@ -1084,19 +1082,15 @@ end
 Shared pooling SD `σ_bg` for the non-BVD background walk
 ([`background_walk_model`](@ref)). Sampled once at the composer level and
 passed to the suspected-case background, whose level the suspected-death
-background inherits, so one time-variation scale serves both streams. The prior is a half-normal of scale 0.3.
+background inherits, so one time-variation scale serves both streams. The
+prior is a half-normal of scale 0.3.
 
 The background is degenerate with outbreak size, so the prior still
 regularises rather than freeing the scale. A wide random effect would let
 individual windows absorb arbitrary suspected counts and re-open the
 posterior mode in which the background explains the majority of suspected
 cases, and regularising `σ_bg` toward zero keeps the time variation a
-perturbation of the informative scalar baselines.
-
-With the daily new-suspect series carried to the cut-off the posterior
-sits at 0.17 to 0.22. At 0.3 that posterior sits below the scale, so the
-data set the time variation rather than the prior. Returns
-`(; σ_bg)`.
+perturbation of the informative scalar baselines. Returns `(; σ_bg)`.
 """
 @model function background_pooling_model(;
         pooling_prior = truncated(Normal(0.0, 0.3); lower = 0)
@@ -1443,9 +1437,7 @@ passive-surveillance streams are data-rich, so each stream's dispersion is
 strongly informed and the non-centred form
 `inv_sqrt_k_s = exp(μ_log + τ z_s)` funnels, with
 `z_s = (log_isk_s − μ_log)/τ` diverging as `τ → 0` and stretching NUTS
-trajectories. On the joint, centring removes that funnel: worst dispersion
-bulk-ESS 102 → 156, divergences 5 → 2, and about 10% faster wall-clock at a
-150×2 fit. Pass `centred = false` for the non-centred form, the better
+trajectories. Pass `centred = false` for the non-centred form, the better
 choice when the streams are data-poor and prior-dominated. The population
 mean is centred on the shared `1/sqrt(k)` prior of
 [`surveillance_dispersion_model`](@ref) (`exp(μ_log)` near 0.6), and the
@@ -2227,8 +2219,7 @@ low.
 The basis coordinates `y_bg` are drawn centred, on the scale `τ_bg`,
 because that composition informs them. The data then pin each deviation
 rather than `τ_bg`, and the non-centred `τ_bg Q z` would tie `z` to `τ_bg`
-along a funnel. On the joint posterior `log τ_bg` correlates at −0.93 with
-the log mean square of the `z`. Both forms carry the same prior, so only
+along a funnel. Both forms carry the same prior, so only
 the sampled coordinates differ.
 
 With one patch the whole background belongs to it and nothing is sampled.
