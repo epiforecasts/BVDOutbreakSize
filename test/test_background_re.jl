@@ -156,7 +156,7 @@ end
     ## With the default onset ramp the gated background grows in from zero
     ## rather than stepping straight to the baseline at the onset, so the first
     ## non-zero day is a small fraction of the baseline and the day-to-day rise
-    ## across the boundary is gradual (no one-day jump to the full level).
+    ## across the boundary is gradual.
     n, onset, σ_rw = 40, 18, 0.0
     st = returned(
         background_walk_model(n, σ_rw; onset = onset, onset_ramp = 7),
@@ -169,7 +169,7 @@ end
     @test st.λ[onset] ≈ st.λ_mu / 7  # first window day is 1/ramp of level
     @test st.λ[onset + 6] ≈ st.λ_mu  # reaches the level after the ramp
     @test st.λ[onset] < st.λ[onset + 1] < st.λ[onset + 6]  # monotone ramp-in
-    ## onset_ramp = 1 recovers the old hard onset (full level on day one).
+    ## onset_ramp = 1 gives a hard onset (full level on day one).
     hard = returned(
         background_walk_model(n, σ_rw; onset = onset, onset_ramp = 1),
         rand(
@@ -231,9 +231,10 @@ end
         chain_type = FlexiChains.VNChain, progress = false
     )
 
-    ## The pooling SD reaches the chain, so the gated tilde ran.
+    ## The pooling SD reaches the chain, so the gated tilde ran. The match
+    ## excludes the background admission walk SD, `σ_bga`.
     ks = collect(keys(chn))
-    σ_key = only(filter(k -> occursin("σ_bg", string(k)), ks))
+    σ_key = only(filter(k -> occursin(r"σ_bg(?!\w)", string(k)), ks))
     σ = vec(Array(chn[σ_key]))
     @test length(σ) == 20
     @test all(isfinite, σ)

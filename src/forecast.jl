@@ -104,10 +104,10 @@ ascertainment, and each stream's own likelihood. Columns:
   counterparts, present when `obs_confirmed` and `obs_confirmed_deaths` are
   supplied.
 - `:cases_new`, … `:confirmed_deaths_new`: new counts over the horizon.
-- `:isolation_level`: the reported isolation occupancy on the last day, the
-  censored negative binomial around the modelled demand plus the
-  reclassification offset. `:bed_demand` is the modelled demand that day
-  and `:bed_shortfall` its excess over the modelled bed capacity.
+- `:isolation_level`: the reported isolation occupancy on the last day,
+  the national occupancy censored at the national beds
+  ([`treatment_forecast_model`](@ref)). `:bed_demand` is the modelled
+  demand that day and `:bed_shortfall` its excess over the national beds.
 - `:admissions_fc`, `:incare_deaths_fc`, `:ruleouts_fc`: the daily
   isolation flows on the last day.
 - `:recovered_cum`, `:recovered_new`: recovered among confirmed. The
@@ -168,9 +168,7 @@ function forecast_reported(
         ## floats: a prior draw far in the tail can overflow an integer.
         df.bed_demand = round.(at("forecast_bed_demand"))
         df.isolation_level = round.(Int, iso)
-        df.bed_shortfall = max.(
-            df.bed_demand .- round.(at("forecast_bed_capacity")), 0.0
-        )
+        df.bed_shortfall = round.(at("forecast_bed_shortfall"))
         df.admissions_fc = round.(Int, at("forecast_admissions.obs"))
         df.incare_deaths_fc = at("forecast_incare_deaths.increments")
         df.ruleouts_fc = at("forecast_ruleouts.increments")
@@ -202,9 +200,9 @@ observes them, one row per draw, read from the posterior-predictive draws
 `pp` of a fit carrying the triangle ([`forecast_draws`](@ref)). It
 separates cases that have had their onset but are not yet reported from
 cases whose onset has not happened. The model runs the fitted reporting
-hazard, ascertainment and scan noise forward to a future vintage
-`horizon` days past the cut-off, which must be a whole number of weeks
-(see [`onset_forecast_model`](@ref)). Columns, all per draw:
+hazard and ascertainment forward, with scan noise drawn from its prior, to
+a future vintage `horizon` days past the cut-off, which must be a whole
+number of weeks (see [`onset_forecast_model`](@ref)). Columns, all per draw:
 
   - `onsets_to_date`: symptom onsets that have happened by the cut-off.
   - `onset_reports_to_date`: of those, the number the triangle should
@@ -341,17 +339,19 @@ posterior-predictive draws `pp` of the patch joint
 the fitted national walk and the province's correlated, mean-reverting
 deviation, and each province renews with the fitted importation. Its
 confirmed cases and confirmed deaths are the national forecast counts split
-each week by the fitted province compositions, with the province's own
-delays, relative ascertainment and severity, so the provinces add up to the
+each week by the fitted province compositions, through the national delays
+and the province's relative ascertainment and severity, so the provinces add up to the
 national forecast in every draw (see [`bvd_joint`](@ref)).
 
 Returns one row per province and draw, with columns `patch`, `province`
 (its label in `patch_labels`), `draw`, `infections_new`, `rt_forecast` (the
 province's reproduction number on the last day), and `confirmed_new` and
 `confirmed_deaths_new` when the fit carries the matching composition, and
-`isolation_level` and `bed_capacity` (the province's patients in isolation
-and beds on the last day) when it carries the province occupancy and bed
-splits. These need `horizon` to be a whole number of weeks.
+`isolation_level`, `bed_capacity` and `admissions_new` when it carries the
+province occupancy and bed splits: the province's patients in isolation and
+beds on the last day, and its admissions over the horizon
+([`treatment_forecast_model`](@ref)), each adding up to the national
+forecast. The weekly counts need `horizon` to be a whole number of weeks.
 """
 function forecast_provinces(
         pp;
@@ -386,14 +386,23 @@ function forecast_provinces(
     end
     conf = weekly("forecast_province_confirmed")
     conf_deaths = weekly("forecast_province_deaths")
-    ## Occupancy and beds are levels, read at the vintage `h` days on.
-    function level(key)
+    ## Levels are read `h` days on and admissions summed over those days. A
+    ## fit with no province rows draws one national row, which is skipped.
+    function daily(key, f)
         v = _forecast_vectors(pp, key)
-        (isnothing(v) || isnothing(j)) && return nothing
-        return [reshape(x, n_patches, :)[:, j] for x in v]
+        isnothing(v) && return nothing
+        len = length(first(v))
+        len == H && n_patches > 1 && return nothing
+        len == n_patches * H || throw(
+            ArgumentError("$key has $len entries per draw, not $(n_patches * H)")
+        )
+        return [f(reshape(x, n_patches, :)) for x in v]
     end
-    iso = level("forecast_province_isolation")
-    beds = level("forecast_province_beds")
+    iso = daily("forecast_isolation.province", x -> x[:, h])
+    beds = daily("forecast_province_beds", x -> x[:, h])
+    adm = daily(
+        "forecast_admissions.province", x -> vec(sum(x[:, 1:h]; dims = 2))
+    )
     nd = length(inf)
     out = DataFrame(
         patch = Int[], province = String[], draw = Int[],
@@ -422,6 +431,8 @@ function forecast_provinces(
         (out.isolation_level = [iso[i][p] for i in 1:nd for p in 1:np])
     isnothing(beds) ||
         (out.bed_capacity = [beds[i][p] for i in 1:nd for p in 1:np])
+    isnothing(adm) ||
+        (out.admissions_new = [adm[i][p] for i in 1:nd for p in 1:np])
     return out
 end
 
@@ -440,19 +451,10 @@ Only the incident and level quantities are archived: `confirmed cases` and
 `onset reports` new over the horizon, and the supply-limited `isolation beds`
 occupancy. The cumulative totals are revised across data vintages, so they
 are not archived. The reporting triangle's own total is revised by more than
-the rest, since the printed total falls between consecutive vintages (2531 to 2523, and
-2018 to 1996), which late reporting cannot produce.
+the rest, since the printed total falls between some consecutive vintages,
+which late reporting cannot produce.
 
-When the forecast carries the confirmed/suspect ward split
-(`confirmed_occupancy` / `suspect_occupancy`, the occupancy partitioned by
-the cut-off confirmed share), the two ward occupancy levels are archived too
-as `treatment beds` (confirmed) and `isolation beds (suspected)`, each scored
-against its own Tableau 6 occupancy sub-stock. The total `isolation beds`
-occupancy stays as its own stream. Nothing produces those two columns yet:
-[`forecast_reported`](@ref) projects the total occupancy alone, so the two
-ward entries are reachable only from a forecast a caller has partitioned
-itself, which today is the tests. Streams a forecast does not carry are
-skipped, so this costs a real forecast nothing. `thin` keeps every
+Streams a forecast does not carry are skipped. `thin` keeps every
 `thin`-th draw so the archive stays compact when it is saved as a release
 asset.
 """
@@ -462,8 +464,6 @@ function forecast_archive(fcs; made_date::Date, thin::Integer = 1)
         (:confirmed_deaths_new, "confirmed deaths"),
         (:recovered_new, "recovered"),
         (:isolation_level, "isolation beds"),
-        (:confirmed_occupancy, "treatment beds"),
-        (:suspect_occupancy, "isolation beds (suspected)"),
         (:onset_reports_new, "onset reports"),
     )
     out = DataFrame(
@@ -551,8 +551,8 @@ one row per confirmed stream (laboratory-confirmed cases and confirmed
 deaths) and quantity (cumulative total by the cut-off plus the horizon, or
 new this week), reporting the equal-tailed 30/60/90% credible interval
 endpoints (`lower_90 … upper_90`) used by the other summary tables. The
-suspected reported-case and suspected-death streams are no longer reported,
-so they are not shown as forecast targets.
+suspected reported-case and suspected-death streams are not shown as
+forecast targets.
 """
 function forecast_table(fc::DataFrame; digits::Integer = 0)
     _row(
@@ -703,11 +703,6 @@ scored against it too as a single level row. Returns a `DataFrame` with the
 observed count, the equal-tailed 30/60/90% predictive intervals (the same
 endpoints as the other summary tables), and whether the observed count falls
 inside the 90% interval.
-
-Note that at a one-week-back freeze the bed capacity is weakly informed (the
-reported occupancy rate starts only on 9 June), so the projected bed
-occupancy rides the capacity random walk back to the freeze date and its
-interval is wide.
 """
 function forecast_vs_truth(
         fc::DataFrame;
@@ -764,16 +759,4 @@ function _has_key(chn, key)
     catch
         return false
     end
-end
-
-## Draws of the first key in `candidates` the chain carries, or `nothing`
-## when it carries none. Single-stream fits bind each stream's submodel under
-## a composer-level name (`cases_state.expected_reports`), and the joint
-## carries those nested names alongside its own un-prefixed aliases
-## (`expected_reports_T`), so one ordered list serves both fit kinds.
-function _resolve_draws(chn, candidates)
-    for key in candidates
-        _has_key(chn, key) && return _draws(chn, key)
-    end
-    return nothing
 end

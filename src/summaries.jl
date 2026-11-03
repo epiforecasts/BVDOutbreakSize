@@ -172,19 +172,51 @@ function _md_align(col)
 end
 
 """
+    markdown_table(df::DataFrame; missing_text = "") -> String
+
 GitHub-flavoured markdown table for a `DataFrame`, one header row from the
 column names and one body row per data row. Used to persist a rendered table
 to disk so a static page can embed it without re-running the fit, and by
-[`MarkdownTable`](@ref) to put a table on a Literate page.
+[`MarkdownTable`](@ref) to put a table on a Literate page. A `missing` cell
+prints as `missing_text`, blank by default.
 """
-function markdown_table(df::DataFrame)
+function markdown_table(df::DataFrame; missing_text::AbstractString = "")
     cols = names(df)
     header = "| " * join(cols, " | ") * " |"
     sep = "| " * join((_md_align(df[!, c]) for c in cols), " | ") * " |"
+    cell(x) = ismissing(x) ? missing_text : _md_cell(x)
     rows = map(eachrow(df)) do row
-        "| " * join((_md_cell(row[c]) for c in cols), " | ") * " |"
+        "| " * join((cell(row[c]) for c in cols), " | ") * " |"
     end
     return join(vcat(header, sep, rows), "\n") * "\n"
+end
+
+"""
+    finite_round(x; digits = 2) -> Union{Missing, Float64}
+
+`x` rounded to `digits` decimals for a summary table, or `missing` when `x`
+is `missing`, `NaN` or infinite, so an unscored value prints as the table's
+`missing_text` in [`markdown_table`](@ref) rather than as `NaN`.
+"""
+function finite_round(x; digits::Integer = 2)
+    return ismissing(x) || !isfinite(x) ? missing :
+        round(Float64(x); digits)
+end
+
+"""
+    join_names(names) -> String
+
+The names as one phrase for a summary bullet: `"a"`, `"a and b"`,
+`"a, b and c"`. When any name itself contains a comma, as the province
+stream names do (`"Confirmed cases, Ituri"`), the names are separated by
+`"; "` instead of `", "`, so `"a, x; b, y and c, z"`. An empty list gives
+an empty string.
+"""
+function join_names(v::AbstractVector)
+    isempty(v) && return ""
+    strs = string.(v)
+    sep = any(contains(","), strs) ? "; " : ", "
+    return join(strs, sep, " and ")
 end
 
 """
@@ -275,11 +307,10 @@ function _num_divergences(chn)
     return Int(sum(skipmissing(flags)))
 end
 
-# Post-warmup draws across every chain. A divergence count means little
-# without it: six divergences in 3200 draws and six in twelve are not the
-# same fit. Draws whose flag is missing are left out, as they are from the
-# count above, so the two are over the same set and their ratio is the
-# divergence rate among the draws whose outcome is known.
+# Post-warmup draws across every chain. Draws whose flag is missing are
+# left out, as they are from the count above, so the two are over the same
+# set and their ratio is the divergence rate among the draws whose outcome
+# is known.
 function _num_draws(chn)
     flags = _numerical_error_flags(chn)
     flags === nothing && return 0
@@ -316,7 +347,7 @@ of divergent transitions and the number of post-warmup draws they are out of.
 function fit_diagnostics(chn)
     ## Quantities undefined in some draw are excluded by name, and any
     ## remaining non-finite entry (a fixed or degenerate quantity) by value.
-    ## Neither masks the worst genuine value across the sampled parameters.
+    ## Neither masks the worst value across the sampled parameters.
     exclude = (_DIAGNOSTIC_EXCLUDE..., _nonfinite_keys(chn)...)
     rhats = filter(isfinite, _scalar_stats(FlexiChains.rhat(chn); exclude))
     bulk = filter(
@@ -911,8 +942,9 @@ forecast.
 
 The columns are the new confirmed cases and confirmed deaths over the week,
 the patients in isolation and the isolation beds at the end of the week, the
-new infections over the week, the reproduction number at the end of the week
-and the probability that it is above one, each when `fc` carries it.
+new admissions and new infections over the week, the reproduction number at
+the end of the week and the probability that it is above one, each when `fc`
+carries it.
 """
 function province_forecast_headline(
         fc::DataFrame;
@@ -929,6 +961,7 @@ function province_forecast_headline(
             (:confirmed_deaths_new, "New confirmed deaths", 0),
             (:isolation_level, "Patients in isolation", 0),
             (:bed_capacity, "Isolation beds", 0),
+            (:admissions_new, "New admissions", 0),
             (:infections_new, "New infections", 0),
             (:rt_forecast, "R at T+7", 2),
         )
@@ -985,8 +1018,9 @@ end
 """
 Per-province isolation beds at the cut-off, from the province occupancy and
 bed splits in [`treatment_flow_model`](@ref): one row per province with
-the modelled bed count, the latent bed demand, the occupied beds (demand
-capped at the beds), the utilisation and the shortfall, each a median with
+the beds, the latent bed demand, the occupied beds (the national
+occupancy split on the demand shares), the utilisation and the patients
+above the beds, each a median with
 a 90% credible interval. Draws that are not finite are left out of each
 cell. Expects a chain from [`bvd_joint`](@ref) with
 more than one patch, which stores these as the vector deterministics
@@ -1021,7 +1055,7 @@ function province_bed_table(
         "Bed demand" => String[],
         "Occupied beds" => String[],
         "Utilisation (%)" => String[],
-        "Shortfall" => String[]
+        "Patients above beds" => String[]
     )
     for p in 1:np
         push!(
@@ -1138,15 +1172,6 @@ function patch_summary_table(
     ## drop the column. The province belongs in the surrounding heading.
     return patch === nothing ? _prettify(rename(df, :patch => "Patch")) :
         _prettify(select(df, Not(:patch)))
-end
-
-## Per-patch draws of the final column of a `(n_patches × n_vintages)` matrix
-## deterministic (`province_shares`, `province_death_shares`): the modelled
-## split at the most recent vintage.
-function _per_patch_last_share(chn, sym::Symbol, np::Integer)
-    ms = [collect(v) for v in vec(collect(chn[sym]))]
-    nv = size(first(ms), 2)
-    return [[m[p, nv] for m in ms] for p in 1:np]
 end
 
 """
@@ -1281,6 +1306,7 @@ const _PROVINCE_FORECAST_PANELS = (
     (:confirmed_deaths_new, "New confirmed deaths by T+7"),
     (:isolation_level, "Patients in isolation at T+7"),
     (:bed_capacity, "Isolation beds at T+7"),
+    (:admissions_new, "New admissions by T+7"),
     (:infections_new, "New infections by T+7"),
     (:rt_forecast, "Reproduction number at T+7"),
 )
@@ -1379,6 +1405,7 @@ function province_forecast_table(
     for p in 1:np, (col, quantity, dg) in (
                 (:isolation_level, "Patients in isolation at T+$(horizon)", digits),
                 (:bed_capacity, "Isolation beds at T+$(horizon)", digits),
+                (:admissions_new, "New admissions by T+$(horizon)", digits),
                 (:infections_new, "New infections by T+$(horizon)", digits),
                 (:rt_forecast, "Reproduction number at T+$(horizon)", 2),
             )

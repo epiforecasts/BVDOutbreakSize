@@ -333,7 +333,7 @@ admissions_panel = (;
     title = "Admissions/day",
     dates = _vintage_dates(obs.treatment_admissions_history.days),
     replicates = _vintage_replicates(
-        pp_joint, @varname(admissions.obs)
+        pp_joint, @varname(admissions.increments)
     ),
     observed = obs.treatment_admissions_history.counts,
     colour = :teal, cumulative = false,
@@ -521,6 +521,7 @@ joint_vintage_incidence_stopped_fig #hide
 # ### Stream calibration
 #
 # Whether each stream's per-vintage predictions are calibrated against the observed counts.
+# The values behind the plot are tabulated in the summary at the top of the page.
 
 stream_calibration_table = stream_calibration(vintage_panels);
 
@@ -535,16 +536,6 @@ stream_calibration_fig = plot_stream_calibration(stream_calibration_table);
 #md # ```
 
 stream_calibration_fig #hide
-
-#md # ```@raw html
-#md # <details><summary>Per-stream calibration table</summary>
-#md # ```
-
-stream_calibration_table #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # ### Exports
 #
@@ -758,12 +749,14 @@ onset_ppc_by_date_fig #hide
 correlation_fig = plot_correlation_heatmap(
     chn_joint,
     [
-        :C_T, :R_T, :T, :CFR, :p_drc, :p_uganda, :lambda_bg, :tau_test,
+        :C_T, :R_T, :T, :CFR, :p_drc_national, :p_uganda, :lambda_bg,
+        :tau_test,
         :expected_reports_T, :expected_deaths_T, :expected_confirmed_T,
     ];
     labels = Dict(
         :C_T => raw"C_T", :R_T => raw"R_T", :T => raw"T",
-        :CFR => raw"\mathrm{CFR}", :p_drc => raw"p_\mathrm{drc}",
+        :CFR => raw"\mathrm{CFR}",
+        :p_drc_national => raw"p_\mathrm{drc,\ national}",
         :p_uganda => raw"p_\mathrm{ug}", :lambda_bg => raw"\lambda_\mathrm{bg}",
         :tau_test => raw"\tau_\mathrm{test}",
         :expected_reports_T => raw"\mathrm{susp.\ cases}",
@@ -1311,7 +1304,7 @@ rt_stream_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The reproduction number at each release with one panel per dataset, on a shared calendar axis and the fixed range of the figure above.
-#md # A dataset the report also fits alone carries that fit's current-model band, and confirmed deaths carries none.
+#md # A dataset the report also fits alone carries that fit's current-model band.
 #md # Only the most recent releases published these estimates, so the panels span a shorter window than the overview.
 #md # </figcaption>
 #md # </figure>
@@ -1392,7 +1385,7 @@ r0_evolution_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The basic reproduction number published at each release (blue) and from the current model frozen at earlier cut-offs (red), as medians with 30%, 60% and 90% interval bars, with the current fit as a flat band.
-#md # Releases began publishing this quantity recently, so the blue history is short.
+#md # The blue history starts at the first release that published this quantity.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -1472,7 +1465,7 @@ r0_stream_fig #hide
 # ### Delay sensitivity
 #
 # The death stream dates the outbreak from how far deaths lag symptom onset, so the assumed onset-to-death delay sets the implied infection count.
-# The baseline uses the hospital-pathway delay from the Isiro 2012 line-list reanalysis (onset to admission then admission to death, implied mean about 12 d).
+# The baseline uses the hospital-pathway delay from the Isiro 2012 line-list reanalysis (onset to admission then admission to death, implied mean about 13 d).
 # We refit the joint model under the community-pathway delay from the same reanalysis, for deaths in the community without a recorded admission (implied mean about 8 d).
 # The refit is the headline model with the headline's sampler settings and changes only the delay.
 
@@ -1561,7 +1554,8 @@ T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : no
 #md # </details>
 #md # ```
 
-# A slightly earlier common ancestor (Exponential growth) permits a marginally older outbreak, though the difference is small because the evolutionary rates are nearly identical.
+# A slightly earlier common ancestor (Exponential growth) permits a marginally older outbreak.
+# The re-fit moves the genetic bound seven days earlier, against an uncertainty of 16 days on the bound.
 
 #md # ```@raw html
 #md # <details><summary>Tree-prior infection-count table</summary>
@@ -1927,7 +1921,7 @@ frozen_contrast_fig #hide
 # ## Parameter recovery
 #
 # Whether the model recovers known values when fitted to data it simulated itself.
-# Each seed is one prior draw of the model run past the cut-off, kept when its outbreak size is within a factor of five of the one observed, and fitted with the headline joint's sampler settings.
+# Each seed is one prior draw of the model run past the cut-off, kept when its infection count is within a factor of five of the observed confirmed cases, and fitted with the headline joint's sampler settings.
 
 #md # ```@raw html
 #md # <details><summary>Recovery figure</summary>
@@ -2089,21 +2083,16 @@ dashboard_dir = joinpath(
 )
 mkpath(dashboard_dir)
 
-## The bullets under the summary heading at the top of the page. They read
-## tables built further down, so they are written here and read back when
-## the site is assembled.
+## The bullets and table under the summary heading at the top of the page.
+## They read tables built further down, so they are written here and read
+## back when the site is assembled.
 evaluation_insample_national_summary = let
-    fmt(x) = ismissing(x) || !isfinite(x) ? "n/a" :
-        string(round(x; digits = 2))
     cal = filter(r -> isfinite(r["90% coverage"]), stream_calibration_table)
     n_cov = count(>=(0.8), cal[!, "90% coverage"])
-    calibrated(r) = string(
-        r["Stream"], " (bias ", fmt(r["Bias"]), ", 90% coverage ",
-        fmt(r["90% coverage"]), ")"
-    )
+    biased = filter(r -> isfinite(r["Bias"]), cal)
     worst = first(
-        sort(cal, "Bias"; by = abs, rev = true), min(3, size(cal, 1))
-    )
+        sort(biased, "Bias"; by = abs, rev = true), min(3, size(biased, 1))
+    )[!, "Stream"]
     pred(x, observed) = string(
         "observed ", observed, " against a predictive median of ",
         round(Int, quantile(x, 0.5)), " (90% interval ",
@@ -2115,43 +2104,40 @@ evaluation_insample_national_summary = let
             "- **Streams:** ", n_cov, " of ", size(cal, 1),
             " fitted streams have 90% coverage of at least 0.8."
         ),
-        string(
-            "- **Least well reproduced:** ",
-            join(calibrated.(eachrow(worst)), "; "), "."
-        ),
+        isempty(worst) ? nothing :
+            string(
+                "- **Least well reproduced:** ", join_names(worst),
+                length(worst) == 1 ? " has" : " have",
+                " the largest absolute bias."
+            ),
         string(
             "- **Exports:** Uganda exports ",
             pred(pp_exports, obs.exported_cases), ", and export deaths ",
             pred(pp_exports_deaths, obs.exports_deaths), "."
         ),
     ]
-    ## Per stream, split the same way as the posterior predictive checks.
+    ## One row per stream, the streams still reporting first, split the
+    ## same way as the posterior predictive checks.
     reporting = Set(p.title for p in reporting_panels)
-    function block(lead, keep)
-        rows = filter(r -> keep(r["Stream"] in reporting), cal)
-        size(rows, 1) == 0 && return nothing
-        return join(
-            vcat(
-                [string("**", lead, "**"), ""],
-                [
-                    string(
-                        "- ", r["Stream"], ": bias ", fmt(r["Bias"]),
-                        ", 90% coverage ", fmt(r["90% coverage"]), " over ",
-                        r["Vintages"], " vintages."
-                    )
-                        for r in eachrow(rows)
-                ]
-            ), "\n"
-        )
-    end
-    blocks = filter(
-        !isnothing,
-        [
-            block("Streams still reporting", identity),
-            block("Streams no longer reporting", !),
-        ]
+    still = [s in reporting for s in cal[!, "Stream"]]
+    rows = vcat(cal[still, :], cal[.!still, :])
+    table = DataFrame(
+        "Stream" => rows[!, "Stream"],
+        "Still reporting" => [
+            s in reporting ? "yes" : "no" for s in rows[!, "Stream"]
+        ],
+        "Bias" => finite_round.(rows[!, "Bias"]),
+        "50% coverage" => finite_round.(rows[!, "50% coverage"]),
+        "90% coverage" => finite_round.(rows[!, "90% coverage"]),
+        "Vintages" => rows[!, "Vintages"],
     )
-    join(vcat([join(overall, "\n")], blocks), "\n\n")
+    join(
+        vcat(
+            [join(filter(!isnothing, overall), "\n")],
+            size(table, 1) == 0 ? String[] :
+                [markdown_table(table; missing_text = "n/a")]
+        ), "\n\n"
+    )
 end
 write(
     joinpath(dashboard_dir, "evaluation_insample_national.md"),

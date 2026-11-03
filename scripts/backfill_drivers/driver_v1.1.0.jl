@@ -10,7 +10,7 @@
 #
 # Run inside a worktree checked out at v1.1.0, against its `docs` project.
 # At v1.1.0 the joint model, the single-stream models, every submodel they
-# use AND `genetic_seeding_model` are defined INLINE in
+# use and `genetic_seeding_model` are defined inline in
 # `docs/examples/analysis.jl` (the package does not export them). That model
 # block (analysis.jl:445-1415) is reproduced verbatim below, unchanged except
 # for dropping the interleaved figure/prose lines (the `cfr_prior_fig` plot).

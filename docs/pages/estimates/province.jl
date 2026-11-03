@@ -87,7 +87,6 @@ province_headline #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The provinces compared from the joint posterior, as equal-tailed 90% credible intervals, with shares and probabilities computed draw by draw.
-#md # The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -220,8 +219,10 @@ province_bed_overview #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Beds, bed demand, occupied beds, utilisation and shortfall by province at the cut-off, from the occupancy and bed counts in the situation reports.
-#md # Occupied beds are the modelled demand capped at the beds, and the shortfall is the demand above them.
+#md # Beds, bed demand, occupied beds, utilisation and patients above the beds by province at the cut-off, from the occupancy and bed counts in the situation reports.
+#md # Each province's beds are its modelled share of the national capacity, and its occupied beds are its demand share of the national modelled occupancy.
+#md # Patients above the beds are the occupied beds in excess of them.
+#md # The provinces' beds and occupied beds sum to the national figures, but their patients above the beds can exceed the national shortfall.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -298,6 +299,8 @@ province_imports_fig #hide
 # We split it into people infected but not yet symptomatic and people with symptoms who have not yet been detected.
 # Together they are the infections in the community.
 # The [point prevalence](@ref methods-prevalence) section of the Methods gives the calculation.
+# A province's undetected count depends on its suspected-case detection probability.
+# The province compositions see that probability only as a product with case confirmation, so the province occupancy splits and its prior set it.
 # The table gives each rate per 100,000 residents and the number of people in the community, as medians with 90% credible intervals.
 
 #md # ```@raw html
@@ -355,41 +358,24 @@ province_rt_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The reproduction number of each province, with the national trajectory in grey.
-#md # The deviations sum to zero, so the grey band is the incidence-weighted middle of the panels rather than any one province.
+#md # The grey band is the central trend the provinces pool toward, net of depletion, rather than any one province.
 #md # Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi hold few confirmed cases, so their panels are carried mostly by the deviation prior and their widths are not measurements.
 #md # </figcaption>
 #md # </figure>
 #md # ```
 
 # The spread of the provinces' log-Rt deviations is the spatial diagnostic.
-# Its prior gives a 26% probability that the Ituri to Nord-Kivu ratio moves by more than 25% over the window.
 # With eight patches and five of them carrying little signal, the cross-province correlation is not identified and tracks its prior.
 
 #md # ```@raw html
 #md # <details><summary>Spatial hyperparameter summary table</summary>
 #md # ```
 
-## Labels for the spatial hyperparameters, shared by this table and the pair
-## plot against their prior below.
-spatial_labels = Dict(
-    :region_sd => "Rt deviation spread",
-    :region_halflife => "Rt deviation half-life (days)",
-    :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
-    :province_ascertainment_sd => "Ascertainment spread",
-    :importation_epsilon => "Importation intensity",
-    :importation_destination_sd => "Importation destination spread",
-    :importation_origin_destination_correlation =>
-        "Origin-destination correlation",
-    :importation_flow_sd => "Importation flow spread",
-    :importation_reciprocity => "Importation reciprocity",
-    :province_cfr_sd => "Lethality spread (logit)",
-    :province_death_ascertainment_sd => "Death-confirmation spread"
-)
 spatial_hyper_table = summary_table(
     chn_joint,
     [
         :region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd,
+        :province_suspected_ascertainment_sd, :province_ascertainment_sd,
     ];
     digits = 3, labels = spatial_labels
 );
@@ -455,6 +441,7 @@ province_cfr #hide
 # ## Province parameters against their priors
 #
 # The pair plots below set the province parameters against their prior, drawn from the province model.
+# The spatial hyperparameters against their prior are on the [province in-sample checks](@ref "Spatial hyperparameters against their prior") page.
 
 #md # ```@raw html
 #md # <details><summary>Draw from the patch model's prior</summary>
@@ -464,38 +451,6 @@ prior_patch_chn = patch_prior_draws(obs);
 
 #md # ```@raw html
 #md # </details>
-#md # ```
-
-#md # ```@raw html
-#md # <details><summary>Spatial hyperparameter pair plot (prior overlaid)</summary>
-#md # ```
-
-spatial_pair_fig = plot_pair(
-    chn_joint,
-    [
-        :region_sd, :region_halflife, :region_corr_primary_secondary,
-        :province_ascertainment_sd, :importation_epsilon,
-        :importation_destination_sd,
-        :importation_origin_destination_correlation, :importation_flow_sd,
-        :importation_reciprocity, :province_cfr_sd,
-        :province_death_ascertainment_sd,
-    ];
-    prior = prior_patch_chn, labels = spatial_labels
-);
-
-#md # ```@raw html
-#md # </details>
-#md # <figure class="bvd-figure">
-#md # ```
-
-spatial_pair_fig #hide
-
-#md # ```@raw html
-#md # <figcaption>
-#md # Joint posterior of the spatial hyperparameters, with the prior overlaid.
-#md # These are the spread, half-life and correlation of the Rt deviations, the spread of case ascertainment, the importation intensity, its destination and flow spreads and their correlations, and the spreads of lethality and death confirmation.
-#md # </figcaption>
-#md # </figure>
 #md # ```
 
 # Each province's pair plot sets the reproduction number at the cut-off against the relative case ascertainment, the case-fatality ratio against the relative death confirmation, and the importation intensity against the export weight relative to Ituri.
@@ -705,7 +660,7 @@ province_diagnostics_table #hide
 
 # ## Saving province assets
 #
-# The summary dashboard shows the province comparison, the province map, the reproduction number by province and the weekly cases against the reproduction number, so they are written here.
+# The summary dashboard shows the province summary table, the province map, the reproduction number by province and the weekly cases against the reproduction number, so they are written here.
 
 #md # ```@raw html
 #md # <details><summary>Write the province dashboard assets</summary>
@@ -729,9 +684,6 @@ CairoMakie.save(
         [province_infections_panel]; ncols = 1, panel_size = (680, 500)
     )
 )
-open(joinpath(dashboard_dir, "provinces.md"), "w") do io
-    print(io, province_headline_md)
-end
 ## The summary's compact province table: infections to date, R at the
 ## cut-off and the confirmed cases over the latest week of reports, the
 ## same week the cases against R figure ends on.

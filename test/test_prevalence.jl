@@ -51,7 +51,7 @@ end
     @test point_prevalence([5.0, 1.0], [1.0]) ≈ 1.0
 end
 
-@testitem "zone prevalence parameters shift the province CFR by the zone's" begin
+@testitem "zone prevalence parameters shift the province values by the zone's" begin
     using BVDOutbreakSize: _zone_prevalence_parameters, _ZONE_DELAY_KEYS
     using StatsFuns: logit, logistic
     joint = [
@@ -61,48 +61,74 @@ end
         ),
         (;
             inc_mean = 9.5, recovery_mean = 21.0,
-            ascertainment = [0.5, 0.7], cfr = [0.4, 0.6],
+            ascertainment = [0.5, 0.95], cfr = [0.4, 0.6],
         ),
     ]
     ## Three zone draws, so the third cycles back to the first joint draw.
     θ = [Float64.(eachindex(_ZONE_DELAY_KEYS)) .+ j for j in 1:3]
-    ## Logit contrasts; the second draw's third zone is far in the tail.
+    ## Logit fatality contrasts and relative ascertainment; the second
+    ## draw's third zone is far in the tail of both.
     sev = [[-0.5, 0.5, 0.0], [0.0, 0.0, 30.0], [1.0, -1.0, 0.0]]
-    asc = [[1.0, 2.0, 0.5], [2.5, 1.0, 1.0], [1.0, 1.0, 1.0]]
-    w = [[1.0, 1.0, 5.0], [3.0, 1.0, 1.0], [1.0, 2.0, 1.0]]
-    params = _zone_prevalence_parameters(joint, θ, asc, sev, w, [1, 1, 2])
-    ## Within each province the zones, weighted by their infections, keep
-    ## the province's ascertainment, in proportion to their contrasts; a
-    ## province's only zone takes its rate.
-    @test params[1].ascertainment ≈ [0.4 / 1.5, 0.8 / 1.5, 0.6]
-    @test params[2].ascertainment ≈ [0.5 * 2.5 * 4 / 8.5, 0.5 * 4 / 8.5, 0.7]
-    @test params[3].ascertainment ≈ [0.4, 0.4, 0.6]
+    asc = [[0.5, 2.0, 1.0], [2.5, 0.4, exp(30.0)], [1.0, 1.0, 1.0]]
+    params = _zone_prevalence_parameters(joint, θ, asc, sev, [1, 1, 2])
     shift(c, s) = logistic(logit(c) + s)
+    ## Each zone's detection is its province's shifted on the logit scale by
+    ## the log of its relative ascertainment, with no rescaling.
+    @test params[1].ascertainment ≈ shift.([0.4, 0.4, 0.6], log.(asc[1]))
+    @test params[2].ascertainment[1:2] ≈ shift.([0.5, 0.5], log.(asc[2][1:2]))
+    @test params[3].ascertainment ≈ [0.4, 0.4, 0.6]
     @test params[1].cfr ≈ shift.([0.3, 0.3, 0.5], sev[1])
     @test params[2].cfr[1:2] ≈ [0.4, 0.4]
     @test params[3].cfr ≈ shift.([0.3, 0.3, 0.5], sev[3])
-    ## A zero contrast is the province's ratio, and an extreme one stays a
-    ## probability.
+    ## A zero contrast is the province's value, and an extreme one stays a
+    ## probability, even where the province detects almost every case.
     @test params[1].cfr[3] ≈ 0.5
+    @test params[1].ascertainment[3] ≈ 0.6
     @test all(c -> 0 < c < 1, params[2].cfr)
+    @test all(a -> 0 < a <= 1, params[2].ascertainment)
     ## The zone's own delays replace the joint's; the stay is the joint's.
     inc = findfirst(==(:inc_mean), _ZONE_DELAY_KEYS)
     @test [p.inc_mean for p in params] == [θ[j][inc] for j in 1:3]
     @test [p.recovery_mean for p in params] == [20.0, 21.0, 20.0]
 end
 
-@testitem "patch ascertainment keeps the national rate" begin
-    using BVDOutbreakSize: _patch_ascertainment
-    rel = [0.5, 1.0, 2.0]
-    w = [100.0, 50.0, 10.0]
-    asc = _patch_ascertainment(0.3, rel, w)
-    ## Weighted by the infections, the patches detect at the national rate,
-    ## in proportion to their relative ascertainment.
-    @test sum(asc .* w) / sum(w) ≈ 0.3
-    @test asc ./ asc[2] ≈ rel
-    ## The cap at one, and no infections to weight by.
-    @test _patch_ascertainment(0.9, [1.0, 3.0], [10.0, 10.0]) ≈ [0.45, 1.0]
-    @test _patch_ascertainment(0.3, rel, zeros(3)) ≈ 0.3 .* rel
+@testitem "province suspected-case detection stays in (0, 1) at extreme draws" begin
+    using BVDOutbreakSize: province_suspected_ascertainment_model,
+        infection_state_weights
+    using Turing: fix
+    using StatsFuns: logit, logistic
+
+    ## The prevalence reads each province's detection probability directly
+    ## and rejects one outside [0, 1]. A national centre near either end and
+    ## a contrast far into the tail must still give probabilities, each the
+    ## centre shifted on the logit scale by a contrast that sums to zero.
+    pmf = [0.2, 0.3, 0.3, 0.2]
+    for centre in (0.05, 0.5, 0.9), z in ([4.0, -4.0, 4.0], [-4.0, 4.0, -4.0])
+        m = province_suspected_ascertainment_model(4, centre)
+        r = fix(m, (; τ_susp = 5.0, z_susp = z))()
+        @test all(a -> 0 < a < 1, r.ascertainment)
+        @test maximum(abs, r.log_odds) > 10
+        @test sum(r.log_odds) ≈ 0 atol = 1.0e-10
+        @test r.ascertainment ≈ logistic.(logit(centre) .+ r.log_odds)
+        @test r.relative ≈ r.ascertainment ./ centre
+        for a in r.ascertainment
+            w = infection_state_weights(
+                pmf, pmf, pmf, pmf; ascertainment = a, cfr = 0.4, horizon = 10
+            )
+            @test all(>=(0), w.symptomatic)
+        end
+    end
+    ## No contrast gives every patch the centre.
+    r0 = fix(
+        province_suspected_ascertainment_model(4, 0.7),
+        (; τ_susp = 0.0, z_susp = [1.5, -0.7, 0.3])
+    )()
+    @test r0.ascertainment ≈ fill(0.7, 4)
+    @test r0.relative ≈ ones(4)
+    ## One patch takes the centre and samples nothing.
+    r1 = province_suspected_ascertainment_model(1, 0.7)()
+    @test r1.ascertainment == [0.7]
+    @test r1.relative == [1.0]
 end
 
 @testitem "province case-fatality ratios stay in (0, 1) at extreme severity" begin
@@ -141,16 +167,6 @@ end
     r0 = fix(m(0.4), (; τ_sev = 0.0, z_sev = [1.5, -0.7]))()
     @test _logit_shift(0.4, r0.severity_log_odds) ≈ fill(0.4, 3)
     @test r0.province_severity ≈ ones(3)
-end
-
-@testitem "ascertainment weights lag the infections by the confirmation delay" begin
-    using BVDOutbreakSize: _cutoff_confirmations
-    ## Confirmation two days after infection: an area whose infections
-    ## stopped two days before the cut-off still weighs, one infected only
-    ## on the cut-off day does not yet.
-    f = [0.0, 0.0, 1.0]
-    w = _cutoff_confirmations([[5.0, 0.0, 0.0], [0.0, 0.0, 5.0]], f)
-    @test w == [5.0, 0.0]
 end
 
 @testitem "prevalence_overview rates, sorting and table" begin

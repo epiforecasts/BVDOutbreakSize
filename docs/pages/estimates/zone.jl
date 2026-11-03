@@ -1,6 +1,6 @@
 # # Health-zone estimates
 #
-# This page splits each patch of the joint fit across its health zones, giving each zone's reproduction number, share of the patch, one-week forecast and probability of at least a few cases.
+# This page splits each patch of the joint fit across its health zones, giving each zone's reproduction number, share of the patch and one-week forecast.
 # The [health-zone model](@ref "Health-zone model") on the methods page gives the maths, and the interactive map is on the [dashboard](@ref "Dashboard").
 # The one-week zone forecast is on the [health-zone forecasts](@ref "Health-zone forecasts") page and its scores in the [health-zone forecast evaluation](@ref "Health-zone forecast evaluation").
 
@@ -172,33 +172,23 @@ end;
 #md # ```
 
 
-MarkdownTable(first(zone_overview_display, 20)) #hide
+MarkdownTable(zone_overview_display) #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The twenty highest-ranked zones, with every zone in the fold below.
+#md # Every health zone, the zones whose reproduction number is modelled separately first, each group by decreasing probability that it exceeds one.
 #md # The share is of the patch's infections at the cut-off, in percent, and the share, reproduction number and deviation are medians with 90% intervals.
 #md # A zone whose reproduction number is not modelled separately takes it from its province.
 #md # </figcaption>
 #md # </figure>
 #md # ```
 
-#md # ```@raw html
-#md # <details><summary>All health zones</summary>
-#md # ```
-
-MarkdownTable(zone_overview_display) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
 # ## [Point prevalence](@id zone-prevalence)
 #
 # The zone estimates split the infections in the community at the cut-off in the same way as the [province estimates](@ref province-prevalence).
 # The [point prevalence](@ref methods-prevalence) section of the Methods gives the calculation.
-# The figure and table show the twenty zones with the highest rate in the community per 100,000 residents.
-# Every zone is listed in the fold below the table.
+# The figure shows the twenty zones with the highest rate in the community per 100,000 residents.
+# The table lists every zone in the same order.
 
 #md # ```@raw html
 #md # <details><summary>Compute point prevalence by zone</summary>
@@ -226,19 +216,7 @@ zone_prevalence_fig #hide
 
 #-
 
-MarkdownTable(
-    prevalence_table(zone_prevalence_overview; max_rows = 20, area = "Zone")
-) #hide
-
-#md # ```@raw html
-#md # <details><summary>Point prevalence in every health zone</summary>
-#md # ```
-
 MarkdownTable(prevalence_table(zone_prevalence_overview; area = "Zone")) #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # ## Composition checks
 #
@@ -600,9 +578,16 @@ zone_estimates = DataFrame(
 )
 CSV.write(joinpath(dashboard_dir, "zone_estimates.csv"), zone_estimates)
 ## Each zone's daily reproduction number, weekly allocated confirmed cases
-## and weekly confirmed deaths, for the dashboard map's detail column. A
-## zone's deaths are its own cumulative series, so each zone is binned on
-## its own vintages.
+## with their posterior predictive, and weekly confirmed deaths, for the
+## dashboard map's detail column. A zone's deaths are its own cumulative
+## series, so each zone is binned on its own vintages.
+##
+## The predictive is the zone composition's, which splits each patch's
+## observed count across its zones, so it checks the allocation rather than
+## the patch total. The deaths have none: the model zeroes the reattributed
+## death vintages that the observed series keeps, so the two would not bin
+## alike.
+_zone_case_ppc = zone_composition_draws(chn_local, zone_inputs);
 _with_series(t, s) = (t[!, :series] .= s; t)
 _zone_weekly_deaths = let h = obs.zone_death_history
     out = DataFrame(area = String[], date = Date[], count = Int[])
@@ -637,7 +622,13 @@ CSV.write(
                 cutoff = obs.cutoff, n = zone_inputs.n
             ), "cases"
         ),
-        _with_series(_zone_weekly_deaths, "deaths");
+        _with_series(_zone_weekly_deaths, "deaths"),
+        _with_series(
+            weekly_quantile_table(
+                zone_inputs.days, _zone_case_ppc.predictive, zone_map_keys;
+                cutoff = obs.cutoff, n = zone_inputs.n
+            ), "cases_fit"
+        );
         cols = :union
     )
 )

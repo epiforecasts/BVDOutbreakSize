@@ -9,7 +9,7 @@ using Enzyme: Enzyme
 # function annotation (so the closure over the observed data is
 # differentiated, not treated as read-only). An opt-in alternative to the
 # default Mooncake backend; differentiating the full renewal joint under
-# Enzyme is still work in progress.
+# Enzyme is work in progress.
 #
 # The `SpecialFunctions.gamma` EnzymeRule that the Beta and
 # NegativeBinomial normalising constants need is supplied by

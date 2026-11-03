@@ -26,6 +26,7 @@ Manifest-v*.toml
 # Figures a local Literate render writes beside the page markdown
 /docs/src/**/*-[0-9]*.png
 /docs/src/references.md
+/docs/src/.vitepress/theme/base.ts
 /docs/src/summary_assets/
 /docs/node_modules/
 /output/

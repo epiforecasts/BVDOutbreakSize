@@ -3,10 +3,10 @@ name: Benchmark
 # Per-component AD gradient comparison against `main`, posted as a single PR
 # comment. The components are the observation submodels, the latent process,
 # the single-stream composers and the full `bvd_joint`. The joint's gradient
-# is ~14 ms over 76 parameters behind a ~18 min cold compile, so it is the
-# dominant cost of this workflow; it is carried here rather than in the test
-# suite, which asserts the components differentiate and leaves the joint to
-# this comparison and to the docs build's fits (see benchmark/README.md).
+# is ~14 ms over 76 parameters behind a ~18 min cold compile, the dominant
+# cost of this workflow. It is carried here rather than in the test suite,
+# which asserts the components differentiate and leaves the joint to this
+# comparison and to the docs build's fits (see benchmark/README.md).
 #
 # One job, one machine. Both revisions are materialised as git worktrees of
 # this checkout and handed to `benchmark/ci/run_pair.jl`, which times them in

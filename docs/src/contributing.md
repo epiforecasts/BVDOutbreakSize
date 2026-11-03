@@ -73,7 +73,6 @@ A closure in a model body must not box its captures.
 Julia boxes a local variable when a closure captures it and something later reassigns it.
 The variable becomes a `Core.Box` and is type-unstable at every use.
 Mooncake answers type instability with a `DynamicDerivedRule`, a dictionary lookup per call site on every gradient evaluation, and Enzyme's reverse mode cannot differentiate through a box at all.
-Removing the boxes from the observation models roughly halved the gradient with the log-density bit-identical.
 
 A box has no failure mode, which is why one can sit in the code for a long time.
 Gradients, the log-density and the parameter count are all correct, so the only symptom is an unexplained ratio of gradient time to primal time.

@@ -2,7 +2,7 @@
 ## primitives in src/renewal.jl, the per-patch Rt and infection models, the
 ## per-province composition likelihood, and the bvd_joint composer.
 
-## The three-patch joint on the live observations, compiled once and drawn
+## The patch joint on the live observations, compiled once and drawn
 ## from once. Four items below read the same chain; building it per item
 ## cost four compilations of the largest model in the package.
 @testsnippet PatchJointChain begin
@@ -103,8 +103,8 @@ end
     on = patch_infections(Rt, g, seeds, K, 0.5, unbounded).infections
     @test all(>(0), on[2, 3:n])            ## epsilon > 0: patch 2 seeded
     ## Patch 1 is debited what it exports. Coupling moves transmission, so the
-    ## origin must lose exactly what the destination gains; an earlier version
-    ## left the origin untouched, which made coupling a net source.
+    ## origin must lose exactly what the destination gains, or coupling is a
+    ## net source.
     @test all(on[1, t] < off[1, t] for t in 3:n)
     ## The imported amount is epsilon * K[2,1] times what patch 1 generates.
     for t in 3:n
@@ -148,14 +148,14 @@ end
     ## The deviations are centred unweighted, so `mu` is their geometric mean,
     ## and the weighted arithmetic mean is the larger of the two. The gap is
     ## second order in the deviation scale, so it is small wherever the
-    ## deviations are, which is what the pooling prior is for.
+    ## deviations are.
     g = [0.2, 0.3, 0.3, 0.2]
     n = 80
     mu = fill(1.2, n)
     delta = [0.15, -0.1, -0.05]
     @test sum(delta) ≈ 0 atol = 1.0e-12
     Rt = reduce(vcat, [fill(1.2 * exp(d), n)' for d in delta])
-    ## Very unequal seeds, so one province dominates the force as Ituri does.
+    ## Unequal seeds, so one province dominates the force as Ituri does.
     seeds = [100.0 100.0; 5.0 5.0; 0.5 0.5]
 
     ## A power-of-two pool, so the renewal is exactly undepleted.
@@ -191,20 +191,13 @@ end
     ## Importation is a transfer. An infection that moves from Ituri to
     ## Nord-Kivu is one infection in a different place, not a second infection,
     ## so the origin must be debited exactly what the destinations are
-    ## credited and the national total must be untouched by coupling.
+    ## credited and the national total must be untouched by coupling. Any
+    ## infection the coupling manufactures lands in `C_T` and compounds
+    ## through the renewal.
     ##
-    ## This is worth pinning because the national total is the sum over
-    ## patches: any infection the coupling manufactures lands directly in
-    ## `C_T` and compounds through the renewal over the whole window. Crediting
-    ## the destination without debiting the origin makes every patch's total
-    ## rise and none fall, and leaves national `C_T` incomparable between
-    ## one patch and several, which is exactly what the spatial
-    ## sensitivity comparison assumes.
-    ##
-    ## The patches share one `Rt` here so conservation is exact. With patches
-    ## at different `Rt` the national total legitimately moves when infections
-    ## are relocated to a faster-growing province; that is epidemiology, not
-    ## bookkeeping.
+    ## The patches share one `Rt` here so conservation is exact. With patches at
+    ## different `Rt` the national total moves when infections are relocated to
+    ## a faster-growing province; that is epidemiology, not bookkeeping.
     g = [0.2, 0.3, 0.3, 0.2]
     n = 60
     Rt = [fill(1.3, n)'; fill(1.3, n)'; fill(1.3, n)']
@@ -218,7 +211,7 @@ end
 
     ## Moving infections around cannot change how many there are.
     @test sum(on) ≈ sum(off) rtol = 1.0e-8
-    ## And it must actually move them: the destination patches gain, the
+    ## And it must move them: the destination patches gain, the
     ## origin that dominates the epidemic loses.
     @test !isapprox(on[1, :], off[1, :])
     @test sum(on[1, :]) < sum(off[1, :])
@@ -232,7 +225,7 @@ end
 @testitem "implied_national_Rt: recovers the incidence-weighted patch Rt" begin
     using BVDOutbreakSize: patch_infections, implied_national_Rt
 
-    ## Inverting the renewal equation on the SUMMED infections must return
+    ## Inverting the renewal equation on the summed infections must return
     ## the force-of-infection-weighted mean of the per-patch Rts. Build two
     ## uncoupled patches with different constant Rts and check the identity
     ## Rt_implied(t) = sum_p Rt_p * force_p(t) / sum_p force_p(t).
@@ -276,11 +269,10 @@ end
         ## Sum-to-zero at every time. The national walk is the common trend
         ## and the deviations are contrasts around it.
         @test maximum(abs, sum(res.δ_patch; dims = 1)) < 1.0e-10
-        ## Every patch, INCLUDING the primary, carries its own deviation.
+        ## Every patch, including the primary, carries its own deviation.
         ## Reference coding (delta_1 = 0) also identifies the model, but it
-        ## forces Ituri to BE the national trend while the other provinces
-        ## carry noise -- an artefact of the identifiability fix, not
-        ## epidemiology.
+        ## forces Ituri to be the national trend while the other provinces
+        ## carry noise.
         @test any(!iszero, res.δ_patch[1, :])
         ## Rt is the common trend times the patch deviation.
         for p in 1:np
@@ -289,7 +281,7 @@ end
         end
         @test all(>(0), res.Rt_matrix)
         @test size(res.δ_patch) == (np, n)
-        ## Omega is a genuine correlation matrix: symmetric, unit diagonal,
+        ## Omega is a correlation matrix: symmetric, unit diagonal,
         ## entries in [-1, 1]. It is reconstructed as L * L', so allow the
         ## round-off that puts the diagonal a few ulps either side of 1.
         for i in 1:np
@@ -402,9 +394,8 @@ end
     using Statistics: median
 
     ## The deviations follow a multivariate-normal random walk whose scale is
-    ## itself sampled, so the model NESTS both hypotheses and lets the data
-    ## choose. Pin both limits: the point of this parameterisation is that
-    ## neither is hard-coded.
+    ## itself sampled, so the model nests both hypotheses and lets the data
+    ## choose. Pin both limits.
     n, np = 120, 3
 
     ## sigma_delta -> 0: every province collapses onto the common national
@@ -421,13 +412,13 @@ end
         @test rf.Rt_matrix[p, :] ≈ rf.Rt_national
     end
 
-    ## A large drift scale lets the provincial trajectories genuinely
-    ## separate over time, which a constant modifier could not represent.
+    ## A large drift scale lets the provincial trajectories separate over time,
+    ## which a constant modifier could not represent.
     wide = patch_rt_model(
         n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
         region_drift_sd_prior = truncated(Normal(0.5, 1.0e-3); lower = 0)
     )
-    ## The Ituri / Nord-Kivu contrast must actually move over the window.
+    ## The Ituri / Nord-Kivu contrast must move over the window.
     ## One walk can end where it started, so this is read over several.
     moves = map(1:9) do s
         seed!(s)
@@ -505,11 +496,11 @@ end
     using Turing: DynamicPPL
     using Random: Xoshiro
 
-    ## The whole point of the composition likelihood is that it adds only the
-    ## spatial split and leaves the national total to the national confirmed
-    ## stream. So its log-density must be invariant to rescaling the modelled
-    ## confirmed level: doubling every patch's modelled cases leaves the
-    ## shares unchanged and must leave the log-density unchanged.
+    ## The composition likelihood adds only the spatial split and leaves the
+    ## national total to the national confirmed stream. So its log-density must
+    ## be invariant to rescaling the modelled confirmed level: doubling every
+    ## patch's modelled cases leaves the shares unchanged and must leave the
+    ## log-density unchanged.
     obs = [80 40; 15 8; 5 2]
     modelled = [8.0 4.0; 1.5 0.8; 0.5 0.2]
 
@@ -578,12 +569,11 @@ end
         keys(DynamicPPL.VarInfo(Xoshiro(1), m))
     )
 
-    ## Provinces are COUPLED by default: the outbreak spread from Ituri into
-    ## Nord-Kivu and Sud-Kivu, so a meta-population model that cannot move
-    ## infections between patches is not describing what happened.
+    ## Provinces are coupled by default: the outbreak spread from Ituri into
+    ## Nord-Kivu and Sud-Kivu.
     @test has_eps(patch_infection_model(n, np))
 
-    ## The kernel is a gravity kernel weighted by DESTINATION population, with
+    ## The kernel is a gravity kernel weighted by destination population, with
     ## a zero diagonal (no self-importation).
     K = province_importation_kernel()
     npk = length(PROVINCE_NAMES)
@@ -679,7 +669,7 @@ end
     base = DynamicPPL.logjoint(m, vi)
     @test isfinite(base)
 
-    ## Reallocating cases BETWEEN provinces, at a fixed national total, must
+    ## Reallocating cases between provinces, at a fixed national total, must
     ## move the log-density: the spatial split is what this model adds.
     shifted = Dict(k => v for (k, v) in pch)
     shifted["ituri"] = (;
@@ -765,19 +755,16 @@ end
     ## Seven quantities per patch: cumulative infections, Rt,
     ## daily infections, the log-Rt deviation from the national trend, the
     ## log-Rt contrast against the primary patch, and the relative case
-    ## ascertainment. The last two must BOTH be present: the case composition
-    ## identifies only their product, so reporting a provincial Rt without the
-    ## ascertainment beside it invites a case-finding artefact to be read as
-    ## epidemiology.
+    ## ascertainment. The last two must both be present: the case composition
+    ## identifies only their product.
     @test nrow(df) == 7 * np
     quantities = unique(df[!, "Quantity"])
     @test "Relative case ascertainment" in quantities
     @test "log-Rt vs primary patch" in quantities
     @test "Rt deviation innovation sd" in quantities
     @test unique(df[!, "Patch"]) == PROVINCE_LABELS
-    ## The reported quantiles must be ordered, which the previous
-    ## implementation's invented "median" (the midpoint of the 20-80
-    ## interval) did not guarantee.
+    ## The reported quantiles must be ordered, which a "median" taken as the
+    ## midpoint of the 20-80 interval does not guarantee.
     for r in eachrow(df)
         @test r["Lower 90%"] <= r["Lower 60%"] <= r["Lower 30%"]
         @test r["Upper 30%"] <= r["Upper 60%"] <= r["Upper 90%"]
@@ -801,9 +788,9 @@ end
 
     chn = patch_chain
 
-    ## The cross-province overview is one ROW per province, not one row per
-    ## (province, quantity). This is the whole point of it: the long-format
-    ## table is unreadable as a comparison across provinces.
+    ## The cross-province overview is one row per province, not one row per
+    ## (province, quantity). The long-format table is unreadable as a
+    ## comparison across provinces.
     ov = patch_overview_table(chn, np)
     @test ov isa DataFrame
     @test nrow(ov) == np
@@ -861,10 +848,10 @@ end
     @test length(rt) == np
     @test all(size(r) == (PATCH_DRAWS, obs.n) for r in rt)
 
-    ## THE test that makes the figure trustworthy: rebuilding the provincial
-    ## trajectory from the deviation knots must reproduce, at the cut-off, the
-    ## `R_T_patch` the model itself computed. Without this the panels could
-    ## drift from the tables and nothing would catch it.
+    ## Rebuilding the provincial trajectory from the deviation knots must
+    ## reproduce, at the cut-off, the `R_T_patch` the model itself computed.
+    ## Without this the panels could drift from the tables and nothing would
+    ## catch it.
     rtp = [collect(v) for v in vec(collect(chn[:R_T_patch]))]
     for p in 1:np, i in 1:length(rtp)
 
@@ -933,11 +920,10 @@ end
     ## first order in the deviation scale rather than second. It is a
     ## persistent excess growth rate, so it compounds: on the setup below it
     ## multiplies the national cumulative total by 2.7 over 80 days and by 63
-    ## over 206. This test is what stops that being rediscovered by surprise.
+    ## over 206.
     ##
-    ## Nothing here says the model is wrong. The national streams constrain
-    ## the summed trajectory directly, so the fitted trend moves down to
-    ## compensate. What it does mean is that the molecular-clock prior, which
+    ## The national streams constrain the summed trajectory directly, so the
+    ## fitted trend moves down to compensate. The molecular-clock prior, which
     ## sets the walk base, is a prior on the trend and not on the country, and
     ## the deviation prior reaches the national size through that route.
     g = [0.05, 0.1, 0.15, 0.2, 0.2, 0.15, 0.1, 0.05]
@@ -992,7 +978,7 @@ end
     @test run(1.0, 80).ratio < run(1.0, 120).ratio < run(1.0, 206).ratio
     @test run(1.0, 206).ratio > 10
 
-    ## The provinces genuinely differ, so none of this passes by collapsing
+    ## The provinces differ, so none of this passes by collapsing
     ## the spatial structure.
     inf = run(1.0, 206).infections
     @test !isapprox(inf[1, :], inf[2, :])
@@ -1003,8 +989,8 @@ end
 
     ## The per-province laboratory throughput (sitrep section 4.3) sums, on
     ## every date, to the national `tests_analysed_daily_history` the model
-    ## already fits. That is what makes it a COMPOSITION rather than a new
-    ## count stream, exactly like the per-province confirmed cases. If this
+    ## already fits. That is what makes it a composition rather than a new
+    ## count stream, like the per-province confirmed cases. If this
     ## ever fails, either the scan drifted or the national series moved, and
     ## the two must be reconciled before the data is used.
     obs = load_observations()
@@ -1029,12 +1015,11 @@ end
         @test all(lab["$(p)_positive"].counts .<= lab["$(p)_analysed"].counts)
     end
 
-    ## The finding that motivates using this data at all: the provinces test
-    ## differently-selected pools, so confirmed-case share is not infection
-    ## share, and the background dominates where positivity is low. Ituri's
-    ## positivity over the window is higher than Nord-Kivu's. The gap moves
-    ## with each province's epidemic, so this pins the gap exceeding binomial
-    ## sampling noise, not its size.
+    ## The provinces test differently-selected pools, so confirmed-case share is
+    ## not infection share, and the background dominates where positivity is
+    ## low. Ituri's positivity over the window is higher than Nord-Kivu's. The
+    ## gap moves with each province's epidemic, so this pins the gap exceeding
+    ## binomial sampling noise, not its size.
     function pooled(p)
         k = sum(lab["$(p)_positive"].counts)
         m = sum(lab["$(p)_analysed"].counts)
@@ -1053,12 +1038,12 @@ end
 
     ## The headline spatial claim is read off `region_drift_sd`: a posterior
     ## near zero is reported as "the provinces share one temporal Rt shape".
-    ## That claim is only meaningful if the PRIOR would have allowed them to
+    ## That claim is only meaningful if the prior would have allowed them to
     ## diverge. If the prior were tight, a near-zero posterior would be an
     ## artefact of the prior, not a finding about the outbreak.
     ##
     ## So pin the prior predictive: under the default drift prior, the change
-    ## in the Ituri / Nord-Kivu Rt RATIO across the fitted window must have a
+    ## in the Ituri / Nord-Kivu Rt ratio across the fitted window must have a
     ## substantial chance of exceeding 25%.
     obs = load_observations()
     n = obs.n
@@ -1098,8 +1083,7 @@ end
     ## must be able to reach the level of the observed split on its own, at
     ## zero Rt difference. If it cannot, the deviation is forced to absorb the
     ## level difference and the reported provincial Rt gap becomes an
-    ## artefact of the seed prior, which is the one thing the patch model
-    ## exists to estimate.
+    ## artefact of the seed prior.
     obs = load_observations()
     n = obs.n
     rt_start = clamp(n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, n)
@@ -1129,7 +1113,7 @@ end
     ## median, which is the scale the model itself starts from.
     seed0 = seed_at_renewal_start(2.0^2.75)
 
-    ## Share of infections in patch 2 at ZERO Rt difference, for a given seed
+    ## Share of infections in patch 2 at zero Rt difference, for a given seed
     ## fraction of the primary patch's seed.
     function share(frac)
         Rtm = [Rtv'; Rtv'; Rtv']
@@ -1143,7 +1127,7 @@ end
         return b / (a + b)
     end
 
-    ## The default prior on the seed fraction must BRACKET the observed level
+    ## The default prior on the seed fraction must bracket the observed level
     ## at zero Rt difference: the 5th percentile below it, the 95th above.
     prior = LogNormal(log(0.05), 1.0)
     lo, hi = quantile(prior, 0.05), quantile(prior, 0.95)
@@ -1158,15 +1142,15 @@ end
 @testitem "province deaths: the split that identifies ascertainment" begin
     using BVDOutbreakSize
 
-    ## The per-province CASE count is the product of ascertainment and
+    ## The per-province case count is the product of ascertainment and
     ## incidence, and only the product is observed, so the case split alone
     ## can never separate "more infections" from "better case-finding".
     ##
-    ## The DEATH split breaks that. Deaths are far harder to miss than cases,
+    ## The death split breaks that. Deaths are far harder to miss than cases,
     ## and the case-fatality ratio and death-confirmation probability belong to
-    ## the virus and to a national laboratory, not to a province -- so they are
+    ## the virus and to a national laboratory, not to a province. So they are
     ## common factors and cancel out of the normalised death shares, leaving
-    ## the provincial INCIDENCE split free of case-ascertainment.
+    ## the provincial incidence split free of case-ascertainment.
     obs = load_observations()
     cases = province_increment_matrix(
         obs.province_confirmed_history,
@@ -1217,26 +1201,13 @@ end
     @test iszero(first(death_gaps))
     @test issorted(case_gaps)
 
-    ## THE identifying signal: Nord-Kivu holds a far larger share of the
-    ## confirmed DEATHS than of the confirmed CASES, at every vintage. If this
-    ## gap ever vanishes the deaths stop identifying ascertainment, and the
-    ## per-patch split silently falls back to being prior-driven -- so pin it.
-    ct = sum(cases.increments; dims = 2)
-    dt = sum(deaths.increments; dims = 2)
-    nk_case_share = ct[2] / sum(ct)
-    nk_death_share = dt[2] / sum(dt)
     ## Nord-Kivu has carried a rising share of new confirmed cases since
-    ## July, so its cumulative share has drifted up from ~16% to ~22% by
-    ## SitRep 159. The bands catch a misassigned province column, not a
-    ## trend, so they sit clear of the drift.
-    @test 0.12 < nk_case_share < 0.26          ## ~22%
-    @test 0.16 < nk_death_share < 0.28         ## ~26%
-    ## The gap that does the work. It has narrowed as the series lengthened,
-    ## from roughly 1.6 when the province data stopped in July to 1.16 at
-    ## SitRep 159, so the deaths identify ascertainment less sharply than they
-    ## did. Pinned loosely enough to track that and tightly enough to catch it
-    ## vanishing.
-    @test nk_death_share > 1.15 * nk_case_share
+    ## July, so its cumulative share has drifted up from ~16% to ~24% by
+    ## SitRep 169. The band catches a misassigned province column, not a
+    ## trend, so it sits clear of the drift.
+    ct = sum(cases.increments; dims = 2)
+    nk_case_share = ct[2] / sum(ct)
+    @test 0.12 < nk_case_share < 0.26          ## ~24%
 end
 
 @testitem "bvd_joint: a patch chain carries every headline quantity" tags = [:slow] begin
@@ -1245,10 +1216,9 @@ end
     import FlexiChains
     using Random: Xoshiro
 
-    ## The patch model is the headline joint, not a side analysis. So a patch
-    ## chain must carry every quantity a single-patch chain does: the report
-    ## pages, the forecast machinery and the plots all key off these names,
-    ## and a missing one is a silent failure at report-render time rather
+    ## A patch chain must carry every quantity a single-patch chain does: the
+    ## report pages, the forecast machinery and the plots all key off these
+    ## names, and a missing one is a silent failure at report-render time rather
     ## than a test failure here.
     ##
     ## `forecast_reported` in particular reads a long list of `expected_*_T`
@@ -1261,20 +1231,10 @@ end
         progress = false
     )
 
-    ## THE CHAIN READ CONTRACT. Every key that src/ or docs/ pulls off a joint
-    ## chain. Two CI render failures in a row came from keys the model tests
-    ## could not see:
-    ##
-    ##   - `cumulative_infections` was surfaced by the OLD composer's `_latent`
-    ##     submodel, not by its body, so a diff of the two function bodies
-    ##     showed every other deterministic as missing but not that one.
-    ##   - the `rt_state.*` keys existed but under BARE names, because the
-    ##     patch model attached the Rt walk unprefixed. The same parameters are
-    ##     sampled either way, so a parameter COUNT check passes and only a
-    ##     render fails.
-    ##
-    ## Both are invisible to a test that asserts what the author remembers.
-    ## Assert against what is actually READ.
+    ## The chain read contract: every key that src/ or docs/ pulls off a
+    ## joint chain. A key can be absent or wrongly prefixed while the
+    ## parameter set is unchanged, so a parameter-count check passes and only
+    ## the render fails. Assert against what is read.
     for q in (
             :bed_capacity, :CFR, :C_T, :cumulative_confirmed,
             :cumulative_infections, :cumulative_onsets,
@@ -1282,7 +1242,8 @@ end
             :expected_bed_demand_T, :expected_confirmed_deaths_T,
             :expected_confirmed_T, :expected_deaths_T, :expected_incare_deaths_T,
             :expected_infections_T, :expected_recovered_T, :expected_reports_T,
-            :expected_ruleouts_T, :isolation_dispersion, :k,
+            :expected_ruleouts_T, :isolation_dispersion,
+            :treatment_flow_dispersion, :k,
             :onset_to_confirmation_pmf, :onset_to_death_confirmation_pmf,
             :p_drc, :p_uganda, :r, :r0, :R0, :recovered_dispersion, :R_T, :T,
             :lambda_bg, :lambda_bg_death, :tau_death, :tau_test,
@@ -1290,8 +1251,8 @@ end
         @test chn[q] !== nothing
     end
 
-    ## Submodel-PREFIXED keys. These are the ones that bite, because a prefix
-    ## change leaves the parameter set identical and only breaks the read.
+    ## Submodel-prefixed keys. A prefix change leaves the parameter set
+    ## identical and only breaks the read.
     for q in (
             "rt_state.sigma_rw", "rt_state.log_R0", "rt_state.log_Rt_knots",
             "rt_state.intervention_effect", "gi_state.gi_mean", "gi_state.gi_sd",
@@ -1327,14 +1288,12 @@ end
     using Turing: DynamicPPL
     using Random: Xoshiro
 
-    ## There is ONE model, not two. The patch machinery is a strict
-    ## generalisation: with a single patch the sum-to-zero deviations vanish,
-    ## the importation kernel has nothing to couple, and there are no
-    ## composition terms -- so the model collapses exactly onto the
-    ## single-population one. That is what lets the old bvd_joint be retired
-    ## rather than maintained alongside.
+    ## The patch machinery is a strict generalisation: with a single patch the
+    ## sum-to-zero deviations vanish, the importation kernel has nothing to
+    ## couple, and there are no composition terms. The model collapses exactly
+    ## onto the single-population one.
     ##
-    ## The failure this guards against is a QUIET one: if the deviation
+    ## The failure this guards against is a quiet one: if the deviation
     ## machinery still sampled with one patch, it would add prior-only
     ## dimensions the likelihood never touches, and nothing would look wrong.
     obs = load_observations()
@@ -1372,17 +1331,15 @@ end
     ## The silent failure mode: per-province data supplied but n_patches left
     ## at its default of 1. The compositions would be scored against a single
     ## patch holding the entire national total, the spatial structure would
-    ## quietly vanish, and the fit would look perfectly healthy. This exact
-    ## mistake was made once already, by a rename that dropped the argument.
+    ## quietly vanish, and the fit would look healthy.
     obs = load_observations()
     prov = province_increment_matrix(
         obs.province_confirmed_history,
         PROVINCE_NAMES, length(PROVINCE_NAMES)
     )
 
-    ## The guard lives in the model body, so it fires on EVALUATION, not on
-    ## construction -- which is the right place: it is the fit that would be
-    ## silently wrong.
+    ## The guard lives in the model body, so it fires on evaluation, not on
+    ## construction.
     bad = bvd_joint(
         obs.n, obs.exported_cases,
         obs.total_deaths, obs.reported_cases, obs.exports_deaths,
@@ -1481,7 +1438,7 @@ end
     @test df[1, "Province"] == "Ituri"
     ## 0.4 / 1.5 = 26.7% for the best-ascertained province, 0.4 / 0.8 = 50%
     ## for the worst. The structural column is the same national value in
-    ## every row, which is the point of reporting it.
+    ## every row.
     @test startswith(df[1, "Delay-corrected confirmed CFR"], "26.7%")
     @test startswith(df[2, "Delay-corrected confirmed CFR"], "50.0%")
     @test length(unique(df[!, "Structural (infection-based) CFR"])) == 1
@@ -1525,8 +1482,7 @@ end
     @test K[near, 1] / K[far, 1] > flat[near, 1] / flat[far, 1]
     ## Symmetric with a zero diagonal, and the pairwise distances are the
     ## great-circle ones to the nearest kilometre. Ituri to Nord-Kivu and
-    ## Nord-Kivu to Sud-Kivu are read off the source centres, since the
-    ## patches pool them.
+    ## Nord-Kivu to Sud-Kivu are read off the source centres.
     @test D ≈ D'
     @test all(iszero, [D[i, i] for i in 1:np])
     @test haversine_km(
@@ -1592,12 +1548,12 @@ end
         convolve_delay, bin_increments
 
     ## The provincial confirmed composition must carry each patch's onsets
-    ## through the SAME onset-to-confirmation kernel as the national confirmed
-    ## stream: onset-to-report convolved with report-to-receipt. An earlier
-    ## version stopped at the receipt leg alone (#756), which attributed the
-    ## provincial split to earlier days than the national total it conditions
-    ## on. The helper is kernel-parametric, so pin what a caller must pass:
-    ## the convolved two-leg pmf, applied per patch and binned to the vintages.
+    ## through the same onset-to-confirmation kernel as the national confirmed
+    ## stream: onset-to-report convolved with report-to-receipt. The receipt leg
+    ## alone attributes the provincial split to earlier days than the national
+    ## total it conditions on. The helper is kernel-parametric, so pin what a
+    ## caller must pass: the convolved two-leg pmf, applied per patch and binned
+    ## to the vintages.
     n = 12
     onsets = zeros(2, n)
     onsets[1, 3] = 10.0
@@ -1632,7 +1588,7 @@ end
 
     ## The composition kernel must be the full onset-to-confirmation delay of
     ## the national confirmed stream (onset-to-report ⊕ report-to-receipt),
-    ## not the receipt leg alone (#756). A delay pinned to lag 0 vs lag 5 on
+    ## not the receipt leg alone. A delay pinned to lag 0 vs lag 5 on
     ## the report leg must measurably move the modelled provincial increments
     ## the composition scores; passing only `receipt_pmf` would make them
     ## identical. The composition is captured through a recording wrapper
@@ -1697,7 +1653,7 @@ end
     end
 
     ## Same seed, same everything except the report lag. Under a receipt-only
-    ## kernel the two matrices would be identical; under the fixed two-leg
+    ## kernel the two matrices would be identical; under the two-leg
     ## kernel the 5-day report delay moves the whole provincial firings later
     ## by five days, a visible shift in the models' binned vintages.
     lag0 = modelled_prov(0.0)

@@ -108,6 +108,7 @@ end
     for key in (
             :k, :k_cases, :k_deaths, :k_confirmed, :k_confirmed_deaths,
             :isolation_dispersion, :recovered_dispersion,
+            :treatment_flow_dispersion,
         )
         v = vec(Array(chn[key]))
         @test length(v) == 30
@@ -117,4 +118,16 @@ end
     sd = vec(Array(chn[:dispersion_sd]))
     @test all(isfinite, sd)
     @test all(sd .>= 0)
+
+    ## The pool holds six streams. The treatment flows draw their dispersion
+    ## inside the treatment submodel, about the pooled stock dispersion, and
+    ## the exposed flow dispersion is that draw.
+    using Turing: @varname
+    using Random: Xoshiro
+    θ = rand(Xoshiro(3), m)
+    @test length(θ[@varname(dispersion_state.log_isk)]) == 6
+    @test haskey(θ, @varname(treatment_state.log_inv_sqrt_k_flow))
+    lisk = vec(Array(chn[@varname(treatment_state.log_inv_sqrt_k_flow)]))
+    k_flow = vec(Array(chn[:treatment_flow_dispersion]))
+    @test all(isapprox.(k_flow, exp.(-2 .* lisk); rtol = 1.0e-6))
 end

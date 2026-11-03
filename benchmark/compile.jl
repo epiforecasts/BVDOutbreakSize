@@ -12,9 +12,9 @@
 # `bvd_joint` spends 969 s of its 1095 s cold build there.
 #
 # Each component runs in its own process because the first build in a
-# session pays a fixed floor — about 38 s for a two-parameter model — that
+# session pays a fixed floor (about 38 s for a two-parameter model) that
 # every later component in the same session avoids. Sharing one process
-# would charge the whole floor to whichever component happened to run first.
+# would charge the floor to whichever component ran first.
 #
 # `BVD_BENCH_JOINT=true` adds the full joint, which costs ~18 min on its own.
 using Printf

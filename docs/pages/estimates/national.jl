@@ -31,7 +31,6 @@ chn_confirmed_deaths = load_fit("confirmed_deaths")
 chn_treatment = load_fit("treatment")
 chn_onsets = load_fit("onsets")
 frozen_lastweek = load_fit("frozen_validation")
-frozen_lastweek_streams = frozen_validation_stream_fits()
 frozen_by_cutoff = frozen_fits_by_cutoff()
 frozen_results = [frozen_by_cutoff[c] for c in frozen_cutoffs]
 if RUN_SENSITIVITY
@@ -337,7 +336,7 @@ start_date_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The posterior of the outbreak start date (left) and the joint posterior of the outbreak age and the early doubling time (right).
+#md # The posterior of the outbreak start date (left) and the joint posterior of the outbreak age and the doubling time at the cut-off (right).
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -480,8 +479,8 @@ rt_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Daily reproduction number from the genetic bound to the cut-off, with 30%, 60% and 90% credible ribbons and about a hundred sampled trajectories.
-#md # Red lines mark the start (dashed, the first situation report on 18 May 2026) and end (dotted) of the three-week response scale-up.
+#md # Daily reproduction number of the national trend, net of depletion, from the renewal start to the cut-off, with 30%, 60% and 90% credible ribbons and about a hundred sampled trajectories.
+#md # Red lines mark the centre of the logistic response ramp (dashed, the first situation report on 18 May 2026) and one 21-day ramp time scale after it (dotted).
 #md # Grey dashed lines mark a reproduction number of one and the cut-off.
 #md # </figcaption>
 #md # </figure>
@@ -513,7 +512,7 @@ intervention_table #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The response effect on the reproduction number as a multiplier.
-#md # A value below one is the factor by which the response lowers the reproduction number once the scale-up completes.
+#md # A value below one is the factor by which the response lowers the reproduction number once the ramp is complete.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -559,7 +558,7 @@ obs_delay_summary #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The delays from onset to report, death and hospitalisation abroad, the report-to-receipt delay and the mean lengths of stay.
+#md # The delays from onset to report, onset to admission, admission to death and onset to detection abroad, the report-to-receipt delay and the mean lengths of stay.
 #md # The lengths of stay are the isolation stay of a BVD patient, the rule-out stay of a non-BVD patient and the delay from confirmation to recovery.
 #md # </figcaption>
 #md # </figure>
@@ -601,7 +600,7 @@ obs_delay_pair_fig #hide
 # ### Surveillance parameters
 #
 # The surveillance parameters cover the reporting fractions, the stream dispersions, the laboratory pipeline and the isolation and recovered streams.
-# The six count streams each have a negative-binomial dispersion, partially pooled around a population-level dispersion $k$ (see [surveillance dispersion](@ref "Surveillance dispersion")).
+# The stream dispersions are defined in [surveillance dispersion](@ref "Surveillance dispersion") and the flow dispersion in [treatment-centre flow](@ref "Treatment-centre flow").
 
 #md # ```@raw html
 #md # <details><summary>Surveillance-parameter summary table</summary>
@@ -610,14 +609,15 @@ obs_delay_pair_fig #hide
 surveillance_summary = summary_table(
     chn_joint,
     [
-        :p_drc, :p_uganda, :k, :k_cases, :k_deaths, :k_confirmed,
+        :p_drc_national, :p_uganda, :k, :k_cases, :k_deaths, :k_confirmed,
         :k_confirmed_deaths, :dispersion_sd, :tau_test,
         :specimens_per_suspect, :lambda_bg,
         :suspected_positivity, :test_positivity, :expected_confirmed_T,
         :expected_analysed_T, :death_ascertainment, :background_cfr,
         :tau_death, :death_composition,
         :death_confirmation, :expected_confirmed_deaths_T,
-        :isolation_admission, :isolation_dispersion, :expected_isolation_T,
+        :isolation_admission, :isolation_dispersion,
+        :treatment_flow_dispersion, :expected_isolation_T,
         :expected_bed_demand_T, :bed_capacity, :bed_shortfall_T,
         :incare_cfr, :incare_cfr_modifier, :incare_confirm_modifier,
         :isolation_death_los_mean,
@@ -641,6 +641,7 @@ surveillance_summary #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Reporting fractions for the DRC and Uganda, stream dispersions, laboratory, isolation and recovery parameters, and the expected counts at the cut-off.
+#md # The DRC reporting fraction is the province detection probabilities weighted by their onsets to the cut-off.
 #md # </figcaption>
 #md # </figure>
 #md # </details>
@@ -669,6 +670,7 @@ surveillance_pair_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Joint posterior of the main surveillance parameters, with the prior overlaid.
+#md # The DRC ascertainment here is the logit-scale centre of the province detection probabilities rather than the national reporting fraction.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -875,7 +877,7 @@ no_onward_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Deaths still expected among people infected by the cut-off, net of those already observed (left), and the projected total deaths (right).
+#md # Deaths still expected among people infected by the cut-off, net of the deaths the model expects by the cut-off (left), and the observed deaths plus those still expected (right).
 #md # The right axis starts at the observed death count.
 #md # </figcaption>
 #md # </figure>
@@ -979,7 +981,7 @@ joint_summary = summary_table(
     chn_joint,
     [
         :r, :r0, :doubling_time, :T, :R_T, :CFR, :C_T,
-        :p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
+        :p_drc_national, :p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
         Symbol("exports_state.travel_state.daily_travellers"),
     ]; digits = 2
 )
@@ -1016,6 +1018,7 @@ posterior_draws = DataFrame(
     R_T = vec(Array(chn_joint[:R_T])),
     CFR = vec(Array(chn_joint[:CFR])),
     p_drc = vec(Array(chn_joint[:p_drc])),
+    p_drc_national = vec(Array(chn_joint[:p_drc_national])),
     p_uganda = vec(Array(chn_joint[:p_uganda])),
     C_T = vec(Array(chn_joint[:C_T])),
     cumulative_onsets_T = cumulative_onsets_T,
@@ -1112,8 +1115,8 @@ for id in frozen_forecast_ids
 end
 
 ## The frozen single-stream fits, forecast from their own chains as
-## `stream_forecasts.csv` forecasts the live ones. They are registered only
-## at the validation cut-off and only for still-reported streams.
+## `stream_forecasts.csv` forecasts the live ones, for every id
+## `frozen_stream_fit_ids` lists.
 _frozen_stream_of = Dict(
     "cases" => (:reported_cases, "reported cases"),
     "deaths" => (:suspected_deaths, "suspected deaths"),
@@ -1121,10 +1124,12 @@ _frozen_stream_of = Dict(
     "confirmed_deaths" => (:confirmed_deaths, "confirmed deaths"),
     "treatment" => (:isolation_beds, "isolation beds")
 )
-for (_sid, _sf) in sort(collect(pairs(frozen_lastweek_streams)); by = first)
-    _stream, _label = _frozen_stream_of[_sid]
-    _o = _sf.o
-    _spp = fit_forecast("frozen_validation_$_sid")
+for _f in frozen_stream_fit_ids(
+        validation_cutoff, frozen_cutoffs, validation_stream_ids(obs)
+    )
+    _stream, _label = _frozen_stream_of[_f.sid]
+    _o = load_fit(_f.id).o
+    _spp = fit_forecast(_f.id)
     for h in forecast_horizons
         _vals = forecast_stream(_spp, _stream; horizon = h)
         for (_d, _i) in enumerate(1:5:length(_vals))
@@ -1132,7 +1137,7 @@ for (_sid, _sf) in sort(collect(pairs(frozen_lastweek_streams)); by = first)
                 frozen_forecast_archive,
                 (
                     _o.cutoff, h, _o.cutoff + Day(h), _label, _d,
-                    Float64(_vals[_i]), _sid,
+                    Float64(_vals[_i]), _f.sid,
                 )
             )
         end
@@ -1289,36 +1294,6 @@ for f in stream_fits, (stream, label) in f.streams,
     end
 end
 
-## Confirmed/suspect ward-bed occupancy for the joint, read from the joint's
-## own `forecast_reported` runs so the ward beds are scored on the same
-## footing as the total occupancy in the preferred `stream_forecasts.csv`
-## asset. `forecast_stream` cannot project these. The split is not a growable
-## stream but a partition of the total.
-##
-## Dead as it stands. `forecast_reported` projects the total occupancy alone
-## and emits neither column, so the guard below always skips and nothing
-## reaches `stream_forecasts.csv` under these two labels. The joint does
-## carry the cut-off split (`expected_confirmed_incare_T`), so what is
-## missing is the partition of the projected level, not the quantity to
-## partition it by. Kept, with the guard, so the loop starts writing the
-## moment `forecast_reported` grows those columns.
-for (h, fc) in forecast_runs,
-        (col, label) in (
-            (:suspect_occupancy, "isolation beds (suspected)"),
-            (:confirmed_occupancy, "treatment beds"),
-        )
-
-    col in propertynames(fc) || continue
-    _wvals = fc[!, col]
-    for (d, i) in enumerate(1:stream_thin:length(_wvals))
-        push!(
-            stream_forecasts, (
-                obs.cutoff, h, obs.cutoff + Day(h), label,
-                d, Float64(_wvals[i]), "joint",
-            )
-        )
-    end
-end
 CSV.write(joinpath(output_dir, "stream_forecasts.csv"), stream_forecasts);
 
 ## Latent symptom-onset trajectory over time, the "symptomatic cases" curve,
@@ -1418,4 +1393,4 @@ end
 #
 # The full analysis code, data and model definitions are in the [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize) repository.
 # Issues, corrections and suggestions are welcome there.
-# Maintained by Sam Abbott, Kath Sherratt, Samuel Brand and Sebastian Funk.
+# Maintained by Sam Abbott and Sebastian Funk.

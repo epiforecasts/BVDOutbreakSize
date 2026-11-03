@@ -35,8 +35,8 @@ end
 
 ## Both plotted quantities have a hard floor: `delta_deaths` is clamped at
 ## zero, so `total_projected` cannot fall below the deaths already observed.
-## A free kernel density spreads mass past the smallest draw, which put a
-## visible negative tail on the still-expected-deaths panel.
+## A free kernel density spreads mass past the smallest draw, which puts a
+## negative tail on the still-expected-deaths panel.
 
 @testitem "plot_no_onward_deaths keeps each density inside its bound" setup = [
     HeadlessMakie,
@@ -45,7 +45,7 @@ end
     using CairoMakie: Axis
     using BVDOutbreakSize: plot_no_onward_deaths
 
-    ## Draws piled against the zero clamp, which is what produced the tail.
+    ## Draws piled against the zero clamp.
     delta = max.(collect(range(-40, 160; length = 500)), 0.0)
     obs_deaths = 2325
     df = DataFrame(

@@ -255,7 +255,12 @@ end
     @test fm.confirmed_deaths ==
         rh.confirmed_deaths_state.confirmed_death_daily[fd]
     @test fm.recovered == rh.recovered_state.recovered_daily[fd]
-    @test fm.isolation == rh.treatment_state.occupancy_mean[fd]
+    ## The occupancy, admissions and beds are the fitted model's series run
+    ## forward, with nothing capped.
+    st = rh.treatment_state
+    @test fm.isolation ≈ max.(st.occupancy_mean[fd], 0.0)
+    @test fm.admissions ≈ st.admit_daily[fd]
+    @test fm.beds == st.capacity_patch[:, fd]
 end
 
 @testitem "forecast counts carry the fitted delays past the cut-off" setup = [

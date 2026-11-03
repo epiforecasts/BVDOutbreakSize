@@ -78,6 +78,11 @@ per-stream cumulative totals at the cut-off (`reported_cases`,
 `exported_cases`, `exports_deaths`). A scalar with no explicit TOML block
 is taken from the final vintage of the matching history.
 
+A `[skip_dates]` block, keyed by history block name, lists vintages left out
+of the loaded history while staying in the manifest as printed, so the
+window before a skipped vintage merges into the next. A zone revision block
+follows its zone block's list. A date that matches no vintage is an error.
+
 The dated Uganda export series are grid day-indices (`export_case_days`,
 `export_death_days`), each a sorted list of detection or death days on or
 before the cut-off.
@@ -139,6 +144,55 @@ function load_observations(
     n = Int(date2epochdays(cutoff) - date2epochdays(seeding)) + 1
     _index(d) = n - _gap(d)
 
+    ## Vintages left out of a block's loaded history while staying in the
+    ## manifest as printed (`[skip_dates]`, keyed by block name). A skipped
+    ## vintage merges its window into the next one, so a report whose
+    ## cumulative is later withdrawn (SitRep 169's Ituri death harmonisation,
+    ## undone by SitRep 170) is not read as a step up and then a fall, which
+    ## the increment likelihood cannot score. Every listed date must match a
+    ## vintage of a block that exists, since a typo would otherwise skip
+    ## nothing while appearing to handle the revision.
+    skip_dates = Dict{String, Set{String}}()
+    if haskey(raw, "skip_dates")
+        for (key, ds) in raw["skip_dates"]
+            key == "source" && continue
+            haskey(raw, key) || error(
+                "skip_dates: $key names no block in the manifest"
+            )
+            blk = raw[key]
+            printed = if haskey(blk, "dates")
+                Set(String.(blk["dates"]))
+            else
+                Set(
+                    String(d) for sub in values(blk) if sub isa AbstractDict
+                        for zsub in (haskey(sub, "dates") ? (sub,) : values(sub))
+                        if zsub isa AbstractDict && haskey(zsub, "dates")
+                        for d in zsub["dates"]
+                )
+            end
+            for d in String.(ds)
+                d in printed || error(
+                    "skip_dates: $key has no vintage dated $d, so skipping " *
+                        "it would do nothing"
+                )
+            end
+            skip_dates[key] = Set(String.(ds))
+        end
+    end
+    ## Whether a block's vintage dated `d` is kept: on or before the cut-off
+    ## and not listed in `[skip_dates]` for that block.
+    ## A zone revision block follows its zone block, so a printed 24h figure
+    ## never sits on a vintage the zone history has dropped.
+    _skip_parent = Dict(
+        "zone_confirmed_revision_24h" => "zone_confirmed_history",
+        "zone_death_revision_24h" => "zone_death_history",
+    )
+    _skipped(key) = union(
+        get(skip_dates, key, Set{String}()),
+        get(skip_dates, get(_skip_parent, key, ""), Set{String}())
+    )
+    _kept(key, d) = Date(String(d)) <= cutoff && !(String(d) in _skipped(key))
+
     ## A dated cumulative history → grid day-indices and counts, sorted
     ## oldest-first so the model differences consecutive vintages into
     ## daily increments. Vintages after the cut-off are dropped. Empty
@@ -146,7 +200,7 @@ function load_observations(
     function history(key)
         haskey(raw, key) || return (; days = Int[], counts = Int[])
         block = raw[key]
-        keep = [Date(String(d)) <= cutoff for d in block["dates"]]
+        keep = [_kept(key, d) for d in block["dates"]]
         idx = Int[_index(d) for d in block["dates"][keep]]
         vals = Int.(block["values"][keep])
         ord = sortperm(idx)
@@ -242,7 +296,7 @@ function load_observations(
         !haskey(block, "dates") && return Dict{String, ProvHistory}()
         provinces = sort!([k for k in keys(block) if k != "dates" && k != "source"])
         result = Dict{String, ProvHistory}()
-        keep = [Date(String(d)) <= cutoff for d in block["dates"]]
+        keep = [_kept(key, d) for d in block["dates"]]
         idx = Int[_index(d) for d in block["dates"][keep]]
         ord = sortperm(idx)
         for prov in provinces
@@ -253,8 +307,8 @@ function load_observations(
     end
 
     ## Sparse province blocks: one `[block.province]` sub-table per province
-    ## with its own `dates` and `values`, since the isolation and bed
-    ## figures are printed for different provinces on different days. A
+    ## with its own `dates` and `values`, since the isolation, bed and
+    ## admissions figures are printed for different provinces on different days. A
     ## province absent on a day has no entry, never a zero.
     function province_sparse_history(key)
         ProvHistory = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
@@ -263,7 +317,7 @@ function load_observations(
         for (prov, sub) in raw[key]
             sub isa AbstractDict || continue
             haskey(sub, "dates") || continue
-            keep = [Date(String(d)) <= cutoff for d in sub["dates"]]
+            keep = [_kept(key, d) for d in sub["dates"]]
             idx = Int[_index(d) for d in sub["dates"][keep]]
             ord = sortperm(idx)
             vals = Int.(sub["values"][keep])
@@ -284,7 +338,7 @@ function load_observations(
         !haskey(raw, key) && return result
         block = raw[key]
         !haskey(block, "dates") && return result
-        keep = [Date(String(d)) <= cutoff for d in block["dates"]]
+        keep = [_kept(key, d) for d in block["dates"]]
         idx = Int[_index(d) for d in block["dates"][keep]]
         ord = sortperm(idx)
         for prov in sort!([k for k in keys(block) if block[k] isa AbstractDict])
@@ -298,6 +352,36 @@ function load_observations(
                 zones[String(zone)] = (; days = idx[ord], counts = v[ord])
             end
             result[prov] = zones
+        end
+        return result
+    end
+
+    ## Sparse per-zone history, one `province.zone` sub-table per zone.
+    function zone_sparse_history(key)
+        ZonePrinted = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
+        result = Dict{String, Dict{String, ZonePrinted}}()
+        haskey(raw, key) || return result
+        for (prov, zones) in raw[key]
+            prov == "source" && continue
+            zones isa AbstractDict || error("$key: $prov is not a table")
+            for (zone, sub) in zones
+                (
+                    sub isa AbstractDict && haskey(sub, "dates") &&
+                        haskey(sub, "values")
+                ) || error(
+                    "$key: $prov.$zone needs `dates` and `values`"
+                )
+                length(sub["values"]) == length(sub["dates"]) || error(
+                    "$key: $prov.$zone has $(length(sub["values"])) " *
+                        "values for $(length(sub["dates"])) dates"
+                )
+                keep = [_kept(key, d) for d in sub["dates"]]
+                idx = Int[_index(d) for d in sub["dates"][keep]]
+                ord = sortperm(idx)
+                vals = Int.(sub["values"][keep])
+                block = get!(result, String(prov), Dict{String, ZonePrinted}())
+                block[String(zone)] = (; days = idx[ord], counts = vals[ord])
+            end
         end
         return result
     end
@@ -523,8 +607,14 @@ function load_observations(
         province_isolation_history =
             province_sparse_history("province_isolation_history"),
         province_bed_capacity_history = province_bed_capacity_history,
+        province_admissions_history =
+            province_sparse_history("province_admissions_history"),
         zone_confirmed_history = zone_history("zone_confirmed_history"),
         zone_death_history = zone_history("zone_death_history"),
+        zone_confirmed_revision_24h =
+            zone_sparse_history("zone_confirmed_revision_24h"),
+        zone_death_revision_24h =
+            zone_sparse_history("zone_death_revision_24h"),
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days,
     )
@@ -603,18 +693,23 @@ function province_increment_matrix(
     return (; days, increments)
 end
 
+## A zone's cumulative falls when it loses more than one, so a single-unit
+## correction is not read as a revision.
+_is_zone_fall(prev, cur) = prev - cur > 1
+
 """
-    zone_cumulative_falls(zone_history; min_fall = 1)
+    zone_cumulative_falls(zone_history)
 
 Every place a named zone's cumulative count falls between consecutive
-vintages by more than `min_fall`, as a vector of named tuples
+vintages by more than one, as a vector of named tuples
 `(; province, zone, day, from, to)`. A cumulative series cannot fall on
 its own, so each entry is a revision: the report has moved counts
-between zones, provinces or the unallocated row. `min_fall` guards
-against a single-unit correction being read as a revision.
-[`zone_increment_matrix`](@ref) clamps these falls to zero.
+between zones, provinces or the unallocated row. A fall of one is read
+as a single-unit correction rather than a revision.
+[`zone_increment_matrix`](@ref) clamps these falls to zero, or takes the
+report's 24h figure where one is recorded ([`zone_increments`](@ref)).
 """
-function zone_cumulative_falls(zone_history; min_fall::Integer = 1)
+function zone_cumulative_falls(zone_history)
     out = @NamedTuple{
         province::String, zone::String, day::Int,
         from::Int, to::Int,
@@ -623,7 +718,7 @@ function zone_cumulative_falls(zone_history; min_fall::Integer = 1)
 
         zone == "unallocated" && continue
         for i in 2:length(h.days)
-            h.counts[i - 1] - h.counts[i] > min_fall || continue
+            _is_zone_fall(h.counts[i - 1], h.counts[i]) || continue
             push!(
                 out,
                 (;
@@ -637,8 +732,34 @@ function zone_cumulative_falls(zone_history; min_fall::Integer = 1)
 end
 
 """
-    zone_reattribution_days(zone_history; include_zone_falls = false,
-        min_fall = 1)
+    zone_increments(counts, days, printed = nothing)
+
+One zone's increments of its cumulative `counts`, clamped at zero,
+except that a flagged fall takes the `printed` figure (`(; days, counts)`)
+for that day, floored at zero.
+"""
+function zone_increments(
+        counts::AbstractVector, days::AbstractVector, printed = nothing
+    )
+    inc = max.(diff(vcat(0, Int.(counts))), 0)
+    printed === nothing && return inc
+    for i in 2:length(counts)
+        _is_zone_fall(counts[i - 1], counts[i]) || continue
+        j = findfirst(==(days[i]), printed.days)
+        j === nothing && continue
+        inc[i] = max(Int(printed.counts[j]), 0)
+    end
+    return inc
+end
+
+## The printed 24h series of `prov.zone` in a revision block, or `nothing`.
+function _zone_printed(daily, prov::AbstractString, zone::AbstractString)
+    haskey(daily, prov) || return nothing
+    return get(daily[prov], zone, nothing)
+end
+
+"""
+    zone_reattribution_days(zone_history; include_zone_falls = false)
 
 The vintage days on which a province's `unallocated` cumulative count
 falls, keyed by province, from the per-health-zone histories loaded by
@@ -653,12 +774,11 @@ A revision can also move counts the other way, out of named zones,
 leaving the unallocated row flat or rising. That vintage is a revision
 just as much, but the unallocated rule does not see it. With
 `include_zone_falls` the vintages of [`zone_cumulative_falls`](@ref) are
-added, so any vintage on which a named zone loses more than `min_fall`
-is left out too. It is off by default.
+added, so any vintage on which a named zone's cumulative falls is left
+out too. It is off by default.
 """
 function zone_reattribution_days(
-        zone_history;
-        include_zone_falls::Bool = false, min_fall::Integer = 1
+        zone_history; include_zone_falls::Bool = false
     )
     out = Dict{String, Vector{Int}}()
     for (prov, zones) in zone_history
@@ -671,7 +791,7 @@ function zone_reattribution_days(
         isempty(falls) || (out[String(prov)] = falls)
     end
     if include_zone_falls
-        for f in zone_cumulative_falls(zone_history; min_fall)
+        for f in zone_cumulative_falls(zone_history)
             push!(get!(out, f.province, Int[]), f.day)
         end
         for (prov, days) in out
@@ -683,7 +803,8 @@ end
 
 """
     zone_increment_matrix(zone_history, patch_names, members = PROVINCE_MEMBERS;
-        reattribution = zone_reattribution_days(zone_history))
+        reattribution = zone_reattribution_days(zone_history),
+        printed = Dict())
 
 Reshape the per-health-zone cumulative histories loaded by
 [`load_observations`](@ref) into one increment matrix per patch, the
@@ -695,7 +816,11 @@ provinces, the `unallocated` rows left out, and one column per vintage.
 Every zone must be reported on the same vintage days, which the tables
 guarantee by sharing one `dates` array; a mismatch is an error.
 Increments are the differences of consecutive cumulative counts, the
-first from zero, clamped at zero as for the provinces.
+first from zero, clamped at zero as for the provinces. Where a zone's
+cumulative count falls and `printed` (keyed province → zone, the
+`zone_confirmed_revision_24h` block of [`load_observations`](@ref)) holds
+the report's 24h figure for that zone and day, the figure replaces the
+clamped zero ([`zone_increments`](@ref)). The default is no figures.
 
 A vintage on which a member province's unallocated count falls
 (`reattribution`, the days per province of
@@ -720,7 +845,8 @@ empty vector.
 function zone_increment_matrix(
         zone_history, patch_names::AbstractVector,
         members::AbstractDict = PROVINCE_MEMBERS;
-        reattribution::AbstractDict = zone_reattribution_days(zone_history)
+        reattribution::AbstractDict = zone_reattribution_days(zone_history),
+        printed::AbstractDict = Dict{String, Any}()
     )
     out = @NamedTuple{
         patch::String, zones::Vector{Tuple{String, String}},
@@ -762,8 +888,10 @@ function zone_increment_matrix(
         end
         inc = Matrix{Int}(undef, length(keys_), length(days))
         for (i, (prov, zone)) in enumerate(keys_)
-            c = zone_history[prov][zone].counts
-            inc[i, :] = max.(diff(vcat(0, c)), 0)
+            inc[i, :] = zone_increments(
+                zone_history[prov][zone].counts, days,
+                _zone_printed(printed, prov, zone)
+            )
         end
         excluded = sort!(
             unique!(

@@ -41,8 +41,8 @@
     @test !any(l -> occursin("capacité d'accueil", l), got)
     @test !any(l -> occursin("Vaccination", l), got)
 
-    ## The layout every vintage from 109 to 145 prints, which must read as
-    ## before: subsections numbered under the section, ending at Défis.
+    ## The layout every vintage from 109 to 145 prints still reads:
+    ## subsections numbered under the section, ending at Défis.
     nested = [
         "2.5. Prise en charge holistique",
         "2.5.1. Principales actions",
@@ -119,7 +119,7 @@ end
     )
     @test f[:patients_isolated] == 14
 
-    ## The wording every vintage from 109 prints still reads as before.
+    ## The wording every vintage from 109 prints still reads.
     f = parse_prose_entry(
         "89 nouvelles admissions contre 107 sorties dont 18 gueries. " *
             "ainsi, 442 patients sont hospitalises pour 1015 lits, soit un " *
@@ -206,5 +206,26 @@ end
         "bas_uele"
     )
     @test f[:patients_isolated] == 60
+    @test !haskey(f, :beds)
+end
+
+@testitem "care parser reads patients pris en charge CTE/CT" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "scan_province_care.jl"
+        )
+    )
+
+    ## SitRep 164, Nord-Kivu: the count with "pris en charge cte/ct" and a
+    ## rate with no fraction or beds.
+    f = parse_prose_entry(
+        "495 nouvelles admissions ont ete enregistrees contre 82 sorties, " *
+            "dont 4 patients gueris. ainsi, 497 patients sont pris en charge " *
+            "cte/ct, pour un taux d’occupation global des cte/ct de 87,8 %.",
+        "nord_kivu"
+    )
+    @test f[:patients_isolated] == 497
     @test !haskey(f, :beds)
 end

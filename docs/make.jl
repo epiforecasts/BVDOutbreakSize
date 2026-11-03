@@ -161,6 +161,26 @@ function stage_zone_map()
     return
 end
 
+## Copy the DocumenterVitepress default theme entry to `theme/base.ts`.
+## The site's own `theme/index.ts` extends it with the large-table
+## enhancement, and DocumenterVitepress writes its default entry only when the
+## source has none, so the copy keeps the base in step with the installed
+## package version.
+function stage_base_theme()
+    template = joinpath(
+        pkgdir(DocumenterVitepress), "template", "src", ".vitepress", "theme", "index.ts"
+    )
+    isfile(template) || error(
+        "DocumenterVitepress $(pkgversion(DocumenterVitepress)) has no default " *
+            "theme entry at $(template); docs/src/.vitepress/theme/index.ts " *
+            "extends it, so update `stage_base_theme` for this version."
+    )
+    dest = joinpath(LITERATE_OUT, ".vitepress", "theme", "base.ts")
+    mkpath(dirname(dest))
+    write(dest, read(template, String))
+    return
+end
+
 ## Assemble and deploy the Vitepress site from the pre-rendered markdown. The
 ## two report pages are already executed (Literate `execute = true`), so
 ## makedocs does not re-run them; it resolves `@ref`/`@cite`/`@bibliography`
@@ -172,6 +192,7 @@ function combine()
     write_index()
     write_references()
     stage_zone_map()
+    stage_base_theme()
     makedocs(;
         sitename = "BVDOutbreakSize",
         authors = "Sam Abbott and contributors",
@@ -249,13 +270,28 @@ function combine()
     ## (docs/build/1/, …) and its deploydocs flattens each build/i/ to
     ## gh-pages/<base>/. Plain deploydocs leaves the numbered subdir, so
     ## the deployed site's asset URLs 404. Ref LuxDL/DocumenterVitepress.jl#280.
-    return DocumenterVitepress.deploydocs(;
-        repo = "github.com/epiforecasts/BVDOutbreakSize",
-        target = "build",
-        branch = "gh-pages",
-        devbranch = "main",
-        push_preview = true
-    )
+    ##
+    ## The preview cleanup and sweep workflows also push to gh-pages and sit
+    ## outside the combine job's concurrency group, so a push can be rejected
+    ## as non-fast-forward. Each call clones gh-pages afresh and leaves
+    ## docs/build untouched, so a retry deploys on top of the new tip.
+    attempts = 3
+    for attempt in 1:attempts
+        try
+            return DocumenterVitepress.deploydocs(;
+                repo = "github.com/epiforecasts/BVDOutbreakSize",
+                target = "build",
+                branch = "gh-pages",
+                devbranch = "main",
+                push_preview = true
+            )
+        catch err
+            attempt == attempts && rethrow()
+            @warn "deploydocs failed; retrying" attempt exception = err
+            sleep(30 * attempt)
+        end
+    end
+    return nothing
 end
 
 if STAGE == "render-methods"

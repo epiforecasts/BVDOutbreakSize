@@ -2,15 +2,12 @@
 # diagnostics to the job summary; this decides whether those diagnostics are
 # good enough to publish a report from, and names the parameters responsible
 # when they are not. The joint fit is the one the headline outbreak size comes
-# from, so a build that publishes a joint fit which has not converged publishes
-# a number nobody should read.
+# from.
 #
 # Two thresholds per diagnostic rather than one. The fail threshold marks a
 # fit that has not converged at all (an R-hat of 2.6 is a chain stuck at its
 # initialisation, not a slow one). The warn threshold marks a fit that has
-# converged but mixes poorly, which is where the joint fit currently sits and
-# is tracked work rather than a build failure. Both are environment-settable,
-# so tightening the gate as the fit improves is a variable, not a code change.
+# converged but mixes poorly. Both are environment-settable.
 
 using BVDOutbreakSize: fit_diagnostics, parameter_diagnostics,
     sampler_by_chain_table, worst_parameters_table, family_diagnostics_table,
@@ -20,7 +17,7 @@ include(joinpath(@__DIR__, "shared.jl"))
 
 ## Fails a build. An R-hat this far from one, an effective sample size this
 ## small or a divergence rate this high is a sampler that has not explored the
-## posterior, whatever the numbers it reports.
+## posterior.
 const CONVERGENCE_FAIL = (
     rhat = 1.1, ess_bulk = 25.0, ess_tail = 25.0, divergent_fraction = 0.05,
 )
@@ -38,13 +35,11 @@ const CONVERGENCE_WARN = (
 const CONVERGENCE_IDS = ["joint", "local"]
 
 ## A threshold read from the environment. A malformed value names the
-## variable it came from: the parse failure alone says only that some number
-## could not be read, and the report is never written to say which.
+## variable it came from.
 ##
 ## `nan` and `inf` parse, and either one turns the threshold off without
-## saying so, because every comparison against them is false. A gate that a
-## typo can silently disable is the failure this exists to prevent, so a
-## threshold has to be finite.
+## saying so, because every comparison against them is false. A threshold
+## has to be finite.
 function _env_number(name, default)
     v = strip(get(ENV, name, ""))
     isempty(v) && return default
@@ -84,9 +79,8 @@ end
 
 
 ## A diagnostic that could not be computed (every parameter degenerate, or a
-## chain carrying no sampler extras) is not evidence of convergence, but it is
-## not evidence against it either, so it neither fails nor warns. The report
-## prints it as `n/a`, which is visible.
+## chain carrying no sampler extras) neither fails nor warns. The report
+## prints it as `n/a`.
 _breaches(value, limit, worse) = isfinite(value) && worse(value, limit)
 
 """

@@ -25,7 +25,7 @@ frozen_lastweek_streams = frozen_validation_stream_fits();
 
 # ## Summary
 #
-# The overall bullets come first, then each stream's own scores, from the sections below.
+# The overall bullets come first, then a table of each stream's scores, from the sections below.
 # Relative skill is the model's CRPS over the persistence baseline's, so a value below one beats the baseline.
 # Coverage is the fraction of forecasts whose observed value falls inside the 90% predictive interval, nominally 0.9.
 
@@ -39,8 +39,7 @@ frozen_lastweek_streams = frozen_validation_stream_fits();
 #
 # How last week's forecast held up against the data since observed, from the frozen refit in [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation").
 # Only the streams the situation reports still update are validated, since a stopped stream repeats its last total and leaves nothing to score.
-# The projected bed occupancy is scored against the beds held a week later, but this check is weak at a one-week-back freeze.
-# The reported occupancy rate starts only on 9 June, so the capacity has no implied-capacity anchor and rides its random walk back to the freeze date.
+# The projected bed occupancy is scored against the beds held a week later.
 
 #md # ```@raw html
 #md # <details><summary>Fit one week back and validate the one-week-ahead forecast</summary>
@@ -266,7 +265,7 @@ validation_latent_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The frozen fit's forecast of the past week's new infections, onsets and deaths against the current fit's estimate for the same window.
-#md # These quantities are not observed, so they are scored distribution against distribution.
+#md # These quantities are not observed, so the two posterior distributions are compared directly.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -342,9 +341,7 @@ validation_stopped_fig #hide
 # Reported cases and suspected deaths stopped being updated partway through the outbreak, and the exports detection series is anchored to an earlier cut-off.
 # Exports therefore has no scored forecast, and reported cases and suspected deaths each rest on a single matched forecast.
 #
-# Only a minority of the daily releases examined contribute a row, each a reconstruction of an earlier model version rather than the current fit.
-# Only the newest few releases carry the current model's individual-stream forecasts.
-# Each row shows the number of matched forecasts it rests on, from one to a handful.
+# Each row shows the number of matched forecasts it rests on.
 #
 # Four things are excluded from the scores, each for a stated reason rather than for scoring badly:
 #
@@ -356,10 +353,7 @@ validation_stopped_fig #hide
 #
 # Nothing is dropped from the archive itself, and the score and overlay files in the data directory record everything that was scored.
 #
-# The symptom-onset stream is scored on the new reported count each vintage adds, because every vintage rereads the whole figure.
-# Its printed total therefore moves with the scan error as well as with late reporting, and on fourteen vintages the reread total falls.
-# A window containing a falling vintage is left unscored, as the [province scores](@ref "Forecast by province across releases") do for a window holding a harmonisation-break day.
-# This bites hardest at the longer horizons: the frozen onset row keeps three of its twenty-nine windows, all at one week, and the cross-release row six of thirty-eight.
+# The symptom-onset stream is scored on the new reported count each vintage adds (see [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and forecast")), and on some vintages the reread total falls.
 # Read the onset row's skill against the baseline rather than its coverage, and as resting on a handful of windows.
 
 #md # ```@raw html
@@ -536,7 +530,8 @@ forecast_overlay_fig #hide
 #
 # The current model, frozen at earlier data cut-offs (see [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), is scored as the cross-release forecasts above, against the same baseline.
 # The tables in this section are the frozen joint model's, one row per stream.
-# Each stream's own frozen fit is scored only at the one-week-back cut-off for still-reported streams, and appears in the skill figures rather than the tables.
+# Each still-reported stream's own frozen fit is scored at the one-week-back cut-off, and confirmed cases and confirmed deaths also at each May cut-off.
+# These single-stream fits appear in the skill figures rather than the tables.
 # The May cut-offs predate the first reported bed occupancy and recoveries, so those windows are left unscored.
 # The baseline snapshot was taken weeks after the frozen cut-off, so it can hold later revisions to earlier days (see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline")).
 
@@ -731,11 +726,10 @@ MarkdownTable(frozen_score_by_vintage_display) #hide
 #md # ```
 
 ## The frozen joint and the persistence baseline only. A single-stream
-## frozen fit exists at the one-week-back cut-off alone, so its series lands
-## on one made date of a panel spanning every cut-off, overplotting the
-## joint point it sits beside rather than reading as a second series. The
-## single-stream frozen fits are compared against the joint in the skill
-## figures and in the validation plot at that cut-off.
+## frozen fit sits at the same made dates as the joint, so drawing it here
+## would overplot the joint point beside it. The single-stream frozen fits
+## are compared against the joint in the skill figures and in the
+## validation plot at the one-week-back cut-off.
 frozen_overlay_fig = plot_forecast_overlay(
     scored_overlay(
         vcat(
@@ -759,9 +753,6 @@ frozen_overlay_fig #hide
 #md # </figcaption>
 #md # </figure>
 #md # ```
-
-# The frozen re-fits below freeze the renewal data to an earlier cut-off and re-fit, so that a change driven by newer data can be distinguished from one driven by a change of method.
-# The one-week-back re-fit uses the headline sampler settings, and the re-fits at earlier cut-offs use the single-population frozen settings given in the methods.
 
 #md # ```@raw html
 #md # <details><summary>Freeze the renewal data to a cut-off and re-fit</summary>
@@ -874,8 +865,6 @@ CSV.write(
 ## tables built further down, so they are written here and read back when
 ## the site is assembled.
 evaluation_forecast_national_summary = let
-    fmt(x) = ismissing(x) || !isfinite(x) ? "n/a" :
-        string(round(x; digits = 2))
     scored(tbl) = filter(r -> !ismissing(r.rel_to_baseline), tbl)
     function beat(label, tbl)
         rows = scored(tbl)
@@ -887,37 +876,33 @@ evaluation_forecast_national_summary = let
             " streams."
         )
     end
-    function block(lead, tbl)
-        rows = scored(tbl)
-        size(rows, 1) == 0 && return nothing
-        return join(
-            vcat(
-                [string("**", lead, "**"), ""],
-                [
-                    string(
-                        "- ", r.stream, ": relative skill ",
-                        fmt(r.rel_to_baseline), ", 90% coverage ",
-                        fmt(r.coverage_90), ", bias ", fmt(r.bias), " over ",
-                        r.n, " forecasts."
-                    )
-                        for r in eachrow(rows)
-                ]
-            ), "\n"
-        )
-    end
     frozen_joint = select_fit_role(frozen_score_overview_table, "joint")
     overall = [
         beat("Joint model across releases", joint_score_overview_table),
         beat("Frozen joint model", frozen_joint),
     ]
-    blocks = filter(
-        !isnothing,
-        [
-            block("Across releases", joint_score_overview_table),
-            block("Frozen fits", frozen_joint),
-        ]
+    ## One row per stream and evaluation, the cross-release scores first.
+    rows(lead, tbl) = let r = scored(tbl)
+        DataFrame(
+            "Stream" => r.stream,
+            "Evaluation" => fill(lead, size(r, 1)),
+            "Relative skill" => finite_round.(r.rel_to_baseline),
+            "90% coverage" => finite_round.(r.coverage_90),
+            "Bias" => finite_round.(r.bias),
+            "Forecasts" => r.n,
+        )
+    end
+    table = vcat(
+        rows("Across releases", joint_score_overview_table),
+        rows("Frozen fit", frozen_joint)
     )
-    join(vcat([join(overall, "\n")], blocks), "\n\n")
+    join(
+        vcat(
+            [join(overall, "\n")],
+            size(table, 1) == 0 ? String[] :
+                [markdown_table(table; missing_text = "n/a")]
+        ), "\n\n"
+    )
 end
 dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets"

@@ -179,8 +179,14 @@ bounds(q) = [
 ]
 ## Label, the four bounds, posterior median (or nothing) and prior median
 ## (or nothing) per stream.
+## The national suspected-case ascertainment, `p_drc_national` in a
+## release fitted with the province detection and `p_drc` before it.
+drc_key = hasproperty(draws, :p_drc_national) ? "p_drc_national" : "p_drc"
 asc_rows = [
-    ("Suspected cases", bounds("p_drc"), median(draws.p_drc), asc_prior),
+    (
+        "Suspected cases", bounds(drc_key),
+        median(getproperty(draws, Symbol(drc_key))), asc_prior,
+    ),
     ("Exported cases", bounds("p_uganda"), median(draws.p_uganda), asc_prior),
     ("Suspects tested", bounds("tau_test"), nothing, tau_prior),
     (

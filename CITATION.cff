@@ -1,7 +1,8 @@
 cff-version: 1.2.0
 message: >-
-  If you use or build on this project, please cite it using
-  these metadata.
+  If you use this project, please cite it using these metadata,
+  together with the INSP and WHO situation reports that supply
+  its data.
 title: >-
   BVDOutbreakSize: estimating the current size of the 2026 DRC
   Bundibugyo virus outbreak
@@ -9,10 +10,6 @@ authors:
   - family-names: Abbott
     given-names: Sam
     orcid: "https://orcid.org/0000-0001-8057-8037"
-  - family-names: Sherratt
-    given-names: Katharine
-  - family-names: Brand
-    given-names: Samuel
   - family-names: Funk
     given-names: Sebastian
     orcid: "https://orcid.org/0000-0002-2842-3406"
@@ -24,5 +21,5 @@ identifiers:
     value: 10.5281/zenodo.20312758
     description: Concept DOI for all versions
 license: MIT
-version: 2.1.0
-date-released: "2026-09-17"
+version: 3.0.0
+date-released: "2026-09-30"

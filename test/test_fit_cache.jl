@@ -80,6 +80,8 @@ end
     )
     @test length(written) >= 4  # guards against a silent regex miss
     @test joinpath("province", "forecast_overlay.csv") in written
+    @test joinpath("province", "released_estimates.csv") in written
+    @test joinpath("zone", "released_estimates.csv") in written
     for f in written
         @test _is_excluded(f, FIT_DATA_EXCLUDE)
     end
@@ -143,11 +145,9 @@ end
     include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
 
     ## `data/observations.toml` is the single source of truth for every
-    ## observation the model conditions on. The digest once covered `*.csv`
-    ## only, so the manifest never entered the key: a data update that touched
-    ## it alone served every fit from cache against the previous data. Four of
-    ## the twenty-five most recent commits to the manifest changed no hashed
-    ## CSV, one of them adding a month of fitted daily new-suspect history.
+    ## observation the model conditions on. A data update can touch it alone
+    ## and change no hashed CSV, so a digest over `*.csv` only would keep
+    ## serving cached fits after the data changed.
     d = mktempdir()
     write(joinpath(d, "observations.toml"), "cases = 1\n")
     write(joinpath(d, "onset_curve_scanned.csv"), "day,count\n1,1\n")
@@ -294,6 +294,26 @@ end
     )
     @test groups["joint"] == ["joint", "sens_no_patches"]
     @test "frozen_validation" in groups["frozen"]
+    ## Each May cut-off carries its confirmed and confirmed-deaths
+    ## single-stream fits beside the frozen joint, in the same CI group, and
+    ## each builds its own stream's model from the observations frozen at
+    ## that cut-off.
+    spec_of(id) = specs[findfirst(s -> s.id == id, specs)]
+    for c in default_frozen_cutoffs(), sid in FROZEN_CUTOFF_STREAM_FITS
+        @test "frozen_$(c)_$sid" in groups["frozen"]
+        @test spec_of("frozen_$(c)_$sid").kind === :frozen
+    end
+    c = first(default_frozen_cutoffs())
+    frozen_n = freeze_observations(c).n
+    @test frozen_n < obs.n
+    for (sid, f) in (
+            ("confirmed", BVDOutbreakSize.confirmed_only_model),
+            ("confirmed_deaths", BVDOutbreakSize.confirmed_deaths_only_model),
+        )
+        m = spec_of("frozen_$(c)_$sid").model()
+        @test m.f === f
+        @test m.args.n == frozen_n
+    end
     @test all(startswith("sens_"), groups["sensitivity"])
 end
 

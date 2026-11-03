@@ -128,10 +128,6 @@ if !@isdefined(_BVD_SETUP_LOADED)
     include(joinpath(pkgdir(BVDOutbreakSize), "docs", "fits", "registry.jl"))
     _BREAKPOINT = default_breakpoint(obs)
 
-    ## The exports-deaths composer keeps the deaths and exports submodels only
-    ## for their CFR, onset-to-death PMF and export onsets, leaving their own
-    ## counts missing, which leaves two redundant sampled discrete draws, so its
-    ## model check is disabled (see `nuts_sample`).
     validation_cutoff = default_validation_cutoff(obs)
 
     ## Published per-release estimates, pulled from the tagged results
@@ -144,10 +140,10 @@ if !@isdefined(_BVD_SETUP_LOADED)
     )
 
     ## Frozen joint re-fits at the cut-offs McCabe et al. used (27 May matches
-    ## the Lancet publication's cut-off), for the matched-in-time comparison
-    ## further down. The estimate-evolution overlay relies on the published
-    ## per-release estimates in `released_df`, so no per-release-date current-
-    ## model re-fits are run here.
+    ## the Lancet publication's cut-off), for the comparisons page. The
+    ## estimate-evolution overlay relies on the published per-release
+    ## estimates in `released_df`, so no per-release-date current-model
+    ## re-fits are run here.
     frozen_cutoffs = default_frozen_cutoffs()
     ## Chamla et al.'s 8 June confirmed-case anchor, kept out of the
     ## McCabe-matched `frozen_cutoffs` but reused for the Chamla comparison and
@@ -159,12 +155,9 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## they can be run from the standalone per-fit entry point too.
 
     ## Sensitivity refits (onset-to-death delay, molecular clock) are slow extra
-    ## joint fits, gated on the `BVD_RUN_SENSITIVITY` env var. They run on
-    ## release builds only (tag pushes, which deploy the versioned docs) and are
-    ## skipped on main pushes and PR previews to keep those docs builds fast:
-    ## `.github/workflows/docs.yml` sets the var to
-    ## `startsWith(github.ref, 'refs/tags/')`. Set `BVD_RUN_SENSITIVITY=true`
-    ## to run them locally.
+    ## joint fits, gated on the `BVD_RUN_SENSITIVITY` env var, which
+    ## `.github/workflows/docs.yml` sets on main pushes and tags and leaves off
+    ## for PR previews. Set `BVD_RUN_SENSITIVITY=true` to run them locally.
     RUN_SENSITIVITY = lowercase(
         strip(
             get(
@@ -330,6 +323,31 @@ if !@isdefined(_BVD_SETUP_LOADED)
         obs.province_death_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES)
     )
+    ## The province model's spatial hyperparameters and their labels, for the
+    ## estimates table and the in-sample prior and posterior pair plot.
+    spatial_labels = Dict(
+        :region_sd => "Rt deviation spread",
+        :region_halflife => "Rt deviation half-life (days)",
+        :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
+        :province_suspected_ascertainment_sd => "Detection spread (logit)",
+        :province_ascertainment_sd => "Confirmation spread",
+        :importation_epsilon => "Importation intensity",
+        :importation_destination_sd => "Importation destination spread",
+        :importation_origin_destination_correlation =>
+            "Origin-destination correlation",
+        :importation_flow_sd => "Importation flow spread",
+        :importation_reciprocity => "Importation reciprocity",
+        :province_cfr_sd => "Lethality spread (logit)",
+        :province_death_ascertainment_sd => "Death-confirmation spread"
+    )
+    spatial_params = [
+        :region_sd, :region_halflife, :region_corr_primary_secondary,
+        :province_suspected_ascertainment_sd, :province_ascertainment_sd,
+        :importation_epsilon, :importation_destination_sd,
+        :importation_origin_destination_correlation, :importation_flow_sd,
+        :importation_reciprocity, :province_cfr_sd,
+        :province_death_ascertainment_sd,
+    ]
     ## Draws from the province model's prior for the province pages. The
     ## `joint_prior_draws` are single-population and carry no province
     ## quantities. Every observation is withheld as there, but the province
@@ -443,6 +461,65 @@ if !@isdefined(_BVD_SETUP_LOADED)
         _joint_pp_cache[] = pp
         return pp
     end
+    ## The first confirmed vintage is an unreplicated baseline, and the
+    ## deaths are replicated from zero at every vintage.
+    _joint_counts_cache = Ref{Any}(nothing)
+    function joint_count_replicates()
+        cached = _joint_counts_cache[]
+        cached !== nothing && return cached
+        pp = joint_posterior_predictive()
+        chn = load_fit("joint")
+        draws(vn) = collect(pp[BVDOutbreakSize.FlexiChains.Prefixed(vn)])
+        ## The national confirmed cases are replicated per laboratory
+        ## window, oldest first, as on the national page.
+        windows = BVDOutbreakSize.confirmed_positivity_windows(
+            obs.confirmed_history, obs.lab_history, obs.lab_daily_history
+        )
+        conf_days = vcat(windows.early_days, windows.obs_days, windows.late_days)
+        conf_obs = collect(
+            first(
+                pp[k] for k in keys(pp)
+                    if occursin(
+                        "confirmed_state.confirmed_positives.positives", string(k)
+                    )
+            )
+        )
+        conf_reps = [
+            vcat(collect(e), collect(p), collect(l))
+                for (e, p, l) in zip(
+                    vec(draws(@varname(early_increments.increments))),
+                    vec(conf_obs), vec(draws(@varname(late_increments.increments)))
+                )
+        ]
+        death_reps = [collect(r) for r in vec(draws(@varname(cdeath_increments.increments)))]
+        cases = province_count_panels(
+            chn;
+            share_key = :province_shares,
+            obs_increments = province_cases.increments,
+            province_days = province_cases.days,
+            national_days = conf_days, national_replicates = conf_reps,
+            baseline = Int(first(obs.confirmed_history.counts)),
+            stream = "Confirmed cases", n_patches = N_PATCHES
+        )
+        deaths = province_count_panels(
+            chn;
+            share_key = :province_death_shares,
+            obs_increments = province_deaths.increments,
+            province_days = province_deaths.days,
+            national_days = obs.confirmed_deaths_history.days,
+            national_replicates = death_reps,
+            stream = "Confirmed deaths", n_patches = N_PATCHES
+        )
+        out = (;
+            cases = (; panels = cases, national_days = conf_days, national = conf_reps),
+            deaths = (;
+                panels = deaths, national_days = obs.confirmed_deaths_history.days,
+                national = death_reps,
+            ),
+        )
+        _joint_counts_cache[] = out
+        return out
+    end
     province_lab = province_lab_increment_matrix(
         obs.province_lab_daily_history, PROVINCE_NAMES,
         length(PROVINCE_NAMES); every = 7
@@ -454,6 +531,9 @@ if !@isdefined(_BVD_SETUP_LOADED)
     )
     province_capacity = province_care_observations(
         obs.province_bed_capacity_history, PROVINCE_NAMES; changes_only = true
+    )
+    province_admissions = province_care_observations(
+        obs.province_admissions_history, PROVINCE_NAMES
     )
     ## The parameter-recovery results the `recovery` CI job writes
     ## (`scripts/recovery.jl`), over every seed found: the recovery table and

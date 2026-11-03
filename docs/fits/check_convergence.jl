@@ -10,9 +10,8 @@
 #
 # The report is written to stdout, to the GitHub Actions job summary and, when
 # `BVD_CONVERGENCE_REPORT` names a path, to that file for the workflow's PR
-# comment. The process exits non-zero when any gated fit failed, so the build
-# goes red; nothing here touches the docs build, which runs in its own jobs and
-# publishes its preview either way.
+# comment. The process exits non-zero when any gated fit failed. The docs
+# build runs in its own jobs and publishes its preview either way.
 using Pkg: Pkg
 Pkg.instantiate()
 
@@ -34,8 +33,7 @@ const REPORT = strip(get(ENV, "BVD_CONVERGENCE_REPORT", ""))
 ## rather than leaving a new comment per build.
 const MARKER = "<!-- bvd-fit-convergence -->"
 
-## Where this verdict came from, so a comment read weeks later still says
-## which commit and which run produced it.
+## The commit and run that produced this verdict.
 function _context()
     sha = get(ENV, "GITHUB_SHA", "")
     isempty(sha) && return ""

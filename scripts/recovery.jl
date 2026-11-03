@@ -40,6 +40,7 @@ const SCALARS = [
 ]
 const PER_PROVINCE = [
     "C_T_patch", "R_T_patch", "CFR_patch", "province_ascertainment",
+    "province_suspected_ascertainment",
     "region_drift_sd",
 ]
 

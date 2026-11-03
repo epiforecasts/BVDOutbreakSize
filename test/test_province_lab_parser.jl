@@ -2,13 +2,11 @@
 ## (`scripts/scan_province_lab.jl`).
 ##
 ## The parser reads free prose that INSP rewords between vintages, and a
-## wording it cannot read drops that whole vintage. That failed quietly
-## once: from SitRep 119 the brief format began writing a wholly-negative
-## batch as "reveles" rather than "revenus", and six vintages (119-124)
-## went missing from `province_lab_daily_history` before anyone noticed
-## (issue #695). Every phrasing below is taken verbatim from a report, so a
-## future rewording that breaks one of them fails here rather than
-## silently shortening the series.
+## wording it cannot read drops that whole vintage. From SitRep 119 the
+## brief format writes a wholly-negative batch as "reveles" rather than
+## "revenus". Every phrasing below is taken verbatim from a report, so a
+## rewording that breaks one of them fails here rather than silently
+## shortening the series.
 ##
 ## Filter target for a scoped run (this worktree only, not every sibling
 ## worktree `@run_package_tests` would otherwise discover):
@@ -28,7 +26,7 @@
     ## after `province_entries` strips the province name and colon, folded
     ## to the unaccented lower case the parser works in.
     cases = [
-        ## The two ordinary shapes, which have always parsed.
+        ## The two ordinary shapes.
         (
             "57 nouveaux resultats positifs (40 vivants et 17 deces) sur 203 " *
                 "nouveaux echantillons recus et analyses (positivite : 28,1%).",
@@ -40,8 +38,8 @@
             "nord_kivu", (151, 21),
         ),
 
-        ## Wholly negative. "revenus" was the only spelling the parser
-        ## read; "reveles" is what SitReps 119-124 actually print.
+        ## Wholly negative, spelt "revenus" or, in SitReps 119-124,
+        ## "reveles".
         (
             "3 echantillons recus et testes (3 vivants), tous sont revenus " *
                 "negatifs.",
@@ -76,8 +74,8 @@
         ),
 
         ## A definite singular denominator, printed without a digit
-        ## (SitRep 119, Sud Ubangi). This one used to return (0, 0), which
-        ## broke the national partition without failing loudly.
+        ## (SitRep 119, Sud Ubangi). It reads as (1, 1), not (0, 0), which
+        ## would break the national partition without failing loudly.
         (
             "1 nouveau resultat positif (1 deces) sur l'echantillon analyse " *
                 "(positivite : 100,0%)",
@@ -155,6 +153,53 @@
     end
 end
 
+@testitem "province lab parser reads the SitRep 165 to 169 layouts" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    include(
+        joinpath(
+            pkgdir(BVDOutbreakSize), "scripts",
+            "scan_province_lab.jl"
+        )
+    )
+
+    ## SitRep 169 writes Tshopo's count out in words.
+    @test parse_province_entry(
+        "six echantillons provenant de personnes vivantes ont ete analyses, " *
+            "tous negatifs (positivite : 0%).",
+        "tshopo"
+    ) == (6, 0)
+
+    ## SitRep 165 numbers the section "2.1 Laboratoire" and its subheading
+    ## "2.2.1 Principales actions"; the bullets under it are still the lab.
+    text = join(
+        [
+            "2.1 Laboratoire",
+            "2.2.1   Principales actions",
+            "       Ituri : 36 nouveaux résultats positifs (22 vivants et 14 décès) sur 185 nouveaux échantillons",
+            "        analysés (positivité : 19,5%)",
+            "2.3. Prévention et Contrôle de l'Infection (PCI/EDS)",
+            "       Ituri : 23 rings ouverts sur 30 (76,7 %)",
+        ],
+        "\n"
+    )
+    lines = lab_lines(text)
+    @test length(lines) == 3
+    got, order = province_entries(lines)
+    @test order == ["ituri"]
+    @test parse_province_entry(got["ituri"], "ituri") == (185, 36)
+
+    ## SitRep 168 puts Bas-Uele inside the Haut-Uele bullet.
+    lines = [
+        "          Haut-Uélé : 3 nouveaux résultats positifs (2 vivants et 1 décès) sur 19 nouveaux échantillons",
+        "           analysés au laboratoire d’Isiro (positivité : 15,8 %) ; au Bas-Uélé, 15 échantillons ont été testés au",
+        "           laboratoire de Buta, tous revenus négatifs.",
+    ]
+    got, order = province_entries(lines)
+    @test order == ["haut_uele", "bas_uele"]
+    @test parse_province_entry(got["haut_uele"], "haut_uele") == (19, 3)
+    @test parse_province_entry(got["bas_uele"], "bas_uele") == (15, 0)
+end
+
 @testitem "province lab parser refuses to guess a leading count" begin
     using BVDOutbreakSize: BVDOutbreakSize
     include(
@@ -215,8 +260,8 @@ end
         end
     end
 
-    ## The window closed by issue #695: every date from SitRep 119 onward
-    ## is present, not just the ones whose wording happened to parse.
+    ## Every date from SitRep 119 onward is present, not just the ones whose
+    ## wording parses.
     for date in (
             "2026-09-10", "2026-09-11", "2026-09-12", "2026-09-13",
             "2026-09-14", "2026-09-15",
