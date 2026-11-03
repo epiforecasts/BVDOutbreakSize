@@ -82,6 +82,12 @@ end
 ## has `F₊(d + 1) − F₊(d)` (with `F₊(0) = 0`) and lag `nmax` has zero, then
 ## the masses are normalised by their sum, which is the truncation at `nmax`.
 function _pmf_from_cdfs(pc, dist, nmax::Integer)
+    raw = _lag_masses(pc, nmax)
+    return _normalise_masses(raw, sum(raw), dist, nmax)
+end
+
+## Unnormalised lag masses from the boundary CDFs, floored at zero.
+function _lag_masses(pc, nmax::Integer)
     z0 = zero(eltype(pc))
     raw = Vector{eltype(pc)}(undef, nmax + 1)
     pc_prev = z0
@@ -90,8 +96,16 @@ function _pmf_from_cdfs(pc, dist, nmax::Integer)
         pc_prev = pc[i]
     end
     raw[nmax + 1] = z0
-    s = sum(raw)
-    if !isfinite(s) || s <= zero(s)
+    return raw
+end
+
+## Whether a mass total `s` takes the uniform fallback.
+_degenerate_total(s) = !isfinite(s) || s <= zero(s)
+
+## The masses `raw` over their total `s`, or a uniform PMF when `s` is
+## degenerate.
+function _normalise_masses(raw, s, dist, nmax::Integer)
+    if _degenerate_total(s)
         z = zero(pdf(dist, oneunit(float(nmax))))
         return fill(one(z) / (nmax + 1), nmax + 1)
     end

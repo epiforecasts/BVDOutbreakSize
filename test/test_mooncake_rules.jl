@@ -813,9 +813,9 @@ end
 @testitem "Mooncake rules: guarded inputs pass no derivative" tags = [:ad] begin
     using Random: Xoshiro
     using Mooncake: Mooncake
-    using Distributions: logpdf
+    using Distributions: logpdf, Gamma, LogNormal, Weibull
     using BVDOutbreakSize: NegBinomialVector, StudentTVector,
-        zone_share_renewal_kernel
+        zone_share_renewal_kernel, discretise_censored
 
     function mgrad(f, args...)
         rule = Mooncake.build_rrule(f, args...)
@@ -862,6 +862,26 @@ end
     )
     @test all(iszero, gIb)
     @test all(iszero, gδ)
+
+    ## Delays a warm-up proposal can reach. Those on the uniform fallback
+    ## pass no derivative. A shape too large for the incomplete gamma
+    ## derivative to converge passes `NaN` to the shape rather than
+    ## throwing.
+    pmf_grad(d) = Mooncake.value_and_pullback!!(
+        Mooncake.build_rrule(discretise_censored, d, 20), ones(21),
+        discretise_censored, d, 20
+    )
+    for d in (
+            Gamma(Inf, 1.0), Gamma(2.0, Inf), LogNormal(0.0, Inf),
+            Weibull(1.0, Inf),
+        )
+        v, (_, d̄, _) = pmf_grad(d)
+        @test all(==(1 / 21), v)
+        @test all(iszero, values(d̄.fields))
+    end
+    v, (_, d̄, _) = pmf_grad(Gamma(1.0e12, 1.0e-11))
+    @test sum(v) ≈ 1
+    @test isnan(d̄.fields.α)
 end
 
 @testitem "Mooncake rules: the joint's likelihood rules fire" tags = [:ad] begin
