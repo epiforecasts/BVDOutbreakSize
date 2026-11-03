@@ -364,7 +364,7 @@ province_skill_by_cutoff_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Relative skill against the baseline release by release, so a run of releases that lost to the baseline reads as a run rather than as an average.
+#md # Relative skill against the baseline release by release, so a run of releases that lost to the baseline shows as a run.
 #md # </figcaption>
 #md # </figure>
 #md # <details><summary>Province scores by release</summary>

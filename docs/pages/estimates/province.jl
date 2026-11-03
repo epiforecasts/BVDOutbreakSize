@@ -288,17 +288,15 @@ province_imports_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Imported infections by province.
-#md # Every arrival is debited from its origin on the same day, so the figure shows where infection occurred rather than extra infection.
+#md # Every arrival is debited from its origin on the same day, so the figure shows where infection occurred.
 #md # </figcaption>
 #md # </figure>
 #md # ```
 
 # ## [Point prevalence](@id province-prevalence)
 #
-# Point prevalence is the number of people infected at the cut-off who have not yet died, recovered or been detected as a suspected case.
-# We split it into people infected but not yet symptomatic and people with symptoms who have not yet been detected.
-# Together they are the infections in the community.
-# The [point prevalence](@ref methods-prevalence) section of the Methods gives the calculation.
+# Point prevalence is the number of people infected at the cut-off who are still in the community, having not yet died, recovered or been detected as a suspected case.
+# It splits into people not yet symptomatic and people with symptoms not yet detected, as the [point prevalence](@ref methods-prevalence) Methods section sets out.
 # A province's undetected count depends on its suspected-case detection probability.
 # The province compositions see that probability only as a product with case confirmation, so the province occupancy splits and its prior set it.
 # The table gives each rate per 100,000 residents and the number of people in the community, as medians with 90% credible intervals.
@@ -358,7 +356,7 @@ province_rt_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The reproduction number of each province, with the national trajectory in grey.
-#md # The grey band is the central trend the provinces pool toward, net of depletion, rather than any one province.
+#md # The grey band is the central trend the provinces pool toward, net of depletion.
 #md # Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi hold few confirmed cases, so their panels are carried mostly by the deviation prior and their widths are not measurements.
 #md # </figcaption>
 #md # </figure>
@@ -575,7 +573,7 @@ province_pair_figs[8] #hide
 # ## Data currency
 #
 # The province blocks are the provincial tables of the situation reports: confirmed cases, confirmed deaths and the 24-hour laboratory volumes.
-# A block that stops updating shows its last date before the cut-off rather than a flat series.
+# A block that stops updating shows its last date before the cut-off.
 
 #md # ```@raw html
 #md # <details><summary>Province block currency</summary>

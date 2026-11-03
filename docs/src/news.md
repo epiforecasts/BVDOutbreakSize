@@ -11,6 +11,12 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Performance
 
+- The per-patch treatment kernels (the patch rows through a delay, the demand share-out and the capacity and background admission shares) have hand-written Mooncake rules (#1217).
+  The model does not change.
+- The treatment flow no longer re-splits each patch's BVD admissions by weights of one when the per-patch reports carry the suspected-case detection (#1212).
+  The model does not change.
+- The sum-to-zero bases the patch submodels build on every evaluation pass no derivative, so Mooncake no longer tapes them (#1213).
+  The model does not change.
 - Hand-written Mooncake rules for the health-zone pre-grid convolution and vintage window weights keep the per-draw rebuild of the zone delays to about 5% of the full zone gradient, from 24% without them (local timings in #1085).
 - The health-zone relative ascertainment and fatality multipliers take their sum-to-zero basis from the model inputs, built once per fit rather than on every gradient (#1081, resolves #1048).
   This cuts the zone gradient by about 5%, with the timings in #1081.
@@ -294,7 +300,7 @@ A minor version: every affected province is its own patch, the importation kerne
 ### Infrastructure
 
 - The model's recurrences and convolutions are [ComposableRecurrences](https://github.com/EpiAware/ComposableRecurrences.jl) operators, and the hand-written Mooncake rules they replace are removed (#1152).
-  The renewal and the patch renewal are a `Recurrence` with `Depletion` (and `Redistribute` across patches), the delay and PMF convolutions, the care flows and the health-zone pre-grid terms are `Convolution`s, and the deviation-knot walk is a `Recurrence`.
+  The renewal and the patch renewal are a `Recurrence` with `Depletion` (and `Redistribute` across patches), the delay and PMF convolutions, the per-patch rows through a delay, the care flows and the health-zone pre-grid terms are `Convolution`s, and the deviation-knot walk is a `Recurrence`.
   The occupancy balance is a `Depletion` with three pools and share and count flows, its discharge split read off the previous day's pools through `Recent`.
   The health-zone split is a `Recurrence` with `Allocate`.
   Each matches the hand-written code to round-off, so fitted values change only by round-off.
@@ -308,6 +314,7 @@ A minor version: every affected province is its own patch, the importation kerne
   Only a warm-up proposal that overflows the infections reaches this, and its log density is non-finite either way.
   ComposableRecurrences 0.2 comes from GitHub through `[sources]` until it is registered.
 - The test matrix runs its version cell on Julia 1.11, the oldest the package supports, since ComposableRecurrences needs 1.11 (#1152).
+- The docs deploy waits on the health-zone pages, so a failed zone render skips the deploy (#1175).
 - The docs fits save their chain to the cache as soon as sampling ends, so a fit that finishes near the job's time limit is kept if the job is then cancelled, and the re-run loads it rather than refitting.
 - The docs build keeps its resolved manifest for ten days rather than three, so a re-run of failed jobs after a long fit can still pin it.
 - The benchmark driver turns off Pkg's automatic precompilation, which under Julia 1.13.2 fails with "Unknown package" on indirect dependencies after AirspeedVelocity adds its own packages.

@@ -424,6 +424,16 @@ convolve_delay(x::AbstractVector, delay::AbstractVector) =
     Convolution(delay)(x)
 
 """
+    convolve_rows(M, delay)
+
+Each row of `M` through `delay`, as [`convolve_delay`](@ref) takes one
+series: `Y[p, t]` sums `M[p, t−d] · delay[d+1]` over lags `d` that stay in
+range.
+"""
+convolve_rows(M::AbstractMatrix, delay::AbstractVector) =
+    Convolution(delay)(M)
+
+"""
 Discrete convolution of two delay PMFs `a` and `b` (both indexed from
 delay 0 at element 1), giving the PMF of the summed delay `a ⊕ b`. The
 result has length `length(a) + length(b) - 1`. Its mass equals
