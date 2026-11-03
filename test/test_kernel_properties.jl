@@ -83,6 +83,22 @@ end
     @test all(==(R), eachrow(patch_rt_matrix(R, zero(K), days)))
 end
 
+@testitem "importation_epsilon_matrix: the fraction by origin and day, capped at one" setup = [
+    KernelProperties,
+] begin
+    using BVDOutbreakSize: importation_epsilon_matrix, sigmoid_ramp
+    ramp = sigmoid_ramp(40, 20)
+    dev = [-1.0, 0.0, 3.0]
+    E = importation_epsilon_matrix(0.1, dev, 0.5, ramp)
+    @test size(E) == (3, 40)
+    @test E[1, :] ≈ 0.1 .* exp(-1.0) .* exp.(0.5 .* ramp)
+    ## An origin whose fraction would pass one sends everything it generates.
+    @test all(==(1.0), E[3, :])
+    ## With no ramp effect the fraction is flat over the days.
+    E0 = importation_epsilon_matrix(0.1, dev, 0.0, ramp)
+    @test all(allequal, eachrow(E0))
+end
+
 @testitem "convolve_pmf: mass, identity and symmetry" setup = [
     KernelProperties,
 ] begin

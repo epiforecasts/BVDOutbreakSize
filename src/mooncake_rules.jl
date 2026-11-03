@@ -231,6 +231,48 @@ function Mooncake.rrule!!(
     return CoDual(y, ȳ), patch_rt_matrix_pullback!!
 end
 
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(importation_epsilon_matrix), Mooncake.IEEEFloat,
+        Vector{<:Mooncake.IEEEFloat}, Mooncake.IEEEFloat,
+        Vector{<:Mooncake.IEEEFloat},
+    },
+)
+
+## Each uncapped cell `v = ε_bar e^{dev[q]} e^{β ramp[t]}` passes `g = ȳ v` to
+## `dev[q]`, `g ramp[t]` to `β`, `g β` to `ramp[t]` and `g / ε_bar` to
+## `ε_bar`. A capped cell passes nothing. At `ε_bar = 0` the `ε_bar`
+## cotangent is summed from the exponentials directly.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(importation_epsilon_matrix)},
+        ε_bar::CoDual{<:Mooncake.IEEEFloat},
+        dev::CoDual{<:Vector{<:Mooncake.IEEEFloat}},
+        β::CoDual{<:Mooncake.IEEEFloat},
+        ramp::CoDual{<:Vector{<:Mooncake.IEEEFloat}}
+    )
+    εp, dp, βp, rp = primal(ε_bar), primal(dev), primal(β), primal(ramp)
+    d̄, r̄ = tangent(dev), tangent(ramp)
+    E = importation_epsilon_matrix(εp, dp, βp, rp)
+    Ē = zero(E)
+    function importation_epsilon_matrix_pullback!!(::NoRData)
+        T = eltype(E)
+        gε = gβ = zero(T)
+        @inbounds for t in eachindex(rp), q in eachindex(dp)
+            v = E[q, t]
+            v < one(T) || continue
+            g = Ē[q, t] * v
+            d̄[q] += g
+            gβ += g * rp[t]
+            r̄[t] += g * βp
+            gε += iszero(εp) ? Ē[q, t] * exp(dp[q] + βp * rp[t]) : g / εp
+        end
+        return NoRData(), oftype(εp, gε), NoRData(), oftype(βp, gβ),
+            NoRData()
+    end
+    return CoDual(E, Ē), importation_epsilon_matrix_pullback!!
+end
+
 ## Per day, with `S⁻` the pool before it and `x = R f / N`,
 ##
 ##     I = S⁻ (1 − e^{−x}),    S = S⁻ e^{−x},
