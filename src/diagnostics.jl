@@ -289,7 +289,8 @@ end
 """
 Sampler behaviour per chain: how many draws each chain took, how many of
 them were divergent, the step size it adapted to, the deepest tree it built,
-the share of its draws whose tree reached `max_depth`, its mean acceptance
+the share of its draws whose tree reached `max_depth`, the mean leapfrog
+steps per draw (each one gradient evaluation), its mean acceptance
 statistic and its energy Bayesian fraction of missing information (E-BFMI:
 the mean squared change in Hamiltonian energy between draws over the
 energy's variance).
@@ -318,6 +319,7 @@ function sampler_by_chain_table(chn; max_depth::Integer = 10)
     depth = flat(:tree_depth)
     accept = flat(:acceptance_rate)
     energy = flat(:hamiltonian_energy)
+    nsteps = flat(:n_steps)
     divergences = [
         isnothing(div) ? 0 :
             count(x -> x === true, block(div, c)) for c in 1:nc
@@ -336,6 +338,10 @@ function sampler_by_chain_table(chn; max_depth::Integer = 10)
             100 * count(>=(max_depth), Float64.(block(depth, c))) / nd
             for c in 1:nc
     ]
+    leapfrogs = [
+        isnothing(nsteps) ? NaN : mean(Float64.(block(nsteps, c)))
+            for c in 1:nc
+    ]
     acceptance = [
         isnothing(accept) ? NaN : mean(Float64.(block(accept, c)))
             for c in 1:nc
@@ -352,6 +358,7 @@ function sampler_by_chain_table(chn; max_depth::Integer = 10)
         step_size = round.(steps; sigdigits = 3),
         deepest_tree = depths,
         percent_at_max_depth = round.(at_cap; digits = 1),
+        mean_leapfrogs = round.(leapfrogs; digits = 1),
         mean_acceptance = round.(acceptance; digits = 3),
         ebfmi = round.(ebfmi; digits = 3)
     )

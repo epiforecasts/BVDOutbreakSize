@@ -27,7 +27,8 @@ function _headline(chn, p::Symbol)
 end
 
 ## One row per chain: the adapted step size, the share of draws whose tree
-## reached the depth cap, the mean acceptance statistic and the E-BFMI. Left
+## reached the depth cap, the mean leapfrog steps per draw, the mean
+## acceptance statistic and the E-BFMI. Left
 ## out for a chain that carries no NUTS statistics.
 function _chain_rows(io, chn, max_depth)
     t = sampler_by_chain_table(chn; max_depth)
@@ -35,13 +36,15 @@ function _chain_rows(io, chn, max_depth)
     println(io)
     println(
         io,
-        "| chain | step size | % at max depth $max_depth | mean acceptance | E-BFMI |"
+        "| chain | step size | % at max depth $max_depth | " *
+            "mean leapfrogs | mean acceptance | E-BFMI |"
     )
-    println(io, "| --- | --- | --- | --- | --- |")
+    println(io, "| --- | --- | --- | --- | --- | --- |")
     for r in eachrow(t)
         println(
             io, "| ", r.chain, " | ", fmt_value(r.step_size),
             " | ", fmt_value(r.percent_at_max_depth),
+            " | ", fmt_value(r.mean_leapfrogs),
             " | ", fmt_value(r.mean_acceptance),
             " | ", fmt_value(r.ebfmi), " |"
         )

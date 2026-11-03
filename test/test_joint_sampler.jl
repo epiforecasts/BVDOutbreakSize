@@ -35,7 +35,9 @@ end
     ## Every `nuts_sample` call, plus the one health-zone fitter call.
     n_calls = count(r"nuts_sample\(", src) + count("return fitter(", src)
     @test n_calls >= 13
-    @test count("joint_sampler_args()...", src) == n_calls
+    ## `fit_sampler_args` is the same settings plus the fit's warm start.
+    @test count("joint_sampler_args()...", src) +
+        count("fit_sampler_args()...", src) == n_calls
     @test !occursin("samples = samples", src)
     @test count("n_adapts = joint_warmup(", src) == 1
     @test count("target_accept = ", src) == 1

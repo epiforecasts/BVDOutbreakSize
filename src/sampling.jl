@@ -354,6 +354,15 @@ divergences are visible live. Those warmup draws are then also retained
 in the returned chain, so the first `n_adapts` draws are adaptation
 steps rather than posterior samples. Raise `samples` accordingly or drop
 them before summarising.
+
+`warm_start` seeds the sampler from an earlier fit. `nothing`, the default,
+samples with `NUTS` as above. Otherwise
+[`warm_start_settings`](@ref)`(warm_start, model)` is asked for settings
+first. It returns `nothing` to sample with `NUTS` as above, or a
+`(; inverse_metric, step_size, n_adapts)` that switches the sampler to
+[`FixedMetricNUTS`](@ref) with that metric, starting step size and warm-up
+length. After sampling, [`warm_start_record`](@ref)`(warm_start, model,
+chain, sampler)` lets the caller keep what the next fit needs.
 """
 function nuts_sample(
         model;
@@ -369,6 +378,7 @@ function nuts_sample(
         check_model::Bool = true,
         callback = nothing,
         warmup::Bool = false,
+        warm_start = nothing,
         kwargs...
     )
     rng = MersenneTwister(seed)
@@ -397,10 +407,19 @@ function nuts_sample(
     end
     cb_kwargs = callback === nothing ? (;) : (; callback = callback)
     warmup_kwargs = warmup ? (; discard_adapt = false) : (;)
-    return sample(
+    seeded = warm_start_settings(warm_start, model)
+    alg = if seeded === nothing
+        NUTS(n_adapts, target_accept; max_depth, adtype)
+    else
+        FixedMetricNUTS(
+            seeded.n_adapts, target_accept, seeded.inverse_metric;
+            max_depth, ϵ = seeded.step_size, adtype
+        )
+    end
+    chn = sample(
         rng,
         model,
-        NUTS(n_adapts, target_accept; max_depth, adtype),
+        alg,
         MCMCThreads(),
         samples, chains;
         initial_params = inits,
@@ -410,6 +429,190 @@ function nuts_sample(
         warmup_kwargs...,
         kwargs...
     )
+    warm_start_record(warm_start, model, chn, alg)
+    return chn
+end
+
+"""
+    warm_start_settings(warm_start, model)
+
+Sampler settings [`nuts_sample`](@ref) takes from `warm_start` for `model`:
+`nothing` to sample with `NUTS`, or a `(; inverse_metric, step_size,
+n_adapts)` for [`FixedMetricNUTS`](@ref). Returns `nothing` for a
+`warm_start` of `nothing`. A caller adds a method for its own type.
+"""
+warm_start_settings(::Nothing, model) = nothing
+
+"""
+    warm_start_record(warm_start, model, chain, sampler)
+
+Called by [`nuts_sample`](@ref) once `model` has been sampled into `chain`
+with `sampler`, so `warm_start` can keep what a later fit needs. Does
+nothing for a `warm_start` of `nothing`. A caller adds a method for its own
+type.
+"""
+warm_start_record(::Nothing, model, chain, sampler) = nothing
+
+const AHMC = Turing.Inference.AHMC
+
+"""
+    FixedMetricNUTS(n_adapts, δ, inverse_metric; max_depth = 10,
+                    Δ_max = 1000.0, ϵ = 0.0, adtype = default_adtype())
+
+NUTS with a dense metric held fixed at `inverse_metric`, the inverse mass
+matrix in the model's linked parameter order. Warm-up adapts the step size
+only, by dual averaging towards acceptance `δ` from the starting step size
+`ϵ` (`0` searches for one). `NUTS` would replace the metric with its own
+warm-up estimate. The trajectories and the chain's statistics are those of
+`NUTS`.
+
+Each chain's dual-averaging trace, the log step size and its running
+average after every warm-up iteration, is pushed to `step_size_traces`.
+"""
+struct FixedMetricNUTS{AD} <: Turing.Inference.AdaptiveHamiltonian
+    n_adapts::Int
+    δ::Float64
+    max_depth::Int
+    Δ_max::Float64
+    ϵ::Float64
+    adtype::AD
+    inverse_metric::Matrix{Float64}
+    step_size_traces::Vector{Vector{NTuple{2, Float64}}}
+    trace_lock::ReentrantLock
+end
+
+function FixedMetricNUTS(
+        n_adapts::Integer, δ::Real, inverse_metric::AbstractMatrix;
+        max_depth::Integer = 10, Δ_max::Real = 1000.0, ϵ::Real = 0.0,
+        adtype = default_adtype()
+    )
+    size(inverse_metric, 1) == size(inverse_metric, 2) || throw(
+        DimensionMismatch("FixedMetricNUTS: the inverse metric is not square")
+    )
+    return FixedMetricNUTS(
+        Int(n_adapts), Float64(δ), Int(max_depth), Float64(Δ_max),
+        Float64(ϵ), adtype, Matrix{Float64}(inverse_metric),
+        Vector{NTuple{2, Float64}}[], ReentrantLock()
+    )
+end
+
+## The `NUTS` this sampler runs, for the kernel and the post-sample checks.
+function _nuts(alg::FixedMetricNUTS)
+    return NUTS(
+        alg.n_adapts, alg.δ, alg.max_depth, alg.Δ_max, alg.ϵ,
+        AHMC.DenseEuclideanMetric; adtype = alg.adtype
+    )
+end
+
+## Turing builds the metric by calling this with the model's dimension. Each
+## call returns its own copy, since the metric holds a work buffer and the
+## chains run on separate threads.
+struct _FixedDenseMetric
+    inverse_metric::Matrix{Float64}
+end
+
+function (f::_FixedDenseMetric)(dim::Integer)
+    size(f.inverse_metric, 1) == dim || throw(
+        DimensionMismatch(
+            "FixedMetricNUTS: an inverse metric of size " *
+                "$(size(f.inverse_metric, 1)) for a model of dimension $dim"
+        )
+    )
+    return AHMC.DenseEuclideanMetric(copy(f.inverse_metric))
+end
+
+Turing.Inference.getmetricT(alg::FixedMetricNUTS) =
+    _FixedDenseMetric(alg.inverse_metric)
+
+function Turing.Inference.make_ahmc_kernel(alg::FixedMetricNUTS, ϵ)
+    return Turing.Inference.make_ahmc_kernel(_nuts(alg), ϵ)
+end
+
+function Turing.Inference.post_sample_hook(
+        chain, alg::FixedMetricNUTS; kwargs...
+    )
+    return Turing.Inference.post_sample_hook(chain, _nuts(alg); kwargs...)
+end
+
+function Turing.Inference.AHMCAdaptor(
+        alg::FixedMetricNUTS, ::AHMC.AbstractMetric, nadapts::Int;
+        ϵ = alg.ϵ
+    )
+    iszero(alg.n_adapts) && return AHMC.Adaptation.NoAdaptation()
+    trace = NTuple{2, Float64}[]
+    lock(() -> push!(alg.step_size_traces, trace), alg.trace_lock)
+    adaptor = _TracedStepSize(AHMC.StepSizeAdaptor(alg.δ, ϵ), trace)
+    AHMC.Adaptation.initialize!(adaptor, nadapts)
+    return adaptor
+end
+
+## A step-size adaptor that records the dual-averaging state after each
+## warm-up iteration. A step-size adaptor leaves the metric alone.
+struct _TracedStepSize{A <: AHMC.StepSizeAdaptor} <: AHMC.StepSizeAdaptor
+    da::A
+    trace::Vector{NTuple{2, Float64}}
+end
+
+AHMC.Adaptation.getϵ(a::_TracedStepSize) = AHMC.Adaptation.getϵ(a.da)
+function AHMC.Adaptation.initialize!(a::_TracedStepSize, n_adapts::Int)
+    return AHMC.Adaptation.initialize!(a.da, n_adapts)
+end
+AHMC.Adaptation.finalize!(a::_TracedStepSize) = AHMC.Adaptation.finalize!(a.da)
+AHMC.Adaptation.reset!(a::_TracedStepSize) = AHMC.Adaptation.reset!(a.da)
+function AHMC.Adaptation.adapt!(
+        a::_TracedStepSize, θ::AHMC.Adaptation.PositionOrPhasePoint,
+        α::AHMC.AbstractScalarOrVec{<:AbstractFloat}
+    )
+    AHMC.Adaptation.adapt!(a.da, θ, α)
+    push!(a.trace, (log(a.da.state.ϵ), a.da.state.x_bar))
+    return nothing
+end
+
+"""
+    linked_layout(model) -> Vector{Pair{String, UnitRange{Int}}}
+
+Each random variable of `model` and its range in the linked
+(unconstrained) parameter vector the samplers move in, in order.
+"""
+function linked_layout(model::Model)
+    DP = Turing.DynamicPPL
+    ldf = LogDensityFunction(model, DP.getlogjoint_internal, DP.LinkAll())
+    return _linked_layout(ldf)
+end
+
+function _linked_layout(ldf)
+    DP = Turing.DynamicPPL
+    return [
+        string(vn) => rat.range
+            for (vn, rat) in pairs(DP.get_all_ranges_and_transforms(ldf))
+    ]
+end
+
+"""
+    linked_draws(model, chain) -> (; layout, draws, chain_index)
+
+The draws of `chain`, sampled from `model`, as linked parameter vectors:
+one row of `draws` per draw, chains one after another, with
+`chain_index` the chain of each row and `layout` as
+[`linked_layout`](@ref). Each draw is one evaluation of `model`.
+"""
+function linked_draws(model::Model, chain)
+    DP = Turing.DynamicPPL
+    ldf = LogDensityFunction(model, DP.getlogjoint_internal, DP.LinkAll())
+    layout = _linked_layout(ldf)
+    dim = isempty(layout) ? 0 : maximum(last(r) for (_, r) in layout)
+    nd, nc = size(chain)
+    draws = Matrix{Float64}(undef, nd * nc, dim)
+    for c in 1:nc, i in 1:nd
+        accs = DP.OnlyAccsVarInfo(DP.VectorValueAccumulator())
+        _, accs = init!!(
+            model, accs, DP.InitFromParams(chain, i, c), DP.LinkAll()
+        )
+        draws[(c - 1) * nd + i, :] = DP.to_vector_params(
+            DP.get_vector_values(accs), ldf
+        )
+    end
+    return (; layout, draws, chain_index = repeat(1:nc; inner = nd))
 end
 
 """

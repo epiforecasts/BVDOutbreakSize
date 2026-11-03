@@ -256,6 +256,29 @@ jobs:
           pattern: ${{ matrix.parents }}
           path: logs/fit_cache
           merge-multiple: true
+      # Warm start (`docs/fits/warmstart.jl`): the state the latest fit of
+      # this id left, from this branch or main, seeds the sampler's metric
+      # and step size. It is its own small cache entry, so it outlives the
+      # eviction of the large fit caches. The health-zone fits do not use it.
+      - name: Restore the warm-start parent
+        if: >-
+          ${{ matrix.parents == '' &&
+          steps.cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/restore@v6
+        with:
+          path: logs/warmstart
+          key: warmstart-${{ matrix.id }}-${{ needs.list.outputs.fit_hash }}
+          restore-keys: warmstart-${{ matrix.id }}-
+      # Kept apart so the state this fit writes is the only one saved.
+      - name: Move the warm-start parent aside
+        if: >-
+          ${{ matrix.parents == '' &&
+          steps.cache.outputs.cache-hit != 'true' }}
+        run: |
+          mkdir -p logs/warmstart logs/warmstart_parent
+          find logs/warmstart -maxdepth 1 -name '*.warmstart.jls' \
+            -exec mv {} logs/warmstart_parent/ \;
+          ls -l logs/warmstart_parent
       # The fleet is mixed and the joint fit's wall clock varies by half
       # again between runs of the same commit, so the summary names the CPU
       # a refit ran on. Read it next to the fit's timing when a job runs long.
@@ -315,6 +338,15 @@ jobs:
         with:
           path: logs/fit_cache
           key: ${{ steps.cache.outputs.cache-primary-key }}
+      - name: Save the warm-start state
+        if: >-
+          ${{ matrix.parents == '' &&
+          steps.cache.outputs.cache-hit != 'true' &&
+          hashFiles('logs/warmstart/*.warmstart.jls') != '' }}
+        uses: actions/cache/save@v6
+        with:
+          path: logs/warmstart
+          key: warmstart-${{ matrix.id }}-${{ needs.list.outputs.fit_hash }}
       # `one.jl` writes the fit's diagnostics to the job summary itself. A
       # cache hit skips it, so say so rather than leaving the job blank.
       - name: Note the cached fit

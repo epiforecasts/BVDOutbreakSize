@@ -19,6 +19,7 @@ using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
     Model, VarInfo, contextualize, filldist, getlogjoint, init!!,
     is_extracting_colon_eq_values, logjoint, link
 import AbstractMCMC
+import Turing
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
     TYPEDFIELDS, TYPEDSIGNATURES
@@ -78,7 +79,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     drop_superseded_forecasts, SUPERSEDED_FROZEN_FORECASTS,
     drop_rescanned_onset_windows,
     nuts_sample, fit_parallel, default_adtype, enzyme_adtype,
-    ViablePrior, viable_prior_init,
+    FixedMetricNUTS, warm_start_settings, warm_start_record, linked_layout,
+    linked_draws, ViablePrior, viable_prior_init,
     progress_callback, tensorboard_callback,
     combined_callback, fit_callback,
     plot_cumulative_cases, plot_cumulative_trajectories,
