@@ -36,8 +36,8 @@ end
 end
 
 @testitem "a unit intensity reproduces the unmultiplied volume exactly" begin
-    ## The nesting claim, tested rather than asserted: at `κ = 1` the analysed
-    ## volume must match the `nothing` path element-wise.
+    ## At `κ = 1` the analysed volume must match the `nothing` path
+    ## element-wise.
     using BVDOutbreakSize: confirmed_cases_model, specimen_intensity_model
     using Turing: returned
     using Turing.DynamicPPL: fix

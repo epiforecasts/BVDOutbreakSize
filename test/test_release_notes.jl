@@ -115,8 +115,8 @@ end
 
     ## A Windows checkout has CRLF line endings, and the repository carries
     ## no `.gitattributes` to stop that. Every function here matches on line
-    ## structure, so a stray `\r` before the line end silently found no
-    ## version sections at all and the release read as a file with no notes.
+    ## structure, so a stray `\r` before the line end finds no version
+    ## sections and the release reads as a file with no notes.
     lf = """
     # News
 

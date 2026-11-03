@@ -1,14 +1,12 @@
 ## AD-gradient smoke check: the package default backend (Mooncake) must be
-## able to differentiate the models — the one property the NUTS sampler
-## actually relies on. A single unconstrained-space log-density gradient per
-## component is the minimal, fast way to assert that, avoiding a full NUTS
-## fit as a differentiability check: that takes ~25 min and can flake during
-## sampler adaptation rather than in the gradient itself.
+## able to differentiate the models, the one property the NUTS sampler
+## relies on. One unconstrained-space log-density gradient per component
+## asserts that without a full NUTS fit, which takes ~25 min and can flake
+## during sampler adaptation rather than in the gradient itself.
 ##
 ## The components come from `test/ad_fixtures.jl`, which
-## `benchmark/benchmarks.jl` includes too. One source means a component
-## cannot be benchmarked without also being asserted differentiable, or
-## asserted without being timed. Adding a model there adds it to both.
+## `benchmark/benchmarks.jl` includes too. Adding a model there adds it to
+## both.
 ##
 ## The full `bvd_joint` is not a component here: one gradient sits behind a
 ## cold Mooncake compile of roughly 18 minutes. Its gradient in the suite is
@@ -42,8 +40,7 @@
             @test isfinite(logp)
             @test length(grad) == length(x)
             @test all(isfinite, grad)
-            ## A non-trivial gradient (not identically zero) confirms AD
-            ## actually ran.
+            ## A non-trivial gradient (not identically zero) confirms AD ran.
             @test any(!iszero, grad)
         end
     end
@@ -61,7 +58,7 @@ end
     ##
     ## The reshaping that turns the per-province histories into this matrix
     ## (`province_increment_matrix`) looks provinces up by name in a
-    ## `Dict{String}`. It must stay OUTSIDE the model body: a string compare
+    ## `Dict{String}`. It must stay outside the model body: a string compare
     ## on the tape is a `memcmp` foreigncall that Mooncake has no rule for,
     ## and it aborts the gradient of the whole joint.
     seed!(20260518)
@@ -148,10 +145,9 @@ end
     @test any(!iszero, grad)
 end
 
-## The health-zone scenario the benchmark suite times with
-## by default. It is not in the default scenario list, so it is asserted
-## here, at the size it is timed at and with mixing and the zone
-## correlation on.
+## The health-zone scenario the benchmark suite times by default. It is
+## not in the default scenario list, so it is asserted here, at the size it
+## is timed at and with mixing and the zone correlation on.
 @testitem "AD gradient: the zone benchmark scenario differentiates (Mooncake)" tags = [
     :ad,
 ] begin

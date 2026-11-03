@@ -10,9 +10,9 @@
 # scripts/download_sitreps.jl). The fitted values are our own directly
 # scanned headline and province-table figures in
 # data/insp_sitrep_scanned.csv; the mirror is a second pair of eyes on the
-# same PDFs, not an authority over them. It is also incomplete, carrying 86
-# of the 102 report dates the manifest holds, so its series is never pasted
-# into the manifest wholesale.
+# same PDFs, not an authority over them. It is also incomplete, missing some
+# of the report dates the manifest holds, so its series is never pasted into
+# the manifest wholesale.
 #
 # Usage:
 #

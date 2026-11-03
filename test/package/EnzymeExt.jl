@@ -57,10 +57,8 @@
         ##
         ## Exit code 2 is the script's own marker for a scenario that did
         ## not behave as `ADFixtures` declares, which is a regression
-        ## rather than an upstream wobble and fails here. Tolerating it
-        ## identically would leave the sweep unable to report anything it
-        ## had not already been told to expect. Every other non-zero code
-        ## is the script failing to run, which stays tolerated.
+        ## rather than an upstream wobble and fails here. Every other
+        ## non-zero code is the script failing to run, which is tolerated.
         for (part, limit_min) in (("components", components_min), ("joint", joint_min))
             code = run_part(part, limit_min)
             if code == 0

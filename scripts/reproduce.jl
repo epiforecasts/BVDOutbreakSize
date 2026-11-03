@@ -5,8 +5,6 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/epiforecasts/BVDOutbreakSize/main/scripts/reproduce.jl | julia
 #
-# (Reading a script before piping it to a shell is good practice.)
-#
 # Outputs are written to `./bvd-output` by default; set
 # `BVD_OUTPUT_DIR` to write them elsewhere. Set `BVD_REF` to a release
 # tag or branch to reproduce a specific version (defaults to `main`).

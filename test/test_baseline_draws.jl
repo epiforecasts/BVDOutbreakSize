@@ -257,10 +257,8 @@ end
 ## A minimal `observations.toml` fixture: just enough for `load_observations`
 ## (`as_of_date`, `genetic_tmrca.date`, one history block) so
 ## `vintage_observations` can load and freeze it without pulling in a real
-## release manifest. A `@testsnippet`, not a plain top-level function: each
-## `@testitem` below only sees its own code range, not sibling definitions
-## in the same file, so the fixture must be shared through the snippet
-## mechanism to be visible in more than one test item.
+## release manifest. A `@testsnippet`, since each `@testitem` below sees only
+## its own code range.
 @testsnippet FixtureObs begin
     function _write_fixture_manifest(
             path; as_of_date, confirmed_dates,
@@ -351,8 +349,7 @@ end
     @test isapprox(mean(vintage_draws), 20.0; atol = 3.0)
     @test !isapprox(mean(vintage_draws), 70.0; atol = 5.0)
 
-    ## Using the current manifest directly (the pre-fix behaviour) would
-    ## instead see the leaked revision.
+    ## Using the current manifest directly sees the leaked revision.
     leaked_draws = baseline_draws(
         current_obs, current_grid_date, "confirmed cases", made_date, 7,
         2_000, MersenneTwister(21)
@@ -784,7 +781,7 @@ end
     @test diffs == [(10.0, 1), (10.0, 1), (10.0, 1)]
 
     ## Without the declaration the reclassification enters the pool as a
-    ## 60-bed day, which is what inflated the spread.
+    ## 60-bed day, which inflates the spread.
     plain = (; isolation_history = hist)
     @test (-60.0, 1) in
         _history_diffs(plain, grid_date, "isolation beds", hist, made_date)
@@ -825,7 +822,7 @@ end
     @test !isempty(steps)
     @test all(isapprox(0.0; atol = 1.0e-9), steps)
 
-    ## The cumulative first differences it replaces are the 100s themselves.
+    ## The cumulative first differences are the 100s themselves.
     @test all(
         d -> d[1] == 100.0,
         _history_diffs(obs, grid_date, "confirmed cases", hist, made_date)
@@ -913,8 +910,8 @@ end
 
     ## An occupancy reclassification is annotated a report or two after the
     ## report that announced it, so a release snapshot taken in between holds
-    ## the step but not the label. Carried back, its baseline reads the change
-    ## of reporting basis as a day of the walk; carried, it does not.
+    ## the step but not the label. Without the label carried back, its
+    ## baseline reads the change of reporting basis as a day of the walk.
     dir = mktempdir()
     snapshot = joinpath(dir, "observations.toml")
     write(

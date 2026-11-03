@@ -2184,7 +2184,7 @@ end
     nv = length(inputs.days)
 
     ## Each stream reads its own observed counts, and the fixture's deaths
-    ## are a tenth of the cases, so the two are genuinely different tables.
+    ## are a tenth of the cases, so the two are different tables.
     @test _zone_observed_counts(inputs, :cases) === zd.counts
     @test _zone_observed_counts(inputs, :deaths) === zd.death_counts
     @test zd.death_counts != zd.counts

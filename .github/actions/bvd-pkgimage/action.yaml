@@ -7,14 +7,15 @@ description: >-
 # Every later job restores a `docs-env` depot cache, but by the time the
 # render jobs start, hours later, their own run's cache has usually been
 # evicted or superseded and they restore another run's. That depot holds
-# BVDOutbreakSize built from other sources, so each job compiled it again.
+# BVDOutbreakSize built from other sources, so each job would compile it
+# again.
 # The dependencies in it still match, so only this one image has to travel.
 #
 # `save` must run after the environment is precompiled. `restore` must run
 # after the depot cache and the pinned manifest are restored and before the
 # first Pkg call, since `Pkg.develop` and `Pkg.instantiate` both precompile.
-# If the image is missing or no longer matches the dependencies, Julia
-# compiles it as before.
+# If the image is missing or does not match the dependencies, Julia
+# compiles it.
 inputs:
   mode:
     description: '`save` or `restore`.'

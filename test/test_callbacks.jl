@@ -6,7 +6,7 @@
 ## statistics through the `AbstractMCMC.ParamsWithStats` interface rather
 ## than poking transition fields, so they are exercised against genuine
 ## Turing transitions from a real (tiny) fit. TensorBoardLogger is a test
-## dependency (mirroring how Enzyme covers its extension). Kept fast:
+## dependency. Kept fast:
 ## trivial one-parameter Gaussian, few draws.
 
 @testitem "nuts_sample forwards a callback to sample" tags = [:slow] begin

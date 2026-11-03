@@ -114,8 +114,7 @@ end
     m_fit = confirmed_only_model(40, 14; hist...)
     chn = sample(MersenneTwister(1), m_fit, Prior(), 8; progress = false)
     ## In generator mode the per-day volume is resampled, so `predict` emits
-    ## the `analysed_daily_increments.increments` key — i.e. it is a modelled,
-    ## fitted stream rather than only a conditioned denominator.
+    ## the `analysed_daily_increments.increments` key.
     m_gen = confirmed_only_model(40, missing; hist...)
     pp = predict(MersenneTwister(2), m_gen, chn)
     @test any(
