@@ -893,7 +893,7 @@ cfr_prior_fig #hide
 #
 # #### Shared observation submodels
 #
-# Several parameters are assumed shared across the streams: the surveillance dispersion, the ascertainment fractions, the laboratory testing priors and the traveller volume.
+# The streams share the surveillance dispersion, the ascertainment fractions, the laboratory priors and the traveller volume.
 #
 # ##### Surveillance dispersion
 #
@@ -926,10 +926,10 @@ cfr_prior_fig #hide
 
 # ##### Ascertainment
 #
-# Two surveillance systems detect cases: DRC passive community surveillance (the reported suspected-case count) and Uganda's point-of-entry / hospital surveillance (the exported-case count).
+# Two surveillance systems detect cases, DRC passive community surveillance (the suspected cases) and Uganda's point-of-entry and hospital surveillance (the exported cases).
 # Each captures a fraction of the true cases passing through it.
-# The two ascertainment fractions $p_{\text{DRC}}$ and $p_{\text{Uganda}}$ share a logit-scale hyperprior with mean $\mu$ and pooling strength $\tau$, centred on a reporting fraction of $75\%$.
-# This reflects the active case-finding of a declared Ebola response rather than baseline passive surveillance:
+# The two ascertainment fractions $p_{\text{DRC}}$ and $p_{\text{Uganda}}$ share a logit-scale hyperprior with mean $\mu$ and pooling strength $\tau$.
+# It is centred on a reporting fraction of $75\%$, which reflects the active case-finding of a declared Ebola response rather than baseline passive surveillance:
 #
 # ```math
 # \mu \sim \mathrm{Normal}(\mathrm{logit}(0.75),\ 1),
@@ -960,19 +960,18 @@ cfr_prior_fig #hide
 
 # ##### Laboratory priors
 #
-# We model the process of confirming cases via laboratory testing.
 # The testing fraction $\tau_{\text{test}}$ is the share of suspected cases routed to the laboratory.
 # A truly BVD specimen tests positive with the assay sensitivity $s$, and a non-BVD specimen tests positive with the false-positive rate $1 - \mathrm{spec}$ from the assay specificity.
-# We assume that more severe cases, more likely to be Ebola, are preferentially tested.
-# This is captured by an enrichment factor $\delta_0$ that raises the tested BVD share above the suspect-pool composition early on and relaxes towards it as testing broadens.
+# We assume more severe cases, which are more likely to be BVD, are tested preferentially.
+# An enrichment factor $\delta_0$ raises the tested BVD share above the suspect-pool composition early on and relaxes towards it as testing broadens.
 # The death analysed volume scales the case analysed volume by the suspected death-to-case ratio, so the specimens per suspected death $\tau_{\text{death}}$ are not a share and may exceed one for the same reason the case side is not bounded by the suspect count.
 # Confirmation runs on the altona RealStar Filovirus Screen RT-PCR [rieger2016](@cite) rather than the Zaire-specific GeneXpert Ebola assay.
 # The GeneXpert assay does not reliably detect Bundibugyo virus [cepheid_xpert_ebola_ifu, pinsky2015, semper2016](@cite).
-# A single assay draw is sensitive to about 85%, but a suspect is confirmed or ruled out through repeat control tests rather than one draw.
-# The effective process sensitivity is therefore higher, about 98% with two controls, so we put the sensitivity prior's mode near there (97%, mean 95%) and give it a tight spread.
+# A single assay draw has a sensitivity of about 85%, but a suspect is confirmed or ruled out through repeat control tests.
+# With two controls the process sensitivity is about 98%, so the sensitivity prior has its mode at 97% (mean 95%) and a tight spread.
 # The specificity is high but imperfect.
-# The severity enrichment is moderate and one-sided (triage upsamples BVD, never down).
-# The death testing-intensity scaling is a tight log-normal centred on one, since no death-testing data grounds it:
+# The severity enrichment is moderate and one-sided, since triage can raise the tested BVD share but never lower it.
+# The death testing-intensity scaling is centred on one with a tight spread, since no death-testing data inform it:
 #
 # ```math
 # \tau_{\text{test}} \sim \mathrm{Beta}(5,\ 2), \qquad
@@ -1107,12 +1106,11 @@ cfr_prior_fig #hide
 
 # ##### Traveller volume
 #
-# The number of people crossing from the source area to Uganda each day sets the travel rate in the exports likelihood.
-# We treat it as an estimated quantity rather than a fixed input.
+# The number of people crossing from the source area to Uganda each day sets the travel rate in the exports likelihood, and we estimate it.
 # McCabe et al. Table 3 records mean weekly passenger counts across seven points of entry.
-# The Ituri-side daily total of $1871$ is a sample mean across roughly $15$-$21$ point-of-entry-weeks.
-# We use a Normal prior centred on $1871$ with SD $200$ ($\approx 10\%$ CV), truncated at zero, covering point-of-entry variation and the sitrep sampling uncertainty.
-# The source population is kept fixed (census):
+# The Ituri-side daily total of $1871$ is a sample mean over roughly 15 to 21 point-of-entry-weeks.
+# Its prior is a Normal centred on $1871$ with SD $200$ (a coefficient of variation of about 10%), truncated at zero, to cover point-of-entry variation and sampling uncertainty.
+# The source population is fixed at its census value:
 #
 # ```math
 # N_{\text{travel}} \sim \mathrm{Normal}^{+}(1871,\ 200). \tag{32}
