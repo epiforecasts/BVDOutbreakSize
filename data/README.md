@@ -456,6 +456,10 @@ No script tracks mirror-sourced values, so this check is manual.
   This makes the artefact visible to whoever reads the increment the daily likelihood actually fits.
   State the split for both confirmed streams, since a break day now applies to cases and deaths alike.
   Precedents: SitRep 065 (18 July, Haut-Uélé/Nia-Nia reattachment, +83 gross vs +77 net cases and +40 gross vs +37 net deaths — both downward, which is what a transfer between provinces looks like rather than a base integration) and SitRep 069 (22 July, Ituri/Nord-Kivu base integration, +97 gross vs +369 net cases and +62 gross vs +236 net deaths — much the largest so far, and called out in the report's own footnote).
+- **Skipped vintages (`[skip_dates]`)**: a block keyed by history block name lists vintages the loader leaves out while the manifest keeps them as printed, so the window before each merges into the next.
+  It is for a report whose cumulative a later report withdraws, which would otherwise read as a step up and then a fall that the increment likelihood cannot score.
+  A zone revision block follows its zone block's list, and a listed date that matches no vintage stops the loader.
+  List the same date for `zone_confirmed_history` and `zone_death_history`, since the zone blocks share their vintages.
 - **Format change from SitRep 059**: the analytique format moved the 24h analysed counts to §3.2 Laboratoire bullets, dropped the page-1 suspect-death-of-day subtitle, and reports the daily suspect total in Tableau 3.
   The DHIS2 suspect-death-of-day measure is not continuous in this format, so `suspected_daily_deaths_history` is frozen at 11 July.
   See its `source =` string.

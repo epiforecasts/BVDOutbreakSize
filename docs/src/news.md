@@ -107,9 +107,12 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Data
 
-- SitRep 170 (31 October) drops the SitRep 169 Ituri harmonisation without comment, so its national confirmed deaths (5 103) fall 269 below SitRep 169's 5 372.
-  The cut-off stays at SitRep 169 until the death series' basis is decided in #1188; the report is transcribed and ready to apply.
+- A `[skip_dates]` manifest block leaves listed vintages out of a loaded history while keeping them in the manifest as printed, so a report whose cumulative a later report withdraws merges into the next window rather than reading as a fall (#1194).
+- The model cut-off advances to SitRep 170, 31 October.
+  SitRep 170 drops the SitRep 169 Ituri harmonisation without comment, so its national confirmed deaths (5 103) fall 269 below SitRep 169's 5 372.
+  30 October is skipped for the national, province and zone deaths and the zone cases, so their 29 to 31 October step matches the two days' printed counts (#1188).
   `data/onset_dashboard_history.csv` adds the dashboard snapshot of 2 November.
+  Fitted values change with the new data.
 - The model cut-off advances to SitRep 169, 30 October.
   SitRep 169 harmonises Ituri's deaths, so national confirmed deaths step 346 against 32 printed.
   The step is recorded as printed, and whether 30 October becomes a break day is raised in #1188.
