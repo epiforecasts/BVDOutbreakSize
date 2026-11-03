@@ -454,15 +454,7 @@ are not archived. The reporting triangle's own total is revised by more than
 the rest, since the printed total falls between consecutive vintages (2531 to 2523, and
 2018 to 1996), which late reporting cannot produce.
 
-When the forecast carries the confirmed/suspect ward split
-(`confirmed_occupancy` / `suspect_occupancy`, the occupancy partitioned by
-the cut-off confirmed share), the two ward occupancy levels are archived too
-as `treatment beds` (confirmed) and `isolation beds (suspected)`, each scored
-against its own Tableau 6 occupancy sub-stock. The total `isolation beds`
-occupancy stays as its own stream. Nothing produces those two columns yet:
-[`forecast_reported`](@ref) projects the total occupancy alone, so only a
-forecast a caller has partitioned itself carries them, which today is the
-tests. Streams a forecast does not carry are skipped. `thin` keeps every
+Streams a forecast does not carry are skipped. `thin` keeps every
 `thin`-th draw so the archive stays compact when it is saved as a release
 asset.
 """
@@ -472,8 +464,6 @@ function forecast_archive(fcs; made_date::Date, thin::Integer = 1)
         (:confirmed_deaths_new, "confirmed deaths"),
         (:recovered_new, "recovered"),
         (:isolation_level, "isolation beds"),
-        (:confirmed_occupancy, "treatment beds"),
-        (:suspect_occupancy, "isolation beds (suspected)"),
         (:onset_reports_new, "onset reports"),
     )
     out = DataFrame(
