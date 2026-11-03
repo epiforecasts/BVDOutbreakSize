@@ -2240,8 +2240,7 @@ One-row, two-panel figure summarising when the outbreak began. The left
 panel is the posterior density of the outbreak start date, the calendar date
 of the import that started the outbreak, from the outbreak age `T` as
 `as_of_date` minus `T`. The right panel is the joint `(doubling_time, T)`
-posterior pair plot. Shorter doubling times mean faster early growth, which
-reaches the same epidemic size in less time.
+posterior pair plot, with `doubling_time` the doubling time at the cut-off.
 """
 function plot_start_date_pair(
         chn;
@@ -3678,7 +3677,7 @@ end
 Two-panel density of the no-onward-transmission counterfactual from
 [`predict_no_onward_deaths`](@ref). The left panel shows the *still expected*
 deaths (`:delta_deaths`, the future deaths in cases already infected by `T`,
-net of the `obs_deaths` already observed). The right panel shows the
+net of the deaths the model expects by `T`). The right panel shows the
 *projected total* (`:total_projected = obs_deaths + delta_deaths`), whose
 axis starts at `obs_deaths`. Both are lower bounds, assuming every onward
 transmission stops at time `T`.
@@ -3690,7 +3689,7 @@ function plot_no_onward_deaths(df::DataFrame; obs_deaths::Real)
     ## projected total cannot fall below the deaths already observed.
     ax1 = Axis(
         fig[1, 1];
-        xlabel = "Still expected deaths (beyond those already observed)",
+        xlabel = "Still expected deaths (beyond those expected by the cut-off)",
         ylabel = "Posterior density",
         title = "Still expected (future)"
     )
@@ -4207,8 +4206,7 @@ densities, since the occupancy carries the fitted reporting-basis offset and
 the shortfall does not. Drawn only when the forecast carries the bed streams
 (`bed_demand` and `isolation_level`).
 
-This shortfall is national, so it cannot show local saturation. On 13 June
-Ituri was at 93.9% occupancy while Sud-Kivu was at 21.9%, and beds free in
+This shortfall is national, so it cannot show local saturation. Beds free in
 one province cannot serve patients in another, so the national shortfall
 understates the local unmet need.
 """

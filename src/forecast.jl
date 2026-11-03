@@ -200,9 +200,9 @@ observes them, one row per draw, read from the posterior-predictive draws
 `pp` of a fit carrying the triangle ([`forecast_draws`](@ref)). It
 separates cases that have had their onset but are not yet reported from
 cases whose onset has not happened. The model runs the fitted reporting
-hazard, ascertainment and scan noise forward to a future vintage
-`horizon` days past the cut-off, which must be a whole number of weeks
-(see [`onset_forecast_model`](@ref)). Columns, all per draw:
+hazard and ascertainment forward, with scan noise drawn from its prior, to
+a future vintage `horizon` days past the cut-off, which must be a whole
+number of weeks (see [`onset_forecast_model`](@ref)). Columns, all per draw:
 
   - `onsets_to_date`: symptom onsets that have happened by the cut-off.
   - `onset_reports_to_date`: of those, the number the triangle should

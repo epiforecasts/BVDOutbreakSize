@@ -77,7 +77,7 @@ Delay-corrected confirmed case-fatality ratio across the posterior, read off
 a joint `bvd_joint` chain. For each draw the modelled daily confirmed-case
 incidence (rescaled so its total matches the scored expected confirmed cases),
 the onset-to-confirmation and onset-to-death-confirmation delay PMFs, and the
-cumulative confirmed deaths give the corrected ratio
+modelled cumulative confirmed deaths give the corrected ratio
 ([`delay_corrected_cfr`](@ref)).
 
 `obs_confirmed` and `obs_confirmed_deaths` are the observed cumulative
