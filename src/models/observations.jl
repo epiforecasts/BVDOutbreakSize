@@ -4367,28 +4367,29 @@ less the counts before it in the group, with the overdispersion `ρ` and the
 conditional share `share_r / tail_r` clamped into `[0, 1]`. The running
 tail `tail_r = 1 − Σ_{q < r} share_q` is floored at 1e-10. The last row of
 a group is the remainder and adds nothing, so a one-row group adds nothing.
-The rows are scored as one [`BetaBinomialVector`](@ref).
+A row with no trials and no count scores exactly zero, so it is left out.
+The other rows are scored as one [`BetaBinomialVector`](@ref).
 """
 function stick_breaking_loglik(
         groups::AbstractVector{<:Integer}, counts::AbstractVector{<:Integer},
         shares::AbstractVector, ρ::Real
     )
-    cells = _stick_breaking_cells(groups, counts, shares)
+    cells = _stick_breaking_cells(groups, counts, shares; drop_empty = true)
     return logpdf(BetaBinomialVector(cells.trials, cells.p, ρ), cells.obs)
 end
 
 ## The scored rows of `stick_breaking_loglik`, each a trial count, a
-## conditional share and an observed count.
-function _stick_breaking_cells(groups, counts, shares)
+## conditional share and an observed count. `drop_empty` leaves out the rows
+## with no trials and no count. A daily province split is mostly such rows.
+function _stick_breaking_cells(groups, counts, shares; drop_empty::Bool = false)
     T = float(eltype(shares))
     m = length(groups)
     ## Every row but the last of each group is scored.
     nc = m - count(r -> r == 1 || groups[r] != groups[r - 1], 1:m)
-    trials = Vector{Int}(undef, nc)
-    p = Vector{T}(undef, nc)
-    obs = Vector{Int}(undef, nc)
+    trials = sizehint!(Int[], nc)
+    p = sizehint!(T[], nc)
+    obs = sizehint!(Int[], nc)
     tail_floor = T(1.0e-10)
-    k = 0
     i = 1
     @inbounds while i <= m
         j = i
@@ -4400,10 +4401,12 @@ function _stick_breaking_cells(groups, counts, shares)
         remaining = total
         tail = one(T)
         for r in i:(j - 1)
-            k += 1
-            trials[k] = max(remaining, 0)
-            p[k] = clamp(shares[r] / tail, zero(T), one(T))
-            obs[k] = counts[r]
+            n_r = max(remaining, 0)
+            if !drop_empty || n_r != 0 || counts[r] != 0
+                push!(trials, n_r)
+                push!(p, clamp(shares[r] / tail, zero(T), one(T)))
+                push!(obs, counts[r])
+            end
             remaining -= counts[r]
             tail = max(tail - shares[r], tail_floor)
         end
