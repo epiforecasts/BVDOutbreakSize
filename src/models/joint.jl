@@ -1047,13 +1047,7 @@ onset-to-report delay, the rows summing to the national `bvd_reports_daily`
 of [`reported_cases_model`](@ref). Returns an `(n_patches × n)` matrix.
 """
 function _patch_reports(onsets_matrix::AbstractMatrix, report_pmf::AbstractVector)
-    np, n = size(onsets_matrix)
-    T = promote_type(eltype(onsets_matrix), eltype(report_pmf))
-    out = Matrix{T}(undef, np, n)
-    @inbounds for p in 1:np
-        out[p, :] = convolve_delay(onsets_matrix[p, :], report_pmf)
-    end
-    return out
+    return convolve_rows(onsets_matrix, report_pmf)
 end
 
 """

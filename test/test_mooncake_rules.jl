@@ -214,9 +214,7 @@
             "8 × 260, D = 42", convolve_rows, rand(rng, 8, 260) .+ 0.1,
             pmf(rng, 42); perf = true
         )
-        stock = rand(rng, 4, 30) .+ 0.1
-        stock[:, 5] .= 0
-        add!("a day with no stock", _share_out, stock, 100 .* rand(rng, 30))
+        add!("4 × 30", _share_out, rand(rng, 4, 30) .+ 0.1, 100 .* rand(rng, 30))
         add!(
             "8 × 260", _share_out, rand(rng, 8, 260) .+ 0.1,
             100 .* rand(rng, 260); perf = true
@@ -839,7 +837,7 @@ end
     using Mooncake: Mooncake
     using Distributions: logpdf
     using BVDOutbreakSize: NegBinomialVector, StudentTVector,
-        zone_share_renewal_kernel
+        zone_share_renewal_kernel, _share_out
 
     function mgrad(f, args...)
         rule = Mooncake.build_rrule(f, args...)
@@ -886,6 +884,18 @@ end
     )
     @test all(iszero, gIb)
     @test all(iszero, gδ)
+
+    ## A day with no patch stock splits its demand equally, so the stocks
+    ## take no derivative there and the demand takes the mean cotangent.
+    stock = rand(rng, 4, 10) .+ 0.1
+    stock[:, 5] .= 0
+    weights = rand(rng, 4, 10)
+    gs, gd = mgrad(
+        (s, d) -> sum(weights .* _share_out(s, d)), stock, 50 .* rand(rng, 10)
+    )
+    @test all(iszero, gs[:, 5])
+    @test all(!iszero, gs[:, 4])
+    @test gd[5] ≈ sum(weights[:, 5]) / 4
 end
 
 @testitem "Mooncake rules: the joint's likelihood rules fire" tags = [:ad] begin
