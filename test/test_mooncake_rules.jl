@@ -25,7 +25,8 @@
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
-        zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights
+        zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
+        bin_row_increments
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -198,6 +199,19 @@
         add!("1 ⊕ 1", convolve_pmf, [0.4], [0.7])
         add!("empty ⊕ 5", convolve_pmf, Float64[], pmf(rng, 5))
         add!("45 ⊕ 45", convolve_pmf, pmf(rng, 45), pmf(rng, 45); perf = true)
+
+        ## Per-patch rows binned to vintage days: a first bin reaching back
+        ## to day one, single-day bins, a repeated day (an empty bin) and a
+        ## day past the grid end, which clamps.
+        add!(
+            "vintage bins", bin_row_increments, rand(rng, 3, 40),
+            [10, 11, 12, 12, 20, 33, 45]
+        )
+        add!("no vintages", bin_row_increments, rand(rng, 3, 40), Int[])
+        add!(
+            "8 patches, n = 260, daily vintages", bin_row_increments,
+            rand(rng, 8, 260), collect(130:260); perf = true
+        )
 
         ## Every knot layout the model builds: a regular weekly grid, a
         ## two-knot span, an irregular grid, and the single-knot window.
@@ -843,7 +857,7 @@ end
     using Distributions: _logpdf
     using BVDOutbreakSize: load_observations, joint_fit_args,
         default_breakpoint, incare_census, NegBinomialVector,
-        StudentTVector, BetaBinomialVector
+        StudentTVector, BetaBinomialVector, bin_row_increments
 
     ## The argument types the streams pass on the production data.
     obs = load_observations()
@@ -866,6 +880,9 @@ end
     ## means, and the composition's rows are the vectors
     ## `stick_breaking_loglik` builds.
     @test fires(Tuple{typeof(incare_census), F, F, F, Float64, F})
+    ## The per-patch confirmed and death rows are binned as a float matrix
+    ## on integer vintage days.
+    @test fires(Tuple{typeof(bin_row_increments), Matrix{Float64}, Vector{Int}})
     @test fires(
         Tuple{
             typeof(_logpdf), NegBinomialVector{Float64, F}, Vector{Int},
