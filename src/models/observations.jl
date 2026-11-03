@@ -2278,17 +2278,7 @@ function _patch_bvd_admissions(
         reports_matrix::AbstractMatrix, ::Nothing, p_iso_bvd::Real,
         p_drc::Real, adm_pmf::AbstractVector
     )
-    np, n = size(reports_matrix)
-    T = promote_type(
-        eltype(reports_matrix), typeof(p_iso_bvd), typeof(p_drc),
-        eltype(adm_pmf)
-    )
-    scale = p_iso_bvd * p_drc
-    A_bvd = Matrix{T}(undef, np, n)
-    @inbounds for p in 1:np
-        A_bvd[p, :] = convolve_delay(scale .* reports_matrix[p, :], adm_pmf)
-    end
-    return A_bvd
+    return (p_iso_bvd * p_drc) .* convolve_rows(reports_matrix, adm_pmf)
 end
 function _patch_bvd_admissions(
         reports_matrix::AbstractMatrix, asc::AbstractVector, p_iso_bvd::Real,
