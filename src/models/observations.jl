@@ -2271,7 +2271,25 @@ through the admission delay `adm_pmf` at `p_iso_bvd · p_drc`, then the
 national BVD admissions (their sum) re-split by the relative ascertainment
 `asc`, so the BVD-to-background proportion stays national. Returns an
 `(n_patches × n)` matrix whose columns sum to the national BVD admissions.
+`asc = nothing` leaves each patch on its own reports, which equal
+ascertainment would re-split to the same matrix.
 """
+function _patch_bvd_admissions(
+        reports_matrix::AbstractMatrix, ::Nothing, p_iso_bvd::Real,
+        p_drc::Real, adm_pmf::AbstractVector
+    )
+    np, n = size(reports_matrix)
+    T = promote_type(
+        eltype(reports_matrix), typeof(p_iso_bvd), typeof(p_drc),
+        eltype(adm_pmf)
+    )
+    scale = p_iso_bvd * p_drc
+    A_bvd = Matrix{T}(undef, np, n)
+    @inbounds for p in 1:np
+        A_bvd[p, :] = convolve_delay(scale .* reports_matrix[p, :], adm_pmf)
+    end
+    return A_bvd
+end
 function _patch_bvd_admissions(
         reports_matrix::AbstractMatrix, asc::AbstractVector, p_iso_bvd::Real,
         p_drc::Real, adm_pmf::AbstractVector
@@ -2542,12 +2560,10 @@ in-care fraction and the daily series for forecasting and replication.
         ## ([`background_split_model`](@ref)).
         background_split::AbstractVector{<:Real} = [1.0],
         ## Relative ascertainment by patch, which re-splits the national BVD
-        ## admissions. Ones leaves the split on the reports alone, as
+        ## admissions. `nothing` leaves the split on the reports alone, as
         ## [`bvd_joint`](@ref) passes when each patch's reports already
         ## carry its suspected-case detection.
-        patch_ascertainment::AbstractVector{<:Real} = ones(
-            length(background_split)
-        ),
+        patch_ascertainment::Union{Nothing, AbstractVector{<:Real}} = nothing,
         ## Province occupancy, bed and 24h admission rows,
         ## `(; days, patches, counts)` from `province_care_observations`, or
         ## `nothing`. Scored as splits of the printed sum of the provinces
