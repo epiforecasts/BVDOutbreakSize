@@ -1385,7 +1385,7 @@ r0_evolution_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The basic reproduction number published at each release (blue) and from the current model frozen at earlier cut-offs (red), as medians with 30%, 60% and 90% interval bars, with the current fit as a flat band.
-#md # Releases began publishing this quantity recently, so the blue history is short.
+#md # The blue history starts at the first release that published this quantity.
 #md # </figcaption>
 #md # </figure>
 #md # ```
