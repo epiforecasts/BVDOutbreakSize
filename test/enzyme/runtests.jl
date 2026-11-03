@@ -69,9 +69,6 @@ end
 ## No argument runs both.
 parts = isempty(ARGS) ? ["components", "joint"] : ARGS
 
-## Exit code 2 means a scenario did not behave as declared; any other
-## non-zero code means the script could not run. `test/package/EnzymeExt.jl`
-## fails on the first and tolerates the second.
 failed = try
     @testset "Enzyme extension" begin
         if "components" in parts

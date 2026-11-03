@@ -39,8 +39,7 @@ frozen_lastweek_streams = frozen_validation_stream_fits();
 #
 # How last week's forecast held up against the data since observed, from the frozen refit in [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation").
 # Only the streams the situation reports still update are validated, since a stopped stream repeats its last total and leaves nothing to score.
-# The projected bed occupancy is scored against the beds held a week later, but this check is weak at a one-week-back freeze.
-# The reported occupancy rate starts only on 9 June, so the capacity has no implied-capacity anchor and rides its random walk back to the freeze date.
+# The projected bed occupancy is scored against the beds held a week later.
 
 #md # ```@raw html
 #md # <details><summary>Fit one week back and validate the one-week-ahead forecast</summary>
@@ -266,7 +265,7 @@ validation_latent_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The frozen fit's forecast of the past week's new infections, onsets and deaths against the current fit's estimate for the same window.
-#md # These quantities are not observed, so they are scored distribution against distribution.
+#md # These quantities are not observed, so the two posterior distributions are compared directly.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -342,9 +341,7 @@ validation_stopped_fig #hide
 # Reported cases and suspected deaths stopped being updated partway through the outbreak, and the exports detection series is anchored to an earlier cut-off.
 # Exports therefore has no scored forecast, and reported cases and suspected deaths each rest on a single matched forecast.
 #
-# Only a minority of the daily releases examined contribute a row, each a reconstruction of an earlier model version rather than the current fit.
-# Only the newest few releases carry the current model's individual-stream forecasts.
-# Each row shows the number of matched forecasts it rests on, from one to a handful.
+# Each row shows the number of matched forecasts it rests on.
 #
 # Four things are excluded from the scores, each for a stated reason rather than for scoring badly:
 #
@@ -356,10 +353,7 @@ validation_stopped_fig #hide
 #
 # Nothing is dropped from the archive itself, and the score and overlay files in the data directory record everything that was scored.
 #
-# The symptom-onset stream is scored on the new reported count each vintage adds, because every vintage rereads the whole figure.
-# Its printed total therefore moves with the scan error as well as with late reporting, and on fourteen vintages the reread total falls.
-# A window containing a falling vintage is left unscored, as the [province scores](@ref "Forecast by province across releases") do for a window holding a harmonisation-break day.
-# This bites hardest at the longer horizons: the frozen onset row keeps three of its twenty-nine windows, all at one week, and the cross-release row six of thirty-eight.
+# The symptom-onset stream is scored on the new reported count each vintage adds (see [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and forecast")), and on some vintages the reread total falls.
 # Read the onset row's skill against the baseline rather than its coverage, and as resting on a handful of windows.
 
 #md # ```@raw html
@@ -759,9 +753,6 @@ frozen_overlay_fig #hide
 #md # </figcaption>
 #md # </figure>
 #md # ```
-
-# The frozen re-fits below freeze the renewal data to an earlier cut-off and re-fit, so that a change driven by newer data can be distinguished from one driven by a change of method.
-# The one-week-back re-fit uses the headline sampler settings, and the re-fits at earlier cut-offs use the single-population frozen settings given in the methods.
 
 #md # ```@raw html
 #md # <details><summary>Freeze the renewal data to a cut-off and re-fit</summary>

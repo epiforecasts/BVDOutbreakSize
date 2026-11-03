@@ -163,7 +163,7 @@ end
         plot_divergence_locations
 
     ## kept: a trivial Gaussian with one scalar and one three-element
-    ## vector gives NUTS a fast target that still exercises the indexed
+    ## vector gives NUTS a fast target that exercises the indexed
     ## names a vector-valued parameter produces.
     @model function _param_diag_synthetic()
         x ~ Normal(0, 1)

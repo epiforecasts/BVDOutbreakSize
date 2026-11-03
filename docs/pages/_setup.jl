@@ -128,10 +128,6 @@ if !@isdefined(_BVD_SETUP_LOADED)
     include(joinpath(pkgdir(BVDOutbreakSize), "docs", "fits", "registry.jl"))
     _BREAKPOINT = default_breakpoint(obs)
 
-    ## The exports-deaths composer keeps the deaths and exports submodels only
-    ## for their CFR, onset-to-death PMF and export onsets, leaving their own
-    ## counts missing, which leaves two redundant sampled discrete draws, so its
-    ## model check is disabled (see `nuts_sample`).
     validation_cutoff = default_validation_cutoff(obs)
 
     ## Published per-release estimates, pulled from the tagged results
@@ -144,10 +140,10 @@ if !@isdefined(_BVD_SETUP_LOADED)
     )
 
     ## Frozen joint re-fits at the cut-offs McCabe et al. used (27 May matches
-    ## the Lancet publication's cut-off), for the matched-in-time comparison
-    ## further down. The estimate-evolution overlay relies on the published
-    ## per-release estimates in `released_df`, so no per-release-date current-
-    ## model re-fits are run here.
+    ## the Lancet publication's cut-off), for the comparisons page. The
+    ## estimate-evolution overlay relies on the published per-release
+    ## estimates in `released_df`, so no per-release-date current-model
+    ## re-fits are run here.
     frozen_cutoffs = default_frozen_cutoffs()
     ## Chamla et al.'s 8 June confirmed-case anchor, kept out of the
     ## McCabe-matched `frozen_cutoffs` but reused for the Chamla comparison and
@@ -159,12 +155,9 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## they can be run from the standalone per-fit entry point too.
 
     ## Sensitivity refits (onset-to-death delay, molecular clock) are slow extra
-    ## joint fits, gated on the `BVD_RUN_SENSITIVITY` env var. They run on
-    ## release builds only (tag pushes, which deploy the versioned docs) and are
-    ## skipped on main pushes and PR previews to keep those docs builds fast:
-    ## `.github/workflows/docs.yml` sets the var to
-    ## `startsWith(github.ref, 'refs/tags/')`. Set `BVD_RUN_SENSITIVITY=true`
-    ## to run them locally.
+    ## joint fits, gated on the `BVD_RUN_SENSITIVITY` env var, which
+    ## `.github/workflows/docs.yml` sets on main pushes and tags and leaves off
+    ## for PR previews. Set `BVD_RUN_SENSITIVITY=true` to run them locally.
     RUN_SENSITIVITY = lowercase(
         strip(
             get(

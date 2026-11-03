@@ -85,7 +85,7 @@ const ONSET_CURVE_PATH = joinpath(
 
 ## Release tags whose forecast is excluded from scoring because the
 ## reconstruction failed, not because the model performed badly: a chain
-## that did not sample properly rather than a genuine forecast. Keyed on
+## that did not sample properly rather than a forecast. Keyed on
 ## the release tag itself (before the "(backfill)" label is applied), each
 ## value names the signature that identifies it as a failed reconstruction,
 ## kept here rather than in a comment so it prints in the run log. Only the
@@ -189,8 +189,7 @@ end
 # ----------------------------------------------------------------------
 # Minimal CSV I/O. `CSV.jl` is not available under `--project=.` (see
 # above), and every asset this script reads or writes is a plain
-# numeric/short-string table with no embedded commas or quoting, so a
-# hand-rolled split is safe and avoids adding a dependency.
+# numeric/short-string table with no embedded commas or quoting.
 # ----------------------------------------------------------------------
 
 ## Read a simple CSV into `(header, rows)`: `header` is the first line
@@ -265,30 +264,21 @@ end
 ## "exports" is scored too, but its truth is built by `stream_history` from
 ## the dated detection series rather than named here.
 ##
-## The confirmed/suspect ward split ("treatment beds" and "isolation beds
-## (suspected)") is a level quantity like the total: each ward occupancy is
-## scored against its Tableau 6 occupancy sub-stock (`dont confirmes` /
-## `dont suspects`, which sum to the total `isolation_history`). These are
-## present only once a forecast carries the split, so before then no archive
-## row bears the label and it is simply never scored.
-##
 ## "onset reports" is the digitised symptom-onset triangle's own per-vintage
 ## cumulative confirmed total (`onset_report_history`, built by
 ## `load_onset_curve`), scored on the incident basis: the new reported count
-## the triangle adds over the horizon window. The level is deliberately not
-## scored. Each vintage rereads the whole figure, so its total is revised
-## both by genuine late reporting and by the ≈4% per-scan level error, and a
-## level score would charge the forecast for a rescan of cases it had
-## already predicted. On the incident basis each week's revision enters
-## exactly one scored window, so the triangle's own vintage structure is
-## scored once rather than compounded — the same argument `forecast_archive`
-## makes for the other cumulative streams, which is why the archive carries
-## `onset_reports_new` and no onset level. A window over which the rescan
-## reads a smaller total floors at zero here, as every incident stream's
-## truth does, and `forecast_onsets` floors its replicate the same way, so
-## the two sides of the score meet the same convention. Only a release whose
-## forecast carries the triangle can be scored on this stream, and a
-## reconstruction cannot add it to an earlier one.
+## the triangle adds over the horizon window. The level is not scored.
+## Each vintage rereads the whole figure, so its total is revised both by
+## late reporting and by the ≈4% per-scan level error, and a level score
+## would charge the forecast for a rescan of cases it had already predicted.
+## On the incident basis each week's revision enters exactly one scored
+## window, as for the other cumulative streams of `forecast_archive`, so
+## the archive carries `onset_reports_new` and no onset level. A window
+## over which the rescan reads a smaller total floors at zero here, as every
+## incident stream's truth does, and `forecast_onsets` floors its replicate
+## the same way, so the two sides of the score meet the same convention.
+## Only a release whose forecast carries the triangle can be scored on this
+## stream, and a reconstruction cannot add it to an earlier one.
 const STREAM_HISTORY = Dict(
     "reported cases" => (:reported_history, :incident),
     "suspected deaths" => (:deaths_history, :incident),
@@ -296,10 +286,7 @@ const STREAM_HISTORY = Dict(
     "confirmed deaths" => (:confirmed_deaths_history, :incident),
     "recovered" => (:recovered_history, :incident),
     "onset reports" => (:onset_report_history, :incident),
-    "isolation beds" => (:isolation_history, :level),
-    "treatment beds" => (:treatment_confirmed_incare_history, :level),
-    "isolation beds (suspected)" =>
-        (:treatment_suspect_incare_history, :level)
+    "isolation beds" => (:isolation_history, :level)
 )
 
 ## Streams the archive can carry that have no `(; days, counts)` field, so
@@ -328,7 +315,7 @@ const PROVINCE_STREAM_HISTORY = Dict(
 ## carries brackets, so a composed label can never collide with one.
 province_stream_label(stream, province) = string(stream, " [", province, "]")
 
-## Patches that earlier releases forecast and the model no longer has,
+## Retired patches that earlier releases forecast,
 ## keyed and valued like `PROVINCE_MEMBERS`. Releases before every province
 ## had its own patch pooled these four into `other`, so their archived
 ## forecasts are scored against the same pool.
@@ -510,12 +497,11 @@ end
 
 ## The last date a stream's own truth source was still being updated: the
 ## date of its last vintage, since beyond it the cumulative total is only
-## ever repeated at its last reported value rather than genuinely observed.
+## ever repeated at its last reported value rather than observed.
 ## For the exports stream, assembled by `stream_history` from the dated
 ## detection series, this is the date of the last detection, since the
-## manifest documents a later known import deliberately excluded as later
-## than the cut-off that series is anchored to; the same generic rule
-## reads that correctly with no special case for the stream. A history
+## manifest documents a later known import excluded as later than the
+## cut-off that series is anchored to. A history
 ## with no vintages at all has no coverage.
 function stream_coverage_end(obs, grid_date, stream)
     h, _ = stream_history(obs, stream)
@@ -594,8 +580,8 @@ end
 ## the `net - gross` arithmetic, shared with the in-report validation) with
 ## its grid days mapped onto calendar dates. Empty for every stream but the
 ## two confirmed streams. A break day absent from the (possibly frozen)
-## history — because the vintage it names has not arrived by this `obs`'s
-## cut-off — contributes nothing, matching `truth_at`/`baseline_draws` never
+## history (because the vintage it names has not arrived by this `obs`'s
+## cut-off) contributes nothing, matching `truth_at`/`baseline_draws` never
 ## seeing a vintage that has not happened yet.
 ##
 ## `confirmed_break_steps` floors each correction at zero. `data.jl` refuses a
@@ -661,8 +647,7 @@ end
 ## `observations.toml`, see `src/data.jl`): every level stream, since each is
 ## an occupancy sub-stock of the total and the sub-stocks sum to it each day,
 ## so a reclassification of the total moves them too. Derived from
-## `STREAM_HISTORY` rather than named again, so a level stream added there is
-## covered without a second list to keep in step.
+## `STREAM_HISTORY`.
 ##
 ## These breaks are not the same object as the confirmed streams'
 ## harmonisation days: the report publishes no 24h count to split the step
@@ -782,8 +767,8 @@ end
 ##
 ## A window spanning one of the occupancy levels' reclassification breaks is
 ## dropped rather than corrected: the report publishes no count to split that
-## step by, so the only honest reading is that the change across it is a
-## change of reporting basis and not a day of the walk (see
+## step by, so the change across it is read as a change of reporting basis
+## and not a day of the walk (see
 ## `spans_occupancy_break`).
 function _history_diffs(obs, grid_date, stream, hist, made_date)
     out = Tuple{Float64, Int}[]
@@ -810,12 +795,10 @@ end
 ##
 ## The target a forecast of an incident stream is scored on is the count over
 ## the window ending at the target date, so that is the quantity the
-## persistence walk has to step on. Differencing the cumulative series
-## instead puts the window's own incidence into the pool rather than the
-## change in it: a monotone cumulative gives a pool of
-## strictly positive counts whose scale is the epidemic's level, which is
-## then symmetrised about zero and summed over the horizon, so the spread
-## tracks how large the outbreak is rather than how fast it is moving.
+## persistence walk steps on. Differences of the cumulative series would
+## put the window's incidence into the pool rather than its change, so the
+## spread would track how large the outbreak is rather than how fast it is
+## moving.
 ##
 ## Vintages whose window opens before the stream began reporting are skipped,
 ## since their total saturates at the whole cumulative rather than measuring a
@@ -1057,7 +1040,7 @@ end
 ## `vintage_obs_path`, when given, is the release's own
 ## `observations.toml`, the manifest the baseline is built from (see
 ## `vintage_observations`). `obs`/`grid_date` still give the truth every
-## fit is scored against, which is correctly the now-observed data.
+## fit is scored against, the now-observed data.
 ##
 ## Groups that are not scored are counted apart for the caller to log: a
 ## target not yet observed (`.skipped`), one past the stream's own
@@ -1087,8 +1070,7 @@ function score_release(
     ## row whose stream label has no truth source costs itself, not the
     ## release: it is dropped here so the scoring loop only sees scorable
     ## streams, and the dropped labels are logged once per release rather
-    ## than aborting on the first (an unmapped label used to KeyError
-    ## through the whole release).
+    ## than aborting on the first.
     Key = Tuple{Date, Int, Date, String}
     groups = Dict{Key, Dict{String, Vector{Float64}}}()
     unknown = 0
@@ -1410,9 +1392,8 @@ end
 ## The quantities a release's `stream_estimates.csv` carries, mapped to the
 ## per-release-by-stream table each is collected into. "R0" is the per-fit
 ## basic reproduction number, `exp(rt_state.log_R0)`, the by-dataset
-## analogue of `r0_row` below; it is absent from every release until a
-## release carries it in `stream_estimates.csv`, so its destination table
-## stays header-only until then.
+## analogue of `r0_row` below. A release without the column gives no R0
+## rows.
 const STREAM_QUANTITY_DEST = Dict(
     "R_T" => "rt_by_release_by_stream.csv",
     "C_T" => "size_by_release_by_stream.csv",
@@ -1733,7 +1714,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         ## forecast, so it is preferred over the joint-only `forecast.csv`. A
         ## tag on `_FAILED_RECONSTRUCTIONS` is skipped before any of that: its
         ## forecast, wherever it comes from, is a failed reconstruction rather
-        ## than a real one, so it is never worth fetching.
+        ## than a real one, so it is not fetched.
         label = tag
         forecast_path = if haskey(_FAILED_RECONSTRUCTIONS, tag)
             nothing
@@ -1948,8 +1929,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
             )
         )
 
-        ## Per-fit R_T and C_T estimates, split into their own tables. Absent on
-        ## every release until P2.2 lands, so a missing asset is a clean skip.
+        ## Per-fit R_T, C_T and R0 estimates, split into their own tables.
+        ## A release without the asset is skipped.
         est_path = fetch_asset(repo, tag, STREAM_ESTIMATES_ASSET, tagdir(tag))
         byqty = try
             stream_estimate_rows(tag, est_path, cutoffs[tag])
@@ -2021,7 +2002,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     )
 
     ## `data/forecast_scores.csv`: one row per scored (release, made_date,
-    ## stream, horizon, fit) group, `fit` the model or `baseline`. The two
+    ## stream, horizon, fit) group, `fit` the model or `baseline`. The
     ## trailing column is the log-CRPS relative skill to the persistence
     ## baseline (baseline row `1.0`). The comparison against a stream's
     ## individual fit is computed at aggregation time by the table builders
@@ -2264,8 +2245,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     ## `data/zone/released_estimates.csv`: each release's per-area
     ## reproduction number, reported counts and, for provinces, case-fatality
     ## ratio, in long format. The basename is already in `FIT_DATA_EXCLUDE`,
-    ## which matches on basename, so both stay out of the fit key without a
-    ## change to the key itself.
+    ## which matches on basename, so both stay out of the fit key.
     write_area_estimates(
         joinpath(@__DIR__, "..", "data", "province", "released_estimates.csv"),
         area_rows[:province], :province

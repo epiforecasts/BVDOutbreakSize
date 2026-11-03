@@ -316,8 +316,6 @@ cumulative_traj_fig #hide
 
 # The per-province sizes, the modelled infections behind them and the importation between provinces are on the [province estimates](@ref "Province estimates") page.
 
-# The cumulative infection count is set by the reproduction number trajectory and the outbreak age.
-
 #md # ```@raw html
 #md # <details><summary>Outbreak start date and seeding-time posterior</summary>
 #md # ```
@@ -336,7 +334,7 @@ start_date_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The posterior of the outbreak start date (left) and the joint posterior of the outbreak age and the early doubling time (right).
+#md # The posterior of the outbreak start date (left) and the joint posterior of the outbreak age and the doubling time at the cut-off (right).
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -479,8 +477,8 @@ rt_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Daily reproduction number from the genetic bound to the cut-off, with 30%, 60% and 90% credible ribbons and about a hundred sampled trajectories.
-#md # Red lines mark the start (dashed, the first situation report on 18 May 2026) and end (dotted) of the three-week response scale-up.
+#md # Daily reproduction number of the national trend, net of depletion, from the renewal start to the cut-off, with 30%, 60% and 90% credible ribbons and about a hundred sampled trajectories.
+#md # Red lines mark the centre of the logistic response ramp (dashed, the first situation report on 18 May 2026) and one 21-day ramp time scale after it (dotted).
 #md # Grey dashed lines mark a reproduction number of one and the cut-off.
 #md # </figcaption>
 #md # </figure>
@@ -512,7 +510,7 @@ intervention_table #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The response effect on the reproduction number as a multiplier.
-#md # A value below one is the factor by which the response lowers the reproduction number once the scale-up completes.
+#md # A value below one is the factor by which the response lowers the reproduction number once the ramp is complete.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -558,7 +556,7 @@ obs_delay_summary #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The delays from onset to report, death and hospitalisation abroad, the report-to-receipt delay and the mean lengths of stay.
+#md # The delays from onset to report, onset to admission, admission to death and onset to detection abroad, the report-to-receipt delay and the mean lengths of stay.
 #md # The lengths of stay are the isolation stay of a BVD patient, the rule-out stay of a non-BVD patient and the delay from confirmation to recovery.
 #md # </figcaption>
 #md # </figure>
@@ -600,8 +598,7 @@ obs_delay_pair_fig #hide
 # ### Surveillance parameters
 #
 # The surveillance parameters cover the reporting fractions, the stream dispersions, the laboratory pipeline and the isolation and recovered streams.
-# The six count streams each have a negative-binomial dispersion, partially pooled around a population-level dispersion $k$ (see [surveillance dispersion](@ref "Surveillance dispersion")).
-# The four daily treatment-centre flows share a separate flow dispersion $k_{\text{flow}}$, centred on the treatment-centre stock dispersion $k_{\text{iso}}$.
+# The stream dispersions are defined in [surveillance dispersion](@ref "Surveillance dispersion") and the flow dispersion in [treatment-centre flow](@ref "Treatment-centre flow").
 
 #md # ```@raw html
 #md # <details><summary>Surveillance-parameter summary table</summary>
@@ -878,7 +875,7 @@ no_onward_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Deaths still expected among people infected by the cut-off, net of those already observed (left), and the projected total deaths (right).
+#md # Deaths still expected among people infected by the cut-off, net of the deaths the model expects by the cut-off (left), and the observed deaths plus those still expected (right).
 #md # The right axis starts at the observed death count.
 #md # </figcaption>
 #md # </figure>
@@ -1295,36 +1292,6 @@ for f in stream_fits, (stream, label) in f.streams,
     end
 end
 
-## Confirmed/suspect ward-bed occupancy for the joint, read from the joint's
-## own `forecast_reported` runs so the ward beds are scored on the same
-## footing as the total occupancy in the preferred `stream_forecasts.csv`
-## asset. `forecast_stream` cannot project these. The split is not a growable
-## stream but a partition of the total.
-##
-## Dead as it stands. `forecast_reported` projects the total occupancy alone
-## and emits neither column, so the guard below always skips and nothing
-## reaches `stream_forecasts.csv` under these two labels. The joint does
-## carry the cut-off split (`expected_confirmed_incare_T`), so what is
-## missing is the partition of the projected level, not the quantity to
-## partition it by. Kept, with the guard, so the loop starts writing the
-## moment `forecast_reported` grows those columns.
-for (h, fc) in forecast_runs,
-        (col, label) in (
-            (:suspect_occupancy, "isolation beds (suspected)"),
-            (:confirmed_occupancy, "treatment beds"),
-        )
-
-    col in propertynames(fc) || continue
-    _wvals = fc[!, col]
-    for (d, i) in enumerate(1:stream_thin:length(_wvals))
-        push!(
-            stream_forecasts, (
-                obs.cutoff, h, obs.cutoff + Day(h), label,
-                d, Float64(_wvals[i]), "joint",
-            )
-        )
-    end
-end
 CSV.write(joinpath(output_dir, "stream_forecasts.csv"), stream_forecasts);
 
 ## Latent symptom-onset trajectory over time, the "symptomatic cases" curve,

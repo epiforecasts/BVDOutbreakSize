@@ -856,10 +856,6 @@ end
         confirmed_history = cum, confirmed_deaths_history = cum,
         recovered_history = cum, onset_report_history = cum,
         isolation_history = (; days = [26, 33, 40], counts = [18, 19, 20]),
-        treatment_confirmed_incare_history =
-            (; days = [26, 33, 40], counts = [8, 9, 12]),
-        treatment_suspect_incare_history =
-            (; days = [26, 33, 40], counts = [10, 10, 8]),
         export_case_days = [27, 35, 38, 40],
     )
     made_date = grid_date(33)
@@ -883,17 +879,12 @@ end
 
     ## Bed occupancy is a stock, not a cumulative count, so its truth is the
     ## occupancy standing at the target rather than a change over the window.
-    ## Each ward sub-stock is read the same way, including the one that fell.
     n = 40
     cutoff = Date(2026, 7, 15)
     grid_date(day) = cutoff - Day(n - day)
     obs = (;
         cutoff = cutoff, n = n,
         isolation_history = (; days = [26, 33, 40], counts = [18, 19, 20]),
-        treatment_confirmed_incare_history =
-            (; days = [26, 33, 40], counts = [8, 9, 12]),
-        treatment_suspect_incare_history =
-            (; days = [26, 33, 40], counts = [10, 10, 8]),
     )
     made_date = grid_date(33)
     target_date = grid_date(40)
@@ -902,14 +893,6 @@ end
         obs, grid_date, "isolation beds", made_date,
         target_date
     ) == 20.0
-    @test truth_at(
-        obs, grid_date, "treatment beds", made_date,
-        target_date
-    ) == 12.0
-    @test truth_at(
-        obs, grid_date, "isolation beds (suspected)", made_date,
-        target_date
-    ) == 8.0
 end
 
 @testitem "every scored stream is scored on its declared basis" begin
@@ -924,8 +907,8 @@ end
     ##
     ## Driving this from the stream maps rather than a list means a stream
     ## added on the wrong basis fails here, and running each one through
-    ## `truth_at` means the declared basis has to be the one it is actually
-    ## scored on. An increment depends on where the window opens; a level
+    ## `truth_at` means the declared basis has to be the one it is scored
+    ## on. An increment depends on where the window opens; a level
     ## does not. That separates the two without pinning a value per stream.
     n = 40
     cutoff = Date(2026, 7, 15)
@@ -937,10 +920,6 @@ end
         confirmed_history = cum, confirmed_deaths_history = cum,
         recovered_history = cum, onset_report_history = cum,
         isolation_history = (; days = [26, 33, 40], counts = [18, 19, 20]),
-        treatment_confirmed_incare_history =
-            (; days = [26, 33, 40], counts = [8, 9, 12]),
-        treatment_suspect_incare_history =
-            (; days = [26, 33, 40], counts = [10, 10, 8]),
         export_case_days = [27, 35, 38, 40],
     )
     target_date = grid_date(40)

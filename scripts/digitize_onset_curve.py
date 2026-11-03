@@ -238,7 +238,7 @@ CONFIG = {
 # (confirmed by reading the printed tick labels directly - the pixel
 # geometry is otherwise indistinguishable, so this cannot be
 # self-calibrated any more than `last_tick` can). Override per vintage
-# here; anything absent keeps the historical 20.
+# here; anything absent keeps 20.
 Y_AXIS_STEP = {
     "087": 25,
     "088": 25,
@@ -1099,9 +1099,7 @@ def main():
     read_now = 0
     out_rows = []
     for sr, (report_date, last_tick) in CONFIG.items():
-        # Already digitised, so its rows are carried through untouched. They
-        # are written in CONFIG order like any other, so reusing them cannot
-        # reorder the file.
+        # Already digitised, so its rows are carried through untouched.
         if sr in cached:
             out_rows.extend(cached[sr])
             reused += 1

@@ -460,6 +460,56 @@ end
     @test all(d -> count(==(d), weekly2.days) == 2, unique(weekly2.days))
 end
 
+@testitem "patch BVD admissions: `nothing` ascertainment is the unweighted split" begin
+    using BVDOutbreakSize: _patch_bvd_admissions, convolve_delay
+    using Random: Xoshiro
+
+    rng = Xoshiro(1189)
+    reports = 5 .* rand(rng, 4, 50) .+ 0.1
+    reports[3, 1:10] .= 0
+    pmf = [0.2, 0.5, 0.3]
+    plain = _patch_bvd_admissions(reports, nothing, 0.4, 0.6, pmf)
+    for p in 1:4
+        @test plain[p, :] ≈ convolve_delay(0.24 .* reports[p, :], pmf)
+    end
+    ## Equal ascertainment re-splits the national admissions on the
+    ## reports alone, so it gives the same matrix.
+    @test plain ≈ _patch_bvd_admissions(reports, ones(4), 0.4, 0.6, pmf) rtol = 1.0e-12
+end
+
+@testitem "treatment_flow_model: `nothing` ascertainment keeps the density" begin
+    using BVDOutbreakSize: treatment_flow_model
+    using Turing: DynamicPPL
+    using Random: Xoshiro
+
+    n = 60
+    t = 1:n
+    bvd = 2.0 .* exp.(0.05 .* t)
+    reports = vcat(bvd' .* 0.3, bvd' .* 0.7)
+    iso = (; days = collect(30:40), counts = fill(40, 11))
+    rows = (;
+        days = [35, 35, 36, 36], patches = [1, 2, 1, 2],
+        counts = [12, 28, 13, 27],
+    )
+    build(asc) = treatment_flow_model(
+        iso, bvd, fill(6.0, n), 0.5, 0.3;
+        bvd_reports_matrix = reports, background_split = [0.4, 0.6],
+        patch_ascertainment = asc, province_isolation = rows,
+        province_admissions = rows
+    )
+    plain = build(nothing)
+    weighted = build(ones(2))
+    for seed in 1:3
+        vi = DynamicPPL.VarInfo(Xoshiro(seed), weighted)
+        lp = DynamicPPL.getlogjoint(last(DynamicPPL.evaluate!!(weighted, vi)))
+        lp_plain = DynamicPPL.getlogjoint(
+            last(DynamicPPL.evaluate!!(plain, vi))
+        )
+        @test isfinite(lp)
+        @test lp_plain ≈ lp rtol = 1.0e-12
+    end
+end
+
 @testitem "per-patch background stock matches the national running balance" begin
     using BVDOutbreakSize: accumulate_occupancy, abscond_thinned,
         convolve_delay, _background_stay_survival

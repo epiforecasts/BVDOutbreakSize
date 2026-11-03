@@ -1,13 +1,13 @@
 name: Documenter
 
-# The report is fanned out across CI runners instead of built in one ~5h job
-# that hit GitHub's 6h cap. `list` enumerates the fits by group, the `fit_*`
-# jobs run them one per matrix job (content-addressed, so unchanged fits are
-# cache hits), the `render_*` jobs execute each literate page from the cached
-# chains as soon as the fit groups it reads are done, and `combine` assembles
-# and deploys the Vitepress site and publishes the results release. Everything the jobs run lives in Julia
-# entry points (`docs/fits/one.jl`, `docs/execute.jl`, `docs/make.jl`), so the
-# same build runs locally with `task docs`.
+# The report is fanned out across CI runners so no job reaches GitHub's 6h
+# cap. `list` enumerates the fits by group, the `fit_*` jobs run them one per
+# matrix job (content-addressed, so unchanged fits are cache hits), the
+# `render_*` jobs execute each literate page from the cached chains as soon
+# as the fit groups it reads are done, and `combine` assembles and deploys
+# the Vitepress site and publishes the results release. Everything the jobs
+# run lives in Julia entry points (`docs/fits/one.jl`, `docs/execute.jl`,
+# `docs/make.jl`), so the same build runs locally with `task docs`.
 
 on:
   push:
@@ -34,12 +34,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Compile pkgimages for a fixed set of x86-64 targets rather than for the
-# machine that happens to run the job. GitHub's ubuntu-latest fleet is mixed,
-# and Julia rejects a pkgimage built for a microarchitecture the host does
-# not match, so a depot cache built with the default `native` target restores
-# and is then thrown away. That is what makes the render jobs precompile all
-# 531 packages (~16 min each) from a cache they have just restored, while
-# `combine`, landing on a matching machine, reuses it in 5 seconds. Every job
+# machine that runs the job. GitHub's ubuntu-latest fleet is mixed, and Julia
+# rejects a pkgimage built for a microarchitecture the host does not match,
+# so a depot cache built with the default `native` target restores and is
+# then thrown away (~16 min of precompiling per render job). Every job
 # here is ubuntu-latest, so one workflow-level value covers all of them. The
 # string is Julia's own CI multi-target: a generic baseline plus two clones.
 env:
@@ -72,9 +70,8 @@ jobs:
           # `ext/` and `scripts/` are named file by file rather than as
           # directories. The Enzyme extension is never loaded here (Enzyme is
           # not in the docs environment), and of the scripts only these two
-          # run in this workflow, so a change to the SitRep downloader, the
-          # scanners or the backfill driver used to rebuild the whole report
-          # for a site identical to the one on `main`.
+          # run in this workflow. A change to the SitRep downloader, the
+          # scanners or the backfill driver does not rebuild the report.
           patterns: >-
             ^(src/|data/|docs/|README\.md|Project\.toml|ext/BVDOutbreakSizeTensorBoardLoggerExt\.jl|scripts/(refresh_releases|score_releases|archive_dashboard)\.jl|\.github/(workflows/docs\.yml|actions/(changed-paths|bvd-pkgimage)/))
 
@@ -103,12 +100,12 @@ jobs:
           cache-name: docs-env
           # Only a job that finished may write the depot cache; see test.yml.
           save-always: false
-      # Resolve and precompile the ONE environment every job uses (fitting and
+      # Resolve and precompile the one environment every job uses (fitting and
       # rendering). Downstream jobs restore this depot cache and the pinned
-      # manifest below, so precompilation is shared AND the fit and render jobs
-      # use identical package versions — the fits and the render must agree on
-      # the chains library (FlexiChains), or serialized chains fail to
-      # deserialize. The precompile bakes the joint Mooncake rule through the
+      # manifest below, so precompilation is shared and the fit and render jobs
+      # use identical package versions. The fits and the render must agree on
+      # the chains library (FlexiChains), or serialised chains fail to
+      # deserialise. The precompile bakes the joint Mooncake rule through the
       # docs/LocalPreferences.toml workload.
       - name: Resolve and precompile the shared environment
         run: |
@@ -130,20 +127,8 @@ jobs:
         run: julia --project=docs docs/fits/list.jl --groups >> "$GITHUB_OUTPUT"
       # The fit cache key, computed by the same `fit_content_hash` the fits
       # themselves are keyed on, so the Actions cache and the Julia cache
-      # cannot disagree about what invalidates a fit.
-      #
-      # They did. `hashFiles` was given `data/**`, which covers the generated
-      # scoring tables (`forecast_scores.csv`, `rt_by_release*.csv`,
-      # `released_estimates.csv` and the rest) and `data/README.md`, every one
-      # of which `FIT_DATA_EXCLUDE` drops from the Julia key. A rescore commit
-      # or a README edit therefore missed the Actions cache and refit
-      # everything, for inputs no fit reads. It also left out
-      # `docs/fits/cache.jl`, which is in `FIT_SOURCE_FILES` because it
-      # defines what the key covers, so a change to the hashing rule itself
-      # would not have busted the Actions key.
-      #
-      # Deriving the key rather than restating it is what stops the two
-      # drifting again: there is now one list, in `registry.jl`.
+      # cannot disagree about what invalidates a fit. The list of inputs is
+      # in `registry.jl`.
       - id: fit_hash
         run: |
           set -euo pipefail
@@ -165,13 +150,12 @@ jobs:
       # Every artifact this workflow uploads is a handoff inside the run:
       # `fit` feeds `render`, `render` feeds `combine`, and nothing reads any
       # of them afterwards (no step passes a `run-id`). The durable fit cache
-      # is `actions/cache` above, keyed on the model sources and data. Left at
-      # the 90-day default these built up to 6800 artifacts and 36 GB, which
-      # exhausted the storage quota and failed uploads with a 403 on
-      # finalisation. Three days keeps a window for debugging a failed run.
+      # is `actions/cache` above, keyed on the model sources and data. The
+      # 90-day default exhausts the storage quota and fails uploads with a 403
+      # on finalisation. Three days keeps a window for debugging a failed run.
       # The manifest is the exception at ten days: it is tiny, and a re-run
       # of failed jobs reuses this job's upload rather than making a new one,
-      # so at three days a re-run after a long fit found it gone.
+      # so it has to outlast a long fit and its re-run.
       - uses: actions/upload-artifact@v7
         with:
           name: manifest
@@ -296,23 +280,21 @@ jobs:
           JULIA_NUM_THREADS: '4'
           # `progress`, not `none`: the dependency-free stream from
           # `progress_callback`, one `iteration= lp= divergences=` line per
-          # ten iterations into `logs/<name>.log`. It needs no
-          # TensorBoardLogger and costs an appended line per ten steps. The
-          # heartbeat below lifts it into the job log, because the joint fit
-          # runs for hours and otherwise prints nothing at all between its
-          # initial step size and its result.
+          # ten iterations into `logs/<name>.log`. The heartbeat below lifts
+          # it into the job log, because the joint fit runs for hours and
+          # otherwise prints nothing between its initial step size and its
+          # result.
           BVD_FIT_LOG: progress
         run: |
           set -uo pipefail
           julia --project=docs -e 'using Pkg; Pkg.instantiate()'
           mkdir -p logs
           # Report the newest progress line once a minute, and only when it
-          # has moved. A fit that is running prints a rising iteration count;
-          # one that has stalled prints nothing, which is the distinction the
-          # job log cannot otherwise make. The callback names its file after
-          # the fit, which is not always the matrix id (the frozen fits carry
-          # their cut-off date), so take whichever log is newest rather than
-          # guessing the name. One fit runs per job.
+          # has moved. A fit that is running prints a rising iteration count
+          # and one that has stalled prints nothing. The callback names its
+          # file after the fit, which is not always the matrix id (the frozen
+          # fits carry their cut-off date), so take whichever log is newest
+          # rather than guessing the name. One fit runs per job.
           (
             last=""
             start=$SECONDS
@@ -320,7 +302,7 @@ jobs:
               # `|| true` on both: GitHub runs the step under `bash -e`, and
               # before the first progress line lands the glob matches nothing
               # and `ls` exits 2, which would kill this subshell on its first
-              # tick and silently disable the heartbeat for the whole fit.
+              # tick and disable the heartbeat.
               newest=$(ls -t logs/*.log 2>/dev/null | head -n 1) || true
               [ -n "$newest" ] || continue
               line=$(tail -n 1 "$newest" 2>/dev/null) || true
@@ -583,17 +565,13 @@ jobs:
           (julia --project=scripts -e 'using Pkg; Pkg.instantiate()' &&
            julia --project=scripts scripts/refresh_releases.jl) ||
             echo "release refresh failed; using committed released_estimates.csv"
-          # Rescore every release's saved forecasts against the now-observed
+          # Rescore every release's saved forecasts against the observed
           # data and refresh the per-release R_T overlay.
           #
-          # Not best-effort, deliberately. Falling back to the committed
-          # forecast_scores.csv / forecast_overlay.csv would publish skill
-          # scores and forecast-versus-observed figures against whatever
-          # truth series those files were last written from, with nothing on
-          # the rendered page saying so. This step writes them, so they are
-          # stale by construction. A hard failure is recoverable by
-          # re-running the job; a silent substitution is not detectable from
-          # the page at all.
+          # Not best-effort. The committed forecast_scores.csv and
+          # forecast_overlay.csv are stale by construction, and falling back
+          # to them would publish scores against an old truth series with
+          # nothing on the page saying so.
           julia --project=docs scripts/score_releases.jl
       # The dashboard map's tables from past releases, one per data cut-off,
       # for the combine job to stage under zone_map/archive/. Only for the
@@ -634,35 +612,30 @@ jobs:
   # same cached chains the render does, so it costs a load and a few thousand
   # R-hats rather than a refit.
   #
-  # A leaf job on purpose. `combine` does not need it, so a build whose joint
-  # fit has not converged still renders the report, deploys the preview and
-  # comments the preview link: the pages are how anyone diagnoses the failure,
-  # and the fit diagnostics are on them. What this job adds is that the build
-  # goes red and says so in a comment of its own, rather than the failure being
-  # something a reader has to go looking for.
+  # A leaf job. `combine` does not need it, so a build whose joint fit has
+  # not converged still renders the report, deploys the preview and comments
+  # the preview link, since the fit diagnostics are on the pages. This job
+  # turns the build red and says so in a comment of its own.
   convergence:
     name: Check fit convergence
     needs: [fit_joint, fit_zone]
     # Not the default `success()`. The verdict is one comment edited in
     # place, so a build where this job never ran leaves the previous build's
-    # verdict on the thread reading as current: "no new comment" and "still
-    # converged" look the same. The fit matrix is `fail-fast: false`, so one
-    # failed leg would otherwise skip this job silently. Running anyway
-    # reaches the steps below, which find no fit and say the check could not
-    # be made.
+    # verdict on the thread reading as current. The fit matrix is
+    # `fail-fast: false`, so one failed leg would otherwise skip this job.
+    # Running anyway reaches the steps below, which find no fit and say the
+    # check could not be made.
     #
-    # A cancelled run has nothing to report. A `fit_joint` that was skipped means
-    # no fit was attempted, either because this change does not reach the
-    # report and the whole build was gated off, or because `list` failed and
-    # the build is already red for a reason that has nothing to do with
-    # convergence. Neither is a verdict on the fits.
+    # A cancelled run has nothing to report. A skipped `fit_joint` means no
+    # fit was attempted, because the build was gated off or `list` failed.
+    # Neither is a verdict on the fits.
     #
     # Dependabot runs with a read-only token that cannot comment, so it is
-    # skipped outright as `combine` skips it. A dependency bump does not
-    # change a fit cache key, so the gate would only restate `main`'s verdict.
+    # skipped as `combine` skips it. A dependency bump does not change a fit
+    # cache key, so the gate would only restate `main`'s verdict.
     #
-    # The `${{ }}` is required, not decoration: an `if` whose expression
-    # starts with `!` has to be wrapped or quoted.
+    # The `${{ }}` is required: an `if` whose expression starts with `!` has
+    # to be wrapped or quoted.
     if: >-
       ${{ !cancelled() && needs.fit_joint.result != 'skipped' &&
       github.actor != 'dependabot[bot]' }}
@@ -713,10 +686,9 @@ jobs:
       #
       # `BVD_CONVERGENCE_IDS` is set here rather than left to its default so
       # that this job's scope and the artifact fetched above are one edit
-      # apart. The gate takes any list of fit ids, which is what it is for
-      # locally, but a CI run can only judge fits whose chains it has: adding
-      # an id here without adding its artifact above gives a strict cache
-      # miss, not a verdict.
+      # apart. A CI run can only judge fits whose chains it has. Adding an id
+      # here without adding its artifact above gives a strict cache miss, not
+      # a verdict.
       - name: Check convergence
         id: check
         continue-on-error: true
@@ -728,7 +700,7 @@ jobs:
       # One comment per pull request, edited in place on every build, so the
       # thread carries the current verdict rather than one comment per push.
       # A comment that cannot be posted must not decide the verdict, hence
-      # `continue-on-error` — the last step is what fails the build.
+      # `continue-on-error`. The last step is what fails the build.
       - name: Comment the convergence verdict
         if: github.event_name == 'pull_request'
         continue-on-error: true
@@ -811,8 +783,8 @@ jobs:
     name: Render ${{ matrix.id }}
     needs: list
     runs-on: ubuntu-latest
-    # From cached fits and the pinned manifest (no re-resolve or recompile —
-    # `list` did that once), the render is plots/PPCs only.
+    # From cached fits and the pinned manifest (`list` resolved and compiled
+    # once), the render is plots/PPCs only.
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -883,9 +855,9 @@ jobs:
           BVD_DOC_PAGE: ${{ matrix.id }}
           BVD_FIT_CACHE: logs/fit_cache
           # The fit matrix has already produced every fit and they are collected
-          # above, so the render must only ever load from cache. Fail fast and
-          # loud on any miss (naming the key and dir) instead of silently
-          # refitting the whole report into the render-job timeout.
+          # above, so the render only loads from cache. Fail on any miss (naming
+          # the key and dir) instead of refitting the report into the render-job
+          # timeout.
           BVD_FIT_STRICT: true
           BVD_FIT_LOG: none
           BVD_RUN_SENSITIVITY: 'true'

@@ -10,7 +10,7 @@
 
 # A diagnostic entry is usable only when it is a finite number. A fixed or
 # degenerate quantity carries an undefined R-hat or effective sample size,
-# which would otherwise rank ahead of every genuinely badly mixing
+# which would otherwise rank ahead of every badly mixing
 # parameter.
 _diag_value(x) = (x isa Number && isfinite(x)) ? Float64(x) : NaN
 
@@ -55,7 +55,7 @@ and so is any quantity that is not finite in some draw.
 
 Columns are `:parameter`, `:index`, `:rhat`, `:ess_bulk` and `:ess_tail`.
 Rows whose R-hat is undefined are dropped, so a fixed or degenerate quantity
-cannot rank ahead of a parameter that genuinely mixes badly.
+cannot rank ahead of a parameter that mixes badly.
 """
 function parameter_diagnostics(chn; exclude = _DIAGNOSTIC_EXCLUDE)
     rh = FlexiChains.rhat(chn)

@@ -88,7 +88,7 @@ matched_comparison_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # McCabe et al.'s scenarios from the 18 May report, the 20 May update and the 27 May Lancet publication, one panel each, against our cumulative symptom onsets on each report date with their credible interval.
+#md # McCabe et al.'s scenarios from the 18 May report, the 20 May update and the 27 May Lancet publication, one panel each, against our cumulative symptom onsets on each report date with their 90% credible interval.
 #md # Each method and scenario family is one line sweeping the case-fatality ratio, the geographic window and the doubling time.
 #md # Their 95% confidence intervals come from exact negative-binomial counts for geographic spread, which uses exported cases and travel volume, and from a Poisson likelihood profile for back-calculation from deaths.
 #md # </figcaption>
@@ -117,8 +117,8 @@ frozen_streams_table = streams_table(
 # It projects the confirmed-case trajectory under a low, central and high transmissibility scenario.
 #
 # Their published quantity is the cumulative confirmed-case count with the reporting fraction held at one, so it excludes the unconfirmed and unascertained cases that this analysis and McCabe et al. estimate.
-# The like-for-like comparison is therefore against our own confirmed-case projection.
-# We take our fit frozen at 8 June, the date of their calibration anchor, and roll its confirmed cases forward to the dates Chamla report with the one-week-ahead forecast, rather than refitting to their assumptions.
+# The like-for-like comparison is against our own confirmed-case projection.
+# We take our fit frozen at 8 June, the date of their calibration anchor, and roll its confirmed cases forward to the dates Chamla report with the model's forecast, rather than refitting to their assumptions.
 
 #md # ```@raw html
 #md # <details><summary>Project the 8 June fit forward and assemble the Chamla comparison</summary>

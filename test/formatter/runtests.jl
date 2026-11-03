@@ -18,10 +18,8 @@ if isempty(dirs_to_check)
     exit(0)
 end
 
-# `--check` alone prints nothing, so a red run says only that something is
-# wrong. `--verbose` names every file it visits and marks the offenders, and
-# `--diff` prints what would change, which makes a red run actionable from
-# the log alone.
+# `--check` alone prints nothing. `--verbose` names every file it visits and
+# marks the offenders, and `--diff` prints what would change.
 rc = Runic.main(["--check", "--verbose", "--diff", dirs_to_check...])
 
 if rc != 0

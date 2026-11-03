@@ -1,6 +1,6 @@
 ## Smoke tests for the independent DRC / Uganda ascertainment submodel.
 ## Exercises the real `independent_ascertainment_model` from
-## `src/models/priors.jl`, retained as the sensitivity alternative to the
+## `src/models/priors.jl`, the sensitivity alternative to the
 ## composer-default pooled hierarchy.
 
 @testsnippet IndependentFixtures begin
