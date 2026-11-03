@@ -1581,7 +1581,7 @@ h &\\sim \\mathrm{LogNormal}(\\log 42, 0.6),\\; φ = 2^{−w/h} \\\\
     ℓ = −\\bar d / \\log ρ_{\\text{corr}} \\\\
 ρ,\\; ρ_D &\\sim \\mathrm{Beta}(\\text{parent}), &
     κ &= (1 − ρ)/ρ,\\; κ_D = (1 − ρ_D)/ρ_D \\\\
-σ_a &\\sim \\mathrm{LogNormal}(\\text{parent}),\\; σ_θ \\sim N^+(0, 0.1), &
+σ_a &\\sim \\mathrm{LogNormal}(\\text{parent}),\\; σ_θ \\sim N^+(0, 0.15), &
     z^a_p,\\; z^θ_p &\\sim N(0, I_{n_p − 1}) \\\\
 ε_w &\\sim \\mathrm{Beta}(1, 20),\\; τ \\sim N^+(0, 0.5), &
     z^m_z &\\sim N(0, 1) \\\\

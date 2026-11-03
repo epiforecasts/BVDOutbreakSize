@@ -1745,7 +1745,9 @@ cut-off, and the density there, is the fitted model's.
     ## Per-patch quantities, as vector deterministics (one entry per patch).
     if n_patches > 1 && size(treatment_state.capacity_patch, 1) == n_patches
         ## Cut-off beds, demand, occupancy and shortfall by patch
-        ## ([`cutoff_occupancy`](@ref)); the national figures are their sums.
+        ## ([`cutoff_occupancy`](@ref)). The national beds, demand and
+        ## occupancy are their sums. The shortfall is not, since each patch's
+        ## is floored at zero.
         ## Present only when a province split scored them.
         province_bed_capacity := treatment_state.beds_patch_T
         province_bed_demand := treatment_state.demand_patch[:, n]

@@ -3,7 +3,7 @@
 # cached independently, one per CI matrix job or HPC task, and the
 # docs build then loads the chains through the content-addressed cache
 # instead of refitting them inline. `build_fit_specs` mirrors the model
-# calls in `docs/examples/analysis.jl`; keep the two in step.
+# calls in the report pages under `docs/pages/`; keep the two in step.
 #
 # A health-zone fit adds `needs`, the ids it is melded from, and runs in a
 # second stage once those are cached (`base_fit_specs`,
