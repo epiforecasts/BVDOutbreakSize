@@ -2145,7 +2145,7 @@ cfr_prior_fig #hide
 # Each observation stream argument may be dropped, so the same model generates prior- and posterior-predictive draws.
 # With one patch it is the single-population model, with no deviations, importation or composition terms.
 #
-# Single-stream models fit the exported cases with the deaths among exports, the suspected deaths, the suspected cases, the laboratory-confirmed cases, the confirmed deaths, the treatment-centre streams and the symptom-onset reporting triangle.
+# Single-stream models fit the exported cases and the deaths among exports together, the suspected deaths, the suspected cases, the laboratory-confirmed cases, the confirmed deaths, the treatment-centre streams and the symptom-onset reporting triangle.
 # Each stream's posterior over the outbreak size can then be compared with the joint.
 # Other variants reuse these models with the data cut to an earlier date or with counts dropped.
 
@@ -2270,6 +2270,7 @@ cfr_prior_fig #hide
 # #### Inputs from the joint model
 #
 # The zone model samples the joint model's weekly infections in each patch, the parameters of the generation interval and the delays and, when zones mix, the importation intensity of each origin patch at the cut-off.
+# It fixes the mean import log odds and the arrival shares, and each draw recomputes the import fraction from its sampled curves.
 # The sampling step is two-stage Markov melding [goudie2019](@cite) run one way.
 # With $\xi$ the sampled joint quantities, $\psi$ the zone parameters, $Y_1$ the national and province data and $Y_2$ the zone tables, the zone model samples
 #
@@ -2625,7 +2626,7 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # The provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at each origin's fitted intensity.
 # Each week's national forecast of confirmed cases and deaths is split across the provinces by the fitted province compositions.
 # The split carries each province's onsets through the national delays and weights them by its relative ascertainment and, for deaths, its relative case-fatality ratio.
-# The patients in isolation, the beds and the admissions are split as in the national forecast above, so every province forecast adds up to the national one.
+# The patients in isolation, the beds and the admissions are forecast by province as above, so every province forecast adds up to the national one.
 # The symptom-onset curve is national only, so there is no province nowcast.
 # Each release archives the projection with its method recorded, and only forecasts of the current method are scored.
 #
@@ -2731,6 +2732,7 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # The baseline reads only the vintages recorded by the day the forecast was made, from the archived data snapshot the release was built on, so no later correction or backfill reaches it.
 # This holds exactly for a forecast made at a release's own cut-off.
 # The frozen re-fits forecast from fixed historical cut-offs reused across later releases, so their snapshot can post-date the forecast by weeks and already hold a later correction.
+# Closing the gap would need a snapshot archived per frozen cut-off, which does not exist.
 #
 # A baseline is drawn only where the stream's own record covers the window it is centred on.
 # For a count stream that is the horizon-length window ending on the day the forecast was made, and for occupancy it is that day alone.
@@ -2759,6 +2761,7 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # Each posterior draw of the joint fit has its own infections and delays, so the intervals include the uncertainty in both.
 # For the zones we apply the same weights to the daily infections of the [health-zone model](@ref "Health-zone model"), with each zone draw's own incubation, reporting and death delays.
 # The health-zone model does not estimate the treatment-centre stay, so zone draw $j$ takes it from joint draw $j$.
+# It estimates each zone's ascertainment and fatality relative to its province.
 # A zone's case-fatality ratio is its province's from joint draw $j$ shifted on the logit scale by the zone's contrast.
 # A zone's detection probability is its province's from joint draw $j$ shifted on the logit scale by the log of the zone's relative ascertainment.
 # The zone ascertainment contrast is fitted to confirmed cases, so we assume that suspected-case detection varies between the zones of a province with their confirmed-case ascertainment.
