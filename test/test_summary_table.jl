@@ -114,11 +114,9 @@ end
     @test df[1, "Lower 90%"] <= df[1, "Upper 90%"]
 end
 
-## The review flagged that only the zero-spanning case was covered. With a
-## one-signed growth rate the transform is strictly decreasing, so the row is
-## ordered by growth rate and runs from the longest doubling time to the
-## shortest. That ordering is the point of the change, not an accident, so
-## pin it.
+## With a one-signed growth rate the transform is strictly decreasing, so
+## the row is ordered by growth rate and runs from the longest doubling time
+## to the shortest.
 
 @testitem "summary_table orders doubling_time by r when r is one-signed" tags = [
     :slow,

@@ -21,7 +21,7 @@ future deaths
 with `C_T` the cumulative infections and `E[D_T]` the deaths already
 expected by the cut-off, returning a `DataFrame` with one row per draw:
 
-- `:delta_deaths`     additional future expected deaths beyond `obs_deaths`
+- `:delta_deaths`     additional future deaths beyond those expected by the cut-off
 - `:total_projected`  `obs_deaths + delta_deaths`
 
 `obs_deaths` is the number of deaths already observed at the cut-off

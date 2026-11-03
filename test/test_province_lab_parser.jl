@@ -2,13 +2,11 @@
 ## (`scripts/scan_province_lab.jl`).
 ##
 ## The parser reads free prose that INSP rewords between vintages, and a
-## wording it cannot read drops that whole vintage. That failed quietly
-## once: from SitRep 119 the brief format began writing a wholly-negative
-## batch as "reveles" rather than "revenus", and six vintages (119-124)
-## went missing from `province_lab_daily_history` before anyone noticed
-## (issue #695). Every phrasing below is taken verbatim from a report, so a
-## future rewording that breaks one of them fails here rather than
-## silently shortening the series.
+## wording it cannot read drops that whole vintage. From SitRep 119 the
+## brief format writes a wholly-negative batch as "reveles" rather than
+## "revenus". Every phrasing below is taken verbatim from a report, so a
+## rewording that breaks one of them fails here rather than silently
+## shortening the series.
 ##
 ## Filter target for a scoped run (this worktree only, not every sibling
 ## worktree `@run_package_tests` would otherwise discover):
@@ -28,7 +26,7 @@
     ## after `province_entries` strips the province name and colon, folded
     ## to the unaccented lower case the parser works in.
     cases = [
-        ## The two ordinary shapes, which have always parsed.
+        ## The two ordinary shapes.
         (
             "57 nouveaux resultats positifs (40 vivants et 17 deces) sur 203 " *
                 "nouveaux echantillons recus et analyses (positivite : 28,1%).",
@@ -40,8 +38,8 @@
             "nord_kivu", (151, 21),
         ),
 
-        ## Wholly negative. "revenus" was the only spelling the parser
-        ## read; "reveles" is what SitReps 119-124 actually print.
+        ## Wholly negative, spelt "revenus" or, in SitReps 119-124,
+        ## "reveles".
         (
             "3 echantillons recus et testes (3 vivants), tous sont revenus " *
                 "negatifs.",
@@ -76,8 +74,8 @@
         ),
 
         ## A definite singular denominator, printed without a digit
-        ## (SitRep 119, Sud Ubangi). This one used to return (0, 0), which
-        ## broke the national partition without failing loudly.
+        ## (SitRep 119, Sud Ubangi). It reads as (1, 1), not (0, 0), which
+        ## would break the national partition without failing loudly.
         (
             "1 nouveau resultat positif (1 deces) sur l'echantillon analyse " *
                 "(positivite : 100,0%)",
@@ -262,8 +260,8 @@ end
         end
     end
 
-    ## The window closed by issue #695: every date from SitRep 119 onward
-    ## is present, not just the ones whose wording happened to parse.
+    ## Every date from SitRep 119 onward is present, not just the ones whose
+    ## wording parses.
     for date in (
             "2026-09-10", "2026-09-11", "2026-09-12", "2026-09-13",
             "2026-09-14", "2026-09-15",

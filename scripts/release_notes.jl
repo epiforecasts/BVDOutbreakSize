@@ -1,8 +1,8 @@
 # Release notes and the version bump that follows a release, from the one
-# place the changes are already written down. `docs/src/news.md` holds a
-# section per version, newest first, and a release's GitHub notes have been
-# that section copied across by hand. This does the copying, and then opens
-# the next version's section so the following change has somewhere to go.
+# place the changes are written down. `docs/src/news.md` holds a section
+# per version, newest first, and a release's GitHub notes are that section.
+# This copies it across, and then opens the next version's section so the
+# following change has somewhere to go.
 #
 #   julia --project=scripts scripts/release_notes.jl notes
 #   julia --project=scripts scripts/release_notes.jl next patch
@@ -28,8 +28,7 @@ const CITATION_PATH = joinpath(dirname(@__DIR__), "CITATION.cff")
 ##
 ## `\r` is in the trailing class because a Windows checkout has CRLF line
 ## endings and `$` under the `m` flag matches before the `\n`, leaving the
-## `\r` to be matched. Without it no heading matches at all on Windows and
-## every release looks like a file with no version sections.
+## `\r` to be matched. Without it no heading matches on Windows.
 const VERSION_HEADING = r"^##[ \t]+v([0-9]+\.[0-9]+\.[0-9]+)[ \t\r]*$"m
 
 """
@@ -196,8 +195,7 @@ function main(args)
             release_notes(news, version)
             ## CITATION.cff cites the release just cut, not the version the
             ## repository moves on to, so it takes `version` rather than
-            ## `upcoming`. Nothing else was updating it, so it would have
-            ## drifted a version further behind with every release.
+            ## `upcoming`.
             written = (
                 NEWS_PATH => open_section(news, version, upcoming),
                 PROJECT_PATH => bump_project(project, version, upcoming),

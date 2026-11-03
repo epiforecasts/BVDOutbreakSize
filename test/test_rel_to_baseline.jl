@@ -1,4 +1,4 @@
-## Tests for the relative-skill and per-release R0 additions in
+## Tests for the relative-skill and per-release R0 helpers in
 ## scripts/score_releases.jl: rel_to_baseline_columns (per-row log-CRPS
 ## skill to the persistence baseline), r0_row (the established initial
 ## reproduction number, exp(rt_state.log_R0)) and stream_estimate_rows (the

@@ -1,9 +1,9 @@
 ## Correctness and speed gates for the hand-written reverse rules in
 ## `src/mooncake_rules.jl`.
 ##
-## A wrong derivative is worse than a slow one, and a hand-written rule
-## replaces the one place a backend would otherwise derive it for itself,
-## so nothing else in the suite would notice it drifting. `ADRuleCases`
+## A hand-written rule replaces the one place a backend would otherwise
+## derive it for itself, so nothing else in the suite would notice it
+## drifting. `ADRuleCases`
 ## lists every rule with the argument types its call sites pass and the
 ## edge cases its guards take. Mooncake's `test_rule` checks each case
 ## against finite differences with `is_primitive = true`, which also proves
@@ -25,7 +25,8 @@
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
-        zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights
+        zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
+        sum_to_zero_basis, _embedded_sum_to_zero_basis
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -525,6 +526,16 @@
             "no recorded capacity", censoring_cap, days, counts,
             (; days = Int[], counts = Int[])
         )
+        ## The sum-to-zero bases the patch submodels rebuild on every
+        ## draw, from the patch count and the printed patches alone.
+        add!("8 patches", sum_to_zero_basis, 8)
+        add!("1 patch", sum_to_zero_basis, 1)
+        printed = rand(rng, [1, 2, 3, 4, 6], 513)
+        add!(
+            "513 rows over 5 of 8 patches", _embedded_sum_to_zero_basis, 8,
+            printed; perf = true
+        )
+        add!("one printed patch", _embedded_sum_to_zero_basis, 8, [3, 3])
 
         ## The growth rate below, at and above `R = 1`, at the model's
         ## generation-interval truncation.

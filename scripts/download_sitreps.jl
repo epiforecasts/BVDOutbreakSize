@@ -65,13 +65,11 @@ const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " *
     "AppleWebKit/605.1.15"
 const REQUEST_TIMEOUT = 180.0
 # insp.cd runs on modest infrastructure mid-outbreak: give it more time to
-# answer and more space between retries before giving up, rather than
-# treating a slow response as a reason to come back sooner.
+# answer and more space between retries before giving up.
 const ATTEMPTS = 5
 const BACKOFF_SECONDS = 5
 # The walk stops itself: WordPress marks the end of the listing, but an API
-# or cache that keeps answering page 1 would otherwise spin forever, and a
-# nightly hang is worse than an error.
+# or cache that keeps answering page 1 would otherwise spin forever.
 const MAX_PAGES = 50
 # Report numbers INSP never published, which are not gaps in the cache.
 const NEVER_PUBLISHED = Set(["029", "043", "045"])
@@ -129,12 +127,11 @@ end
 
 # Pull the SitRep number out of a filename, tolerating the inconsistent
 # `N°60`, `N_61`, `No59`, `N°055` spellings, and zero-pad it to three digits.
-# From SitRep 084 the "MVEBDB brief format" renamed files to
-# `SitRep_MVEBDB_NNN_...` with no `N`/`No`/`N°` before the digits at all, so
-# the `n[...]` alternative alone silently matched nothing for 084 onward -
-# not even landing in the "rejected" list, since `sitrep_number` returning
-# `nothing` skips the file before the MVE-vs-other-disease check runs. The
-# `mvebdb[...]` alternative below recovers that convention too.
+# From SitRep 084 the "MVEBDB brief format" names files
+# `SitRep_MVEBDB_NNN_...` with no `N`/`No`/`N°` before the digits, which the
+# `mvebdb[...]` alternative below matches. A file no alternative matches is
+# skipped silently: `sitrep_number` returning `nothing` skips it before the
+# MVE-vs-other-disease check, so it never reaches the "rejected" list.
 function sitrep_number(name)
     m = match(r"(?i)sitrep.*?(?:n[°o._\- ]*|mvebdb[_\- ]*)0*(\d{2,3})", name)
     return m === nothing ? nothing : lpad(m.captures[1], 3, '0')
@@ -171,8 +168,8 @@ function api_page(url)
     return (; status = last_status, body = "", err = last_err)
 end
 
-# What went wrong, in the words of whatever went wrong, rather than a list
-# of guesses for the next person to work through.
+# The failure as reported: the HTTP status, else the exception, else
+# "no response".
 function page_failure(res)
     res.status != 0 && return "HTTP $(res.status)"
     res.err === nothing && return "no response"
@@ -245,13 +242,11 @@ function fetch_pdf(url, dest)
     return (; ok = false, err = last_err)
 end
 
-# Published (number, post id, slug) triples straight from the posts API -
-# the same endpoint and query check_new_sitreps.jl uses, so a report that
-# is visible there is findable here even when the media-listing API isn't
-# cooperating. The posts come newest first, 100 to a page, so the walk
-# stops as soon as every number in `want` has been seen; with no `want` it
-# reads to the end of the listing, which WordPress marks as the media walk
-# does.
+# Published (number, post id, slug) triples from the posts API, with the
+# same endpoint and query check_new_sitreps.jl uses. The posts come newest
+# first, 100 to a page, so the walk stops as soon as every number in `want`
+# has been seen; with no `want` it reads to the end of the listing, which
+# WordPress marks as the media walk does.
 function published_posts(; want = nothing)
     out = Tuple{String, Int, String}[]
     for page in 1:MAX_PAGES

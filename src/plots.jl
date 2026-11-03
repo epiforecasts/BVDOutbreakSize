@@ -143,7 +143,7 @@ function plot_cumulative_trajectories(
                 for v in vals
         ]
 
-        ## Deliberately unbounded. These counts sit in the thousands, far
+        ## The axis is unbounded. These counts sit in the thousands, far
         ## from zero, so anchoring the axis there would squash the posterior
         ## into a spike against the right-hand edge.
         finals = Float64[t[n] for t in trajs]
@@ -164,10 +164,6 @@ end
 ## Open triangles marking where a series ran past a cropped axis, one per
 ## x-position given. Drawn a little inside the crop, since a marker placed
 ## exactly on the limit is cut in half by the plot area's clipping.
-##
-## Every cropped axis in this file marks its overflow through here, so the
-## three figures that crop cannot drift apart in marker shape, size or
-## placement.
 function _mark_overflow!(ax, xs::AbstractVector, cap::Real, colour)
     isempty(xs) && return nothing
     return scatter!(
@@ -239,7 +235,7 @@ function plot_stream_trajectories(
         push!(labels, s.label)
         ## Where a cropped axis is asked for, mark the day this stream's 90%
         ## upper first leaves it, so a stream running off the top reads as
-        ## running off rather than as one that simply stops.
+        ## running off rather than as one that stops.
         if !isnothing(cap)
             over = findfirst(v -> v > cap, hi90)
             isnothing(over) || _mark_overflow!(ax, [x[over]], cap, colour)
@@ -702,7 +698,7 @@ end
 Posterior correlation heatmap over the named scalar quantities `params`,
 tracked deterministics or sampled parameters. Each cell is the Pearson
 correlation of two quantities' posterior draws, drawn on a symmetric
-red–blue scale with the value printed in the cell. The whole joint
+red–blue scale with the value printed in the cell. The joint
 identifiability structure sits in one panel, including the cross-block
 degeneracies the [`plot_pair`](@ref) corners split apart: the
 size–ascertainment seesaw (`C_T` vs `p_drc`), the weaker size–fatality tilt
@@ -730,8 +726,8 @@ function plot_correlation_heatmap(
         draws::NamedTuple;
         labels::AbstractDict = Dict{Symbol, String}()
     )
-    ## Render tick labels as LaTeX so subscripts (R_T, p_drc, λ_bg) typeset
-    ## properly. Callers pass plain LaTeX math strings.
+    ## Render tick labels as LaTeX so subscripts (R_T, p_drc, λ_bg) typeset.
+    ## Callers pass plain LaTeX math strings.
     name(p) = CairoMakie.Makie.latexstring(get(labels, p, string(p)))
     params = collect(keys(draws))
     mat = reduce(hcat, (float.(v) for v in values(draws)))
@@ -809,7 +805,7 @@ const _EVOLUTION_MARKS = "median, 30/60/90% bars"
 ## series that runs past it is marked with an open triangle, so a wide fit
 ## reads as running off the axis rather than being dropped. `labels.marks`
 ## is the release marks' bracketed legend note, dropped when empty. Returns
-## the legend handles and labels for the series actually drawn.
+## the legend handles and labels for the series drawn.
 function _evolution_panel!(
         ax, _x, released, renewal, trajectory,
         refline, labels::NamedTuple;
@@ -1069,7 +1065,7 @@ released points with no band.
 
 `shared_yrange` (default `true`) draws every panel on one y range, sized to
 the largest of them, so groups on a comparable scale read against each other.
-Set it to `false` when the groups span very different scales, so a wide-scale
+Set it to `false` when the groups span different scales, so a wide-scale
 group does not squash every other panel's band. Each panel then uses its own
 range, floored at `1.0`.
 
@@ -1253,7 +1249,7 @@ A stream that carries only some roles is drawn with those alone, and the
 legend covers every role drawn in any panel.
 
 Each panel is cropped to zero and about three times the larger of its own
-observed values and forecast medians, so one very wide predictive interval
+observed values and forecast medians, so one wide predictive interval
 elsewhere cannot squash every other panel to a line near the bottom. An
 interval or median past that crop is clamped and marked with an open triangle
 at the top of the axis. Every made date gets its own x tick, thinning to
@@ -1647,8 +1643,7 @@ end
 ## Shared body of the two by-slot skill figures. `keys_of` takes a table to
 ## the per-row key each point sits at, `order_of` to a key => sort-tuple
 ## mapping (the tuple's first entry is the tick label's source) and
-## `label_of` to a tick label. Keeping one body means the release and
-## cut-off figures cannot drift apart in their axis, colours or legend.
+## `label_of` to a tick label.
 function _plot_skill_by_slot(
         scores::DataFrame;
         keys_of, order_of, label_of, xlabel::AbstractString,
@@ -1735,7 +1730,7 @@ function _plot_skill_by_slot(
 end
 
 ## Colour per CRPS component, shared by the by-horizon decomposition figure
-## and its legend so the two cannot disagree.
+## and its legend.
 const _CRPS_PARTS = (
     (:dispersion, "dispersion", :slategray3),
     (:overprediction, "overprediction", :goldenrod),
@@ -2245,8 +2240,7 @@ One-row, two-panel figure summarising when the outbreak began. The left
 panel is the posterior density of the outbreak start date, the calendar date
 of the import that started the outbreak, from the outbreak age `T` as
 `as_of_date` minus `T`. The right panel is the joint `(doubling_time, T)`
-posterior pair plot. Shorter doubling times mean faster early growth, which
-reaches the same epidemic size in less time.
+posterior pair plot, with `doubling_time` the doubling time at the cut-off.
 """
 function plot_start_date_pair(
         chn;
@@ -2592,8 +2586,8 @@ That window runs from `rt_start`, the renewal start where the random walk
 begins, to the cut-off. Only that period is drawn, as 30%, 60% and 90%
 credible ribbons with no median line, with about `n_traj` thinned sampled
 trajectories overlaid faint to show the per-draw spread. The intervention
-breakpoint, the end of the scale-up (`breakpoint + ramp`, dotted) and the
-cut-off are marked. `seeding` is the calendar date of grid day 1, so day `d`
+breakpoint, one ramp time scale after it (`breakpoint + ramp`, dotted) and
+the cut-off are marked. `seeding` is the calendar date of grid day 1, so day `d`
 is `seeding + (d - 1)`.
 """
 function plot_rt(
@@ -2693,7 +2687,7 @@ function _rt_bands(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp, ds)
 end
 
 ## The band quantiles for an already-reconstructed `ndraws × n` Rt matrix.
-## Split out from `_rt_bands` so the per-province trajectories, built from the
+## `_rt_bands` calls it too, so the per-province trajectories, built from the
 ## national walk plus a deviation, summarise through the same code.
 function _rt_bands_matrix(rt::AbstractMatrix; n, ds)
     q(pr) = [_rt_quantile(rt, d, pr) for d in 1:n]
@@ -2749,8 +2743,8 @@ that fit used. The per-stream fits walk from day 1, the joint from the
 breakpoint lead. `display_start` is the shared grid day the panels draw from,
 so every stream reads over the same window. `seeding` is the calendar date of
 grid day 1, so day `d` is `seeding + (d - 1)`. The intervention breakpoint,
-the end of the scale-up (`breakpoint + ramp`, dotted) and the cut-off are
-marked as in [`plot_rt`](@ref).
+one ramp time scale after it (`breakpoint + ramp`, dotted) and the cut-off
+are marked as in [`plot_rt`](@ref).
 
 `title`, `reference_label` and `panel_label` name what the figure is showing.
 They default to the per-stream reading, and the province in-sample page passes its
@@ -2855,7 +2849,7 @@ end
 """
 Reconstruct each posterior draw's daily reproduction number for every
 province, returning a vector of `ndraws × n` matrices, one per patch, each
-masked to the draw's established window exactly as [`reconstruct_rt`](@ref)
+masked to the draw's established window as [`reconstruct_rt`](@ref)
 masks the national trajectory.
 
 The chain stores the provincial `Rt` only at the cut-off (`R_T_patch`), so
@@ -2940,13 +2934,12 @@ is rebuilt by [`reconstruct_patch_rt`](@ref). The national reference is
 
 Every panel draws 30/60/90% credible ribbons with no median line, on a shared
 y-axis so the provinces are compared rather than each rescaled to its own
-range. The intervention breakpoint (dashed), the end of the scale-up (dotted)
-and the cut-off are marked as in [`plot_rt`](@ref).
+range. The intervention breakpoint (dashed), one ramp time scale after it
+(dotted) and the cut-off are marked as in [`plot_rt`](@ref).
 
-The grey reference is the reproduction number implied by the summed
-provinces, the incidence-weighted mean of the panels rather than any one
-province or the central trend they pool toward. A panel tracking the grey
-band says that province moves with the country. Separation between panels is
+The grey reference is the central trend the provinces pool toward, net of
+depletion, rather than any one province. A panel tracking the grey band says
+that province moves with the trend. Separation between panels is
 the spatial signal, and `region_drift_sd`, the sd of each province's
 weekly deviation innovation, measures it.
 """
@@ -3683,7 +3676,7 @@ end
 Two-panel density of the no-onward-transmission counterfactual from
 [`predict_no_onward_deaths`](@ref). The left panel shows the *still expected*
 deaths (`:delta_deaths`, the future deaths in cases already infected by `T`,
-net of the `obs_deaths` already observed). The right panel shows the
+net of the deaths the model expects by `T`). The right panel shows the
 *projected total* (`:total_projected = obs_deaths + delta_deaths`), whose
 axis starts at `obs_deaths`. Both are lower bounds, assuming every onward
 transmission stops at time `T`.
@@ -3695,7 +3688,7 @@ function plot_no_onward_deaths(df::DataFrame; obs_deaths::Real)
     ## projected total cannot fall below the deaths already observed.
     ax1 = Axis(
         fig[1, 1];
-        xlabel = "Still expected deaths (beyond those already observed)",
+        xlabel = "Still expected deaths (beyond those expected by the cut-off)",
         ylabel = "Posterior density",
         title = "Still expected (future)"
     )
@@ -4212,9 +4205,9 @@ densities, since the occupancy carries the fitted reporting-basis offset and
 the shortfall does not. Drawn only when the forecast carries the bed streams
 (`bed_demand` and `isolation_level`).
 
-This shortfall is national, so it cannot show local saturation. On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was
-at 21.9%, and beds free in one province cannot serve patients in another, so
-the national shortfall understates the local unmet need.
+This shortfall is national, so it cannot show local saturation. Beds free in
+one province cannot serve patients in another, so the national shortfall
+understates the local unmet need.
 """
 function plot_forecast_beds(fc::DataFrame)
     (
@@ -4259,7 +4252,7 @@ end
 
 """
 Validate a [`forecast_reported`](@ref) bed projection against the beds
-actually occupied a week later. Histograms the projected reported
+occupied a week later. Histograms the projected reported
 isolation-bed occupancy with the 90% predictive interval shaded and the
 `isolation` count observed at the target date drawn as a dashed black rule,
 so last week's bed forecast is scored against what the beds held. Drawn only
@@ -4271,10 +4264,6 @@ from [`forecast_stream`](@ref), overlaid as a dotted step outline on
 the joint's own bins so both bed
 forecasts are visible against the observed occupancy.
 
-At a one-week-back freeze the bed capacity has no implied-capacity anchor,
-the reported occupancy rate starting only on 9 June, so the projected
-occupancy rides the capacity random walk back to the freeze date and the
-interval is wide.
 """
 function plot_forecast_beds_vs_truth(
         fc::DataFrame;
@@ -4333,7 +4322,7 @@ two-row grid with one column per scored stream: the top row shows the
 cumulative forecast distribution, the bottom row the new count forecast over
 the horizon. Each panel is a histogram with the 90% predictive interval shaded
 and the later-observed count drawn as a dashed black rule, so the forecast
-distribution is scored against the count that was actually observed.
+distribution is scored against the count that was observed.
 
 Streams are drawn in the order reported cases, suspected deaths,
 laboratory-confirmed cases, confirmed deaths and recovered, each shown only
@@ -4570,7 +4559,7 @@ events.
 vintages on or before that date, so streams that keep reporting past the
 others are cut back to the shared last date. Without it the confirmed panel
 runs further along the date axis than the suspected panel and reads as though
-it overtakes it, when the two are simply shown to different end dates.
+it overtakes it, when the two are shown to different end dates.
 
 The date axis carries about one label a week and always labels the last
 vintage.

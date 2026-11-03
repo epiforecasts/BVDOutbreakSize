@@ -1,7 +1,7 @@
 # The health-zone model's inner kernels, each timed on its own.
 #
 # The whole-model gradient sits under "AD gradients"/"Zone"; these are the
-# pieces it spends that time in. They run on the inputs of the `bvd_zone`
+# kernels it spends that time in. They run on the inputs of the `bvd_zone`
 # scenario in `test/ad_fixtures.jl`, at one prior draw, so a kernel's time
 # here is its share of that scenario's gradient. The patch quantities are
 # the cut, the province model's posterior mean, rather than one draw of the
