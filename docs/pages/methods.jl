@@ -216,7 +216,7 @@ MarkdownTable(vintage_table) #hide
 # The share follows a gravity kernel on population and distance, scaled by a partially pooled intensity for each origin patch that changes at detection.
 # The outbreak starts from one unobserved seed growing exponentially in Ituri.
 # The other patches start empty and grow their arrivals at their own reproduction number.
-# The provincial confirmed cases, confirmed deaths, analysed specimens, isolation counts, beds and admissions enter only as splits of national or printed totals, so they inform the split across patches and not the national size.
+# The provincial confirmed cases, confirmed deaths, analysed specimens, isolation counts, beds and admissions enter only as splits of national or printed totals, so they inform only the split across patches.
 
 #md # ```@raw html
 #md # <figure class="bvd-diagram">
@@ -233,7 +233,7 @@ MarkdownTable(vintage_table) #hide
 # Within each patch every zone runs its own renewal equation, with a transmission deviation that sums to zero over the patch.
 # The zones share the infections their patch generated locally in proportion to their force of infection after movement between zones.
 # Arrivals from other patches land in proportion to the force of infection in the sending zones, weighted by a gravity pull.
-# The zone confirmed cases and deaths enter as compositions of the patch counts, so they inform the split within each patch and not its size.
+# The zone confirmed cases and deaths enter as compositions of the patch counts, so they inform only the split within each patch.
 
 #md # ```@raw html
 #md # <figure class="bvd-diagram">
@@ -291,7 +291,7 @@ MarkdownTable(vintage_table) #hide
 # #### Reproduction number
 #
 # The reproduction number is the average number of further infections caused by each infection, and a value above one means infections are growing.
-# Each patch's daily reproduction number is a shared trend $R^{\text{trend}}_t$ plus a patch deviation $\delta_{p,t}$ on the log scale, with the deviations summing to zero across patches on every day:
+# Each patch's daily reproduction number combines a shared trend $R^{\text{trend}}_t$ and a patch deviation $\delta_{p,t}$:
 #
 # ```math
 # \log R_{p,t} = \log R^{\text{trend}}_t + \delta_{p,t}, \qquad
@@ -308,8 +308,7 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # The prior on $\sigma_{\text{rw}}$ makes a weekly change in the trend of more than about 20% unlikely, since two standard deviations of the log step is about $0.20$.
-# $R_0$ has no prior of its own.
-# It follows from the initial growth rate $r$ of the [seeding and growth](@ref "Seeding and growth") subsection through the Euler–Lotka relation under the generation interval $g$:
+# $R_0$ follows from the initial growth rate $r$ of the [seeding and growth](@ref "Seeding and growth") subsection through the Euler–Lotka relation under the generation interval $g$:
 #
 # ```math
 # R_0 = \left( \sum_{s \ge 1} g_s\, e^{-r s} \right)^{-1}. \tag{3}
@@ -410,6 +409,7 @@ MarkdownTable(vintage_table) #hide
 #
 # both truncated below at one day.
 # That puts 95% of the prior mean between 13.4 and 17.2 d and of the prior SD between 7.3 and 11.3 d.
+# The Gamma shape is $(\mu_g/\sigma_g)^2$ and its scale $\sigma_g^2/\mu_g$.
 # The Gamma is discretised like every delay ([incubation period](@ref "Incubation period")) to a daily probability mass function (PMF) $g_s$.
 # The lag-0 bin is dropped and the rest renormalised, so an infectee is infected at least a day after its infector.
 
@@ -440,7 +440,7 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # The traced 25 January death sits near the 87th percentile of this prior.
-# It is the earliest chain the field work reached, so it bounds the origin rather than dating it.
+# It is the earliest chain the field work reached, so the origin lies at or before it.
 #
 # ```math
 # T_{\text{cryptic}} = m\,G, \qquad
@@ -456,7 +456,7 @@ MarkdownTable(vintage_table) #hide
 # r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.30\right). \tag{11}
 # ```
 #
-# The outbreak is assumed to have begun in Ituri, so the primary patch carries the whole cryptic seed and the others start empty:
+# The outbreak is assumed to have begun in Ituri, the first patch:
 #
 # ```math
 # I_{1,j} = C_T\, e^{r (j - L)}, \qquad
@@ -486,7 +486,7 @@ MarkdownTable(vintage_table) #hide
 # The BEAST X analysis of 139 BDBV genomes from 16 health zones [mbalaplacide2026](@cite) places the TMRCA, the age of the oldest internal node of the tree, at a mean of 15 March 2026 (95% HPD 9 February to 12 April).
 # It uses a strict molecular clock at an outbreak-specific rate of about $1.1\times10^{-3}$ substitutions/site/year.
 # The TMRCA is a lower bound on the outbreak age, since adding sequences can only push it earlier.
-# Using the genetic TMRCA as a one-sided seeding bound rather than a point estimate follows a suggestion of [ferguson2026](@citet).
+# Using the genetic TMRCA as a one-sided seeding bound follows a suggestion of [ferguson2026](@citet).
 #
 # We treat the TMRCA day as a right-censored, noisy reading of the total outbreak age $T$ (the cryptic duration plus the observed window, defined in the infection process below):
 #
@@ -545,8 +545,7 @@ MarkdownTable(vintage_table) #hide
 # The origin deviation $\mathbf{z}^{\varepsilon}$ is drawn independently of the reproduction number deviations and is constant in time.
 # Exports scale with $R_{q,t}$ through the origin's generated infections $G_{q,t}$ in Equation (18), and $\beta_\varepsilon$ changes the share of them exported.
 #
-# Gravity is the prior mean of the flows between provinces, and the data can move each flow away from it by a deviation $W$.
-# The log flows $\ell_{p,q} = \log K_{p,q} + W_{p,q}$, for $p \ne q$, take a multivariate normal prior centred on the log gravity kernel:
+# The log flows $\ell_{p,q} = \log K_{p,q} + W_{p,q}$, for $p \ne q$, depart from gravity by a deviation $W$ and take a multivariate normal prior centred on the log gravity kernel:
 #
 # ```math
 # \operatorname{vec}(\ell) \sim \mathrm{MvNormal}\bigl(\operatorname{vec}(\log K),\ \Sigma\bigr),
@@ -623,7 +622,7 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # The cryptic seeds fill the grid days before the renewal start, giving the recursion a full generation interval of history.
-# Each patch then runs its own renewal forward at its own reproduction number, importation relocates a share of each day's new infections, and the result depletes the patch's susceptible pool:
+# Each patch then runs its own renewal with importation and depletion of its susceptible pool:
 #
 # ```math
 # \begin{aligned}
@@ -638,7 +637,7 @@ MarkdownTable(vintage_table) #hide
 # This is the population adjustment of [bhatt2023](@citet), as used in EpiNow2 [epinow2](@cite), with $N_p$ the patch's resident population and $S_{p,t}$ starting at $N_p$ less the seeds.
 # $R_{p,t}$ is the reproduction number in a fully susceptible population, and every reproduction number we report is net of depletion, $R_{p,t}\, S_{p,t-1}/N_p$.
 #
-# National infections are the patch sum, and the national reproduction number is read off that sum by inverting the renewal equation:
+# The national reproduction number inverts the renewal equation on the summed infections:
 #
 # ```math
 # I_t = \sum_p I_{p,t}, \qquad
@@ -649,7 +648,7 @@ MarkdownTable(vintage_table) #hide
 # It sits above the trend $R^{\text{trend}}_t$ because the deviations are centred unweighted while the national sum weights each patch by its share of the force, and the faster patch keeps gaining share.
 #
 # The headline outbreak size is the cumulative national infections at the cut-off.
-# The total outbreak age is the cryptic duration plus the observed window:
+# The total outbreak age is
 #
 # ```math
 # T = m\,G + \tau_{\text{obs}}. \tag{20}
@@ -708,8 +707,7 @@ MarkdownTable(vintage_table) #hide
 # The incubation period and the laboratory receipt delay are not in the line list, so they take mean-and-SD priors moment-matched to a LogNormal.
 # The maximum lag $n_{\max}$ of each delay is the 98th percentile of its prior-centre distribution, or the 99th for the treatment-centre and recovery delays, clamped to 5 to 120 days and computed once outside the model.
 #
-# The primary event (the onset, say) and the secondary event (the report) are both observed only to the day.
-# The primary event is taken uniform over its day and the secondary event is interval-censored to its day, giving the daily PMF
+# The primary event (the onset, say) is taken uniform over its day and the secondary event (the report) is interval-censored to its day, giving the daily PMF
 #
 # ```math
 # f_s = \int_0^1 \big[\, F(s + 1 - u) - F(s - u) \,\big]\, \mathrm{d}u,
@@ -718,7 +716,7 @@ MarkdownTable(vintage_table) #hide
 #
 # which is then renormalised over lags $0,\dots,n_{\max}$.
 #
-# The incubation period also enters the infection-to-detection and infection-to-death delays for the export streams, where the survival clock runs from infection rather than onset.
+# The incubation period also enters the infection-to-detection and infection-to-death delays for the export streams, where the survival clock runs from infection.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: onset_incidence_model</summary>
@@ -761,14 +759,11 @@ MarkdownTable(vintage_table) #hide
 # \theta_{\text{rep}} \sim \mathrm{LogNormal}(\log 3.69,\ 0.32). \tag{23}
 # ```
 #
-# We do not use the reanalysis onset-to-notification delay (mean about 20 d), which we assume includes laboratory confirmation and administrative processing rather than the surveillance report we model.
 # This delay drives the suspected-case, laboratory, treatment-centre and confirmed-death streams.
 #
 # #### Onset-to-death delay
 #
-# McCabe et al. take a point estimate of the onset-to-death delay from the same line list, fitted as a $t$ distribution [rosello2015](@cite).
-# Following the reanalysis, we instead convolve two Gamma components, onset to admission and admission to death.
-# Each is sampled on its natural shape and scale, with priors centred on the reanalysis posteriors:
+# Following the line-list reanalysis [bdbv_linelist_analysis_2026](@cite), the onset-to-death delay convolves two Gamma components, onset to admission and admission to death, each sampled on its natural shape and scale with priors centred on the reanalysis posteriors:
 #
 # ```math
 # \alpha_{\text{oa}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \quad
