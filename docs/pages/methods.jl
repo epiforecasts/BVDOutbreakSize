@@ -151,7 +151,6 @@ vintage_table = let
         suspected_new_daily = bydate(obs.suspected_daily_history),
         patients_isolated = bydate(obs.isolation_history),
         suspected_deaths = bydate(obs.deaths_history),
-        suspected_new_daily_deaths = bydate(obs.suspected_daily_deaths_history),
         confirmed_cases = bydate(obs.confirmed_history),
         confirmed_deaths = bydate(obs.confirmed_deaths_history),
         recovered_confirmed = bydate(obs.recovered_history),

@@ -1294,36 +1294,6 @@ for f in stream_fits, (stream, label) in f.streams,
     end
 end
 
-## Confirmed/suspect ward-bed occupancy for the joint, read from the joint's
-## own `forecast_reported` runs so the ward beds are scored on the same
-## footing as the total occupancy in the preferred `stream_forecasts.csv`
-## asset. `forecast_stream` cannot project these. The split is not a growable
-## stream but a partition of the total.
-##
-## Dead as it stands. `forecast_reported` projects the total occupancy alone
-## and emits neither column, so the guard below always skips and nothing
-## reaches `stream_forecasts.csv` under these two labels. The joint does
-## carry the cut-off split (`expected_confirmed_incare_T`), so what is
-## missing is the partition of the projected level, not the quantity to
-## partition it by. Kept, with the guard, so the loop starts writing the
-## moment `forecast_reported` grows those columns.
-for (h, fc) in forecast_runs,
-        (col, label) in (
-            (:suspect_occupancy, "isolation beds (suspected)"),
-            (:confirmed_occupancy, "treatment beds"),
-        )
-
-    col in propertynames(fc) || continue
-    _wvals = fc[!, col]
-    for (d, i) in enumerate(1:stream_thin:length(_wvals))
-        push!(
-            stream_forecasts, (
-                obs.cutoff, h, obs.cutoff + Day(h), label,
-                d, Float64(_wvals[i]), "joint",
-            )
-        )
-    end
-end
 CSV.write(joinpath(output_dir, "stream_forecasts.csv"), stream_forecasts);
 
 ## Latent symptom-onset trajectory over time, the "symptomatic cases" curve,
