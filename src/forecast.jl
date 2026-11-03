@@ -765,15 +765,3 @@ function _has_key(chn, key)
         return false
     end
 end
-
-## Draws of the first key in `candidates` the chain carries, or `nothing`
-## when it carries none. Single-stream fits bind each stream's submodel under
-## a composer-level name (`cases_state.expected_reports`), and the joint
-## carries those nested names alongside its own un-prefixed aliases
-## (`expected_reports_T`), so one ordered list serves both fit kinds.
-function _resolve_draws(chn, candidates)
-    for key in candidates
-        _has_key(chn, key) && return _draws(chn, key)
-    end
-    return nothing
-end

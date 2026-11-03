@@ -21,44 +21,6 @@
         return "No documentation found."
     end
 
-    # Helper to extract function signature and arguments
-    function extract_function_info(func_name, mod = BVDOutbreakSize)
-        methods_list = methods(getfield(mod, func_name))
-        all_args = Set{Symbol}()
-        has_kwargs = false
-
-        for method in methods_list
-            try
-                # Get argument names from method signature
-                arg_names = Base.method_argnames(method)
-                if length(arg_names) > 1
-                    # Skip first argument (function name) and filter out internal arguments
-                    relevant_args = arg_names[2:end]
-                    for arg in relevant_args
-                        arg_str = string(arg)
-                        if arg ≠ Symbol("#unused#") &&
-                                !startswith(arg_str, "#") &&
-                                !startswith(arg_str, "var\"") &&
-                                arg ≠ Symbol("") &&
-                                !occursin("##", arg_str)
-                            all_args = union(all_args, [arg])
-                        end
-                    end
-                end
-
-                # Check if method has keyword arguments
-                if method.nkw > 0
-                    has_kwargs = true
-                end
-            catch e
-                # Skip methods that can't be introspected
-                continue
-            end
-        end
-
-        return collect(all_args), has_kwargs
-    end
-
     # Helper to check if an object is a type (not a function)
     function is_type_export(name, mod)
         try
@@ -198,24 +160,6 @@ end
 
                                             if !isempty(method_args)
                                                 function_has_args = true
-
-                                                # Check that documented arguments are reasonable for this function
-                                                args_section_match = match(
-                                                    r"# Arguments(.*?)(?=# [A-Z]|@|\z)"s, doc_str
-                                                )
-                                                if args_section_match !== nothing
-                                                    args_section = args_section_match.captures[1]
-                                                    # At least some of this method's args should be documented
-                                                    # (allowing for multiple methods to have different args)
-                                                    method_args_found = 0
-                                                    for arg in method_args
-                                                        arg_pattern = "- `$(arg)"
-                                                        if occursin(arg_pattern, args_section)
-                                                            method_args_found += 1
-                                                        end
-                                                    end
-                                                    # Allow flexibility: if this method contributes some documented args, that's good
-                                                end
                                             end
                                         end
 
