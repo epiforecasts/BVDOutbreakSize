@@ -94,10 +94,9 @@ end
     ## Screening to the batch median keeps the upper half of the prior, so
     ## raising `attempts` sharpens the floor estimate without walking the
     ## starts towards the mode. An argmax rule would instead make the
-    ## spread shrink steadily as `attempts` grows, which is the behaviour
-    ## this guard deliberately avoids: R-hat needs that dispersion.
-    ## An argmax rule collapses this ratio sharply, so the 0.5 floor
-    ## discriminates between the two rules rather than merely passing.
+    ## spread shrink steadily as `attempts` grows, which this guard avoids:
+    ## R-hat needs that dispersion. An argmax rule collapses this ratio
+    ## sharply, so the 0.5 floor discriminates between the two rules.
     d4, d16 = draws(4), draws(16)
     @test std(d16) > 0.5 * std(d4)
 
@@ -158,14 +157,10 @@ end
     using Turing.DynamicPPL: InitFromPrior, LogDensityFunction
     using BVDOutbreakSize: viable_prior_init
 
-    ## `ldf` normally comes from the same model as the draw it wraps, but
-    ## nothing at the call site enforces that, and a model whose dimension
-    ## varies between prior draws could hand `InitFromVector` a vector of
-    ## the wrong length for the `ldf` `nuts_sample` built earlier. A
-    ## deliberately mismatched `ldf` (3 parameters against a 1-parameter
-    ## draw) reproduces that deterministically: the guard must degrade to
-    ## `InitFromPrior()` rather than throwing, matching its documented
-    ## contract for a model it cannot evaluate.
+    ## A model whose dimension varies between prior draws can hand
+    ## `InitFromVector` a vector of the wrong length for the `ldf`. A
+    ## mismatched `ldf` (3 parameters against a 1-parameter draw) reproduces
+    ## that: the guard must fall back to `InitFromPrior()` rather than throw.
     @model function _one()
         x ~ Normal(0.0, 1.0)
     end

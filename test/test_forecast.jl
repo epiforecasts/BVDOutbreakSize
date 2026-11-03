@@ -251,8 +251,7 @@ end
     ## A forecast frame carrying the confirmed/suspect ward split (as
     ## `forecast_reported` emits once the chain carries the confirmed in-care
     ## sub-stock) archives the two ward occupancy levels alongside the total,
-    ## each under its own scored label. A frame without the split carries the
-    ## total alone, so the hook is dormant until the columns appear.
+    ## each under its own scored label.
     n = 40
     occ = collect(1:n)
     conf_occ = fld.(occ, 2)

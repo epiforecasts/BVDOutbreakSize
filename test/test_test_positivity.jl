@@ -1,5 +1,5 @@
 ## Tests for the test-positivity submodel from `src/models/priors.jl`.
-## The `λ_bg` prior was retuned to a half-normal `Normal+(0, 1)` so the
+## The `λ_bg` prior is a half-normal `Normal+(0, 1)` so the
 ## background non-BVD suspected-case process cannot absorb more cases
 ## than were observed: it is degenerate with outbreak size, so a diffuse
 ## prior resolves at the high end where deaths and exports pin `C_T`.
@@ -10,7 +10,7 @@
     using Statistics: mean, std
     using BVDOutbreakSize: test_positivity_model
 
-    ## The retuned default is `truncated(Normal(0, 1); lower = 0)`.
+    ## The default is `truncated(Normal(0, 1); lower = 0)`.
     ## Fold a half-normal back to its untruncated SD via the known
     ## moments: E|X| = σ√(2/π), so σ = mean·√(π/2), and check the SD.
     chn = sample(
@@ -45,11 +45,11 @@ end
     λ_bg = vec(Array(chn[:λ_bg]))
     background = λ_bg .* T
 
-    ## Median background a modest minority; 95% bound clearly below the
+    ## Median background a modest minority; 95% bound below the
     ## observed suspected total.
     @test median(background) < 0.2 * observed_total
     @test quantile(background, 0.95) < 0.5 * observed_total
-    ## Still admits a genuine non-BVD signal (not forced to zero).
+    ## Still admits a non-BVD signal (not forced to zero).
     @test median(λ_bg) > 0.3
 end
 
