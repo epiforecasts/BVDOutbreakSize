@@ -2038,7 +2038,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         importation_epsilon := ε_bar
         importation_epsilon_sd := σ_ε
         importation_epsilon_effect := β_ε
-        importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
+        importation_epsilon_patch := ε_matrix[:, n]
         ## The log flows `log K + W` have a multivariate normal prior whose
         ## mean is the log gravity kernel, so gravity is the prior and `W` is
         ## the data's departure from it. `W = L ζ` is non-centred on the
