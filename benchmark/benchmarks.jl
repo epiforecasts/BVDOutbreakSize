@@ -18,10 +18,10 @@
 # Enzyme is the second backend and is off by default. Loading it is what
 # makes `BVDOutbreakSize.enzyme_adtype()` resolve, so leaving it out is
 # what leaves `ADFixtures.backends()` reporting Mooncake alone.
-# `BVD_BENCH_ENZYME=true` turns it on. Both backends together do not fit a
-# CI run: the sweep was cancelled at the 90 minute cap, where Mooncake
-# alone finished in 39 minutes on the same cold runner. Which pairs then
-# register is decided by the smoke test in `src/ad_gradients.jl`.
+# `BVD_BENCH_ENZYME=true` turns it on. Both backends together do not fit
+# inside a 90-minute CI run. Mooncake alone takes about 39 minutes on a cold
+# runner. Which pairs then register is decided by the smoke test in
+# `src/ad_gradients.jl`.
 
 using BenchmarkTools
 

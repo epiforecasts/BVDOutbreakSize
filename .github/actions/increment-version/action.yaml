@@ -164,9 +164,8 @@ runs:
         # Actions to create and approve pull requests" turned off rejects
         # this with a permissions error, having already accepted the branch
         # push above. Left there, that branch trips the already-exists guard
-        # on every later push, so the increment stops running at all and
-        # does so silently. Clean the branch up and warn instead: a version
-        # bump that needs a settings change is not a reason to fail main.
+        # on every later push and the increment stops running. Clean the
+        # branch up and warn instead of failing main.
         set +e
         PR_OUTPUT=$(gh pr create \
           --title "${{ inputs.pr-title-prefix }} to $NEW_VERSION" \
