@@ -298,12 +298,13 @@ A minor version: every affected province is its own patch, the importation kerne
   The occupancy balance is a `Depletion` with three pools and share and count flows, its discharge split read off the previous day's pools through `Recent`.
   The health-zone split is a `Recurrence` with `Allocate`.
   Each matches the hand-written code to round-off, so fitted values change only by round-off.
-  The report binning, the onset-reporting tables and the health-zone window weights keep their own code and rules: a running sum, a running product and sums that read forward in time gain nothing from the package and were slower through it (EpiAware/ComposableRecurrences.jl#339).
+  The care flows and the onset-reporting delay table are computed kernels built from `Survival`, and the onset-reporting anchor reads that table forward through a transposed `Convolution`.
+  The report binning and the health-zone window weights keep their own code and rules: a running sum gains nothing from the package, and the window weights through a transposed `Convolution` do a pass per health zone where the rule does one.
   Several kernels differentiate slower under Mooncake than the hand-written rules did (timings in #1152).
-  The care flows build their time-varying kernels element by element (EpiAware/ComposableRecurrences.jl#329), the patch renewal is still behind its rule (EpiAware/ComposableRecurrences.jl#296), small calls carry a fixed overhead (EpiAware/ComposableRecurrences.jl#330), and the PMF convolution pads its input with zeros (EpiAware/ComposableRecurrences.jl#336).
-  The occupancy balance reads the previous day's pools through a coupled `Recent`, which allocates at every step (EpiAware/ComposableRecurrences.jl#338).
+  The care flows allocate scratch for each nested `Survival` they compute (EpiAware/ComposableRecurrences.jl#NEW), the patch renewal and the occupancy balance are behind their rules in the per-step work (EpiAware/ComposableRecurrences.jl#296), small calls carry a fixed overhead (EpiAware/ComposableRecurrences.jl#330), and the PMF convolution pads its input with zeros (EpiAware/ComposableRecurrences.jl#336).
+  Most of the health-zone split's extra time is Mooncake taping the broadcasts around the operators, not the operators.
   A patch with no health zones is left out of the zone split, since `Allocate` takes non-empty groups only (EpiAware/ComposableRecurrences.jl#326).
-  A delay convolution now gives `NaN` rather than leaving a day alone where an `Inf` meets a lag of exactly zero weight (EpiAware/ComposableRecurrences.jl#297).
+  A delay convolution now gives `NaN` rather than leaving a day alone where an `Inf` meets a lag of exactly zero weight, since the package multiplies a zero weight as IEEE arithmetic does (EpiAware/ComposableRecurrences.jl#297).
   Only a warm-up proposal that overflows the infections reaches this, and its log density is non-finite either way.
   ComposableRecurrences 0.2 comes from GitHub through `[sources]` until it is registered.
 - The test matrix runs its version cell on Julia 1.11, the oldest the package supports, since ComposableRecurrences needs 1.11 (#1152).

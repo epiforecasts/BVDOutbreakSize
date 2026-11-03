@@ -279,7 +279,7 @@ function renewal_infections(
     L >= n && return convert(Vector{Tp}, seed[1:n])
     depletion = Depletion(N; pools = (S = _pool_after_seed(N, seed),))
     renewal = Recurrence(g; modifiers = (depletion,))
-    return renewal(Rt; history = seed, start = L + 1, prepend = true)
+    return vcat(seed, renewal(Rt; history = seed, start = L + 1))
 end
 
 """
@@ -398,14 +398,14 @@ function patch_infections(
         importation_kernel[1:np, 1:np]
     pool0 = [_pool_after_seed(N[p], view(seeds_matrix, p, :)) for p in 1:np]
     modifiers = (
-        Redistribute(movement(K, epsilon)),
+        Redistribute(K, epsilon),
         Depletion(PerStratum(N); pools = (S = PerStratum(pool0),)),
     )
     renewal = Recurrence(g; modifiers)
-    infections, trace = renewal(
-        Rt_matrix; history = seeds_matrix, start = L + 1, prepend = true,
-        trace = true
+    run, trace = renewal(
+        Rt_matrix; history = seeds_matrix, start = L + 1, trace = true
     )
+    infections = hcat(seeds_matrix, run)
     arrivals = first(trace.modifiers)
     importation = hcat(zeros(eltype(arrivals), np, L), arrivals)
     return (; infections, importation)

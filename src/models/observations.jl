@@ -1811,25 +1811,19 @@ function abscond_thinned_flows(
         eltype(adm1), eltype(pmf1), eltype(adm2), eltype(pmf2),
         typeof(κ), eltype(conf_hazard)
     )
+    n == 0 && return zeros(T, 0), zeros(T, 0)
     pmfs = zeros(T, 2, D)
     pmfs[1, eachindex(pmf1)] .= pmf1
     pmfs[2, eachindex(pmf2)] .= pmf2
-    ## Column `u` holds each schedule times the survival of the cohort
-    ## admitted on day `u`; the shorter schedule is padded with zeros.
-    G = zeros(T, 2, D, n)
-    @inbounds for u in 1:n
-        surv = one(T)
-        unconf = one(T)
-        for d in 0:(D - 1)
-            if d > 0
-                unconf *= one(T) - conf_hazard[min(u + d - 1, n)]
-                surv *= one(T) - κ * unconf
-            end
-            G[1, d + 1, u] = pmfs[1, d + 1] * surv
-            G[2, d + 1, u] = pmfs[2, d + 1] * surv
-        end
-    end
-    flows = Convolution(TimeVarying(PerStratum(G), Primary()))(
+    ## The cohort admitted on day `u` is unconfirmed at lag `j` with
+    ## probability `Π_{i ≤ j} (1 - h[u + i - 1])`, the hazard read a day
+    ## late, and has not absconded at lag `d` with probability
+    ## `Π_{j ≤ d} (1 - κ unconf_j)`. The hazard holds its last day past the
+    ## grid. The shorter schedule is padded with zeros.
+    late = vcat(conf_hazard[1], conf_hazard, fill(conf_hazard[n], D))
+    unconf = Survival(TimeVarying(late); from = 1)
+    kernel = PerStratum(pmfs) * Survival(κ * unconf; from = 1)
+    flows = Convolution(TimeVarying(kernel, Primary()))(
         permutedims(hcat(adm1, adm2))
     )
     return flows[1, :], flows[2, :]
@@ -1917,26 +1911,24 @@ function accumulate_occupancy(
     unconf = Recent(1)
     conf = Recent(1; coupling = [0.0 1.0 0.0; 0.0 0.0 0.0; 0.0 0.0 0.0])
     args = (bvd_out, unconf, conf, adm, hz, κ)
-    flows = Depletion(;
-        pools = (:unconf, :conf, :bg), form = nothing,
-        flows = (
-            ## The hazard is a rate times a borrowed hazard, so it can pass
-            ## one; as a `Derived` its share is not checked against one.
-            Flow(:unconf => :conf, Derived(identity, hz); form = Share()),
-            Flow(:unconf => 0, κ; form = Share()),
-            Flow(:bg => 0, κ; form = Share()),
-            Flow(0 => :unconf, adm; form = Truncate()),
-            Flow(0 => :bg, TimeVarying(A_bg); form = Truncate()),
-            Flow(
-                :unconf => 0, Derived(_unconf_discharges, args...);
-                form = Truncate()
-            ),
-            Flow(
-                :conf => 0, Derived(_conf_discharges, args...);
-                form = Truncate()
-            ),
-            Flow(:bg => 0, TimeVarying(ruleout); form = Truncate()),
-        )
+    flows = Depletion(
+        ## The hazard is a rate times a borrowed hazard, so it can pass
+        ## one; as a `Derived` its share is not checked against one.
+        Flow(:unconf => :conf, Derived(identity, hz); form = Share()),
+        Flow(:unconf => 0, κ; form = Share()),
+        Flow(:bg => 0, κ; form = Share()),
+        Flow(0 => :unconf, adm; form = Truncate()),
+        Flow(0 => :bg, TimeVarying(A_bg); form = Truncate()),
+        Flow(
+            :unconf => 0, Derived(_unconf_discharges, args...);
+            form = Truncate()
+        ),
+        Flow(
+            :conf => 0, Derived(_conf_discharges, args...);
+            form = Truncate()
+        ),
+        Flow(:bg => 0, TimeVarying(ruleout); form = Truncate());
+        pools = (:unconf, :conf, :bg)
     )
     ## The stocks start empty and every inflow is a flow, so the call takes
     ## no gain and `stop` sets the number of days. The clamp floors the
@@ -2062,16 +2054,13 @@ function two_clock_confirmed(
     n = length(A_bvd)
     T = promote_type(eltype(A_bvd), eltype(conf_hazard), eltype(S_clin))
     L = length(S_clin)
-    ## Column `u` is the kernel of the cohort admitted on day `u`.
-    K = zeros(T, L, n)
-    @inbounds for u in 1:n
-        unconf = one(T)
-        for d in 0:(L - 1)
-            d > 0 && (unconf *= one(T) - conf_hazard[min(u + d, n)])
-            K[d + 1, u] = (one(T) - unconf) * S_clin[d + 1]
-        end
-    end
-    return Convolution(TimeVarying(K, Primary()))(A_bvd)
+    n == 0 && return zeros(T, 0)
+    ## The cohort admitted on day `u` is confirmed by lag `d` with
+    ## probability `1 - Π_{j ≤ d} (1 - h[u + j])`; the hazard holds its last
+    ## day past the grid.
+    h = vcat(conf_hazard, fill(conf_hazard[n], L))
+    confirmed = S_clin * (1 - Survival(TimeVarying(h); from = 1))
+    return Convolution(TimeVarying(confirmed, Primary()))(A_bvd)
 end
 
 """
@@ -3352,12 +3341,17 @@ function onset_report_cdf_table(
     )
     T = promote_type(eltype(logit_h0), eltype(γ))
     nu = max(Int(u_hi) - Int(u_lo) + 1, 0)
-    table = Matrix{T}(undef, length(logit_h0), nu)
-    ## The survival products, then their complements in place.
-    _onset_columns!(nothing, table, logit_h0, γ, grid_start, u_lo)
-    @. table = one(T) - table
-    return table
+    D, ng = length(logit_h0), length(γ)
+    (nu == 0 || D == 0) && return zeros(T, D, nu)
+    ## Column `k`, onset date `u_lo + k - 1`, reads the calendar offset of
+    ## delay `l + 1` at `k + l + u_lo - grid_start`, clamped to the grid.
+    off = Int(u_lo) - Int(grid_start)
+    γk = [γ[clamp(t + off, 1, ng)] for t in 1:(nu + D - 1)]
+    hazard = Derived(_logistic_sum, logit_h0, TimeVarying(γk))
+    return kernel_weights(TimeVarying(1 - Survival(hazard), Primary()), nu)
 end
+
+_logistic_sum(a, b) = logistic(a + b)
 
 ## The survival recurrence of each onset date's delay column, the one walk
 ## `onset_report_cdf_table`, `onset_report_expected_total` and the table's
@@ -3444,27 +3438,18 @@ function onset_report_anchor_series(
         cdf_table::AbstractMatrix,
         u_lo::Integer, a::AbstractVector
     )
-    D = size(cdf_table, 1)
-    nu = size(cdf_table, 2)
+    D, nu = size(cdf_table)
     T = promote_type(eltype(cdf_table), eltype(a))
-    na = length(a)
-    out = Vector{T}(undef, nu)
-    ## `G(u, d)` shares one survival product across every `d`, and its
-    ## denominator does not depend on `d`, so the weighted sum runs off the
-    ## onset date's table column rather than rebuilding `G` per delay.
-    @inbounds for k in 1:nu
-        u = Int(u_lo) + k - 1
-        invden = inv(safe_rate(D > 0 ? cdf_table[D, k] : zero(T)))
-        g_prev = zero(T)
-        acc = zero(T)
-        for d in 0:(D - 1)
-            g_cur = cdf_table[d + 1, k] * invden
-            acc += (g_cur - g_prev) * a[clamp(u + d, 1, na)]
-            g_prev = g_cur
-        end
-        out[k] = acc
-    end
-    return out
+    (nu == 0 || D == 0) && return zeros(T, nu)
+    ## Summed by parts, `Σ_d (F_d - F_{d-1}) a(u + d)` is
+    ## `Σ_d F_d (a(u + d) - a(u + d + 1)) + F_{D-1} a(u + D)`, which reads the
+    ## table itself forward from each onset date. `a` runs from the first
+    ## onset date and holds its last value past its end.
+    ext = vcat(a[Int(u_lo):end], fill(a[end], max(Int(u_lo) + nu - 1 + D - length(a), 0)))
+    Δa = ext[1:(end - 1)] .- ext[2:end]
+    reads = Convolution(TimeVarying(cdf_table, Primary()))'(Δa; stop = nu)
+    last = cdf_table[D, :]
+    return (reads .+ last .* ext[(D + 1):(D + nu)]) ./ safe_rate.(last)
 end
 
 """

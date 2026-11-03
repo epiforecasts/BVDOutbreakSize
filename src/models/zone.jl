@@ -1020,7 +1020,7 @@ function zone_share_renewal_kernel(
                 TimeVarying(PerStratum(mix.import_fraction[held, days])),
                 mix.between .* permutedims(mix.origin_weight),
             ),
-            spill = Redistribute(movement(mix.within, ε))
+            spill = Redistribute(mix.within, ε)
         ) :
         Allocate(patch_ranges[held], totals)
     renewal = Recurrence(g; modifiers = (split,))

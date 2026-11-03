@@ -174,6 +174,7 @@
     const PACKAGE_KERNELS = (
         convolve_delay, convolve_pmf, renewal_infections, patch_infections,
         abscond_thinned_flows, two_clock_confirmed, accumulate_occupancy,
+        onset_report_cdf_table, onset_report_anchor_series,
         zone_share_renewal_kernel, zone_pre_convolution,
     )
 
