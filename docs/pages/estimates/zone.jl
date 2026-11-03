@@ -225,7 +225,7 @@ MarkdownTable(prevalence_table(zone_prevalence_overview; area = "Zone")) #hide
 # ## [Data currency](@id zone-data-currency)
 #
 # The zone blocks are the per-zone confirmed-case and confirmed-death tables of the situation reports.
-# A block that stops being picked up shows its last date before the cut-off rather than a flat series.
+# A block that stops being picked up shows its last date before the cut-off.
 
 #md # ```@raw html
 #md # <details><summary>Zone block currency</summary>
@@ -394,7 +394,7 @@ zone_meld_rt_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The reproduction number implied by the zone stage's patch trajectories against that implied by the joint fit, nationally and for each patch, both using the joint posterior mean generation interval.
-#md # Agreement means the melding has kept the joint's patch trajectories rather than moved them to fit the zone data.
+#md # Agreement means the melding has kept the joint's patch trajectories.
 #md # </figcaption>
 #md # </figure>
 #md # ```
