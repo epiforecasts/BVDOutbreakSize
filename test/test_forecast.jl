@@ -248,9 +248,9 @@ end
     using Dates: Date
     using BVDOutbreakSize: forecast_archive
 
-    ## A forecast frame carrying the confirmed/suspect ward split (as
-    ## `forecast_reported` emits once the chain carries the confirmed in-care
-    ## sub-stock) archives the two ward occupancy levels alongside the total,
+    ## A forecast frame carrying the confirmed/suspect ward split, which
+    ## `forecast_reported` does not yet emit, archives the two ward occupancy
+    ## levels alongside the total,
     ## each under its own scored label. A frame without the split carries the
     ## total alone, so the hook is dormant until the columns appear.
     n = 40

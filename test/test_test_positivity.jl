@@ -31,7 +31,7 @@ end
     using BVDOutbreakSize: test_positivity_model, load_observations
 
     ## The background contribution over the window is `λ_bg · T`, with T
-    ## the latent seeding-to-cut-off time (≈ 132 days on current data).
+    ## the latent seeding-to-cut-off time.
     ## The 95% prior-predictive background must stay well below the
     ## observed cumulative suspected total at the cut-off.
     obs = load_observations()

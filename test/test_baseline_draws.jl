@@ -910,8 +910,8 @@ end
 
     ## An occupancy reclassification is annotated a report or two after the
     ## report that announced it, so a release snapshot taken in between holds
-    ## the step but not the label. Carried back, its baseline reads the change
-    ## of reporting basis as a day of the walk; carried, it does not.
+    ## the step but not the label. Without the label carried back, its
+    ## baseline reads the change of reporting basis as a day of the walk.
     dir = mktempdir()
     snapshot = joinpath(dir, "observations.toml")
     write(

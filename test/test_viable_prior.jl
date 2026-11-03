@@ -133,8 +133,7 @@ end
 
     ## `nuts_sample` calls `viable_prior_init` once per chain from a shared
     ## `rng`, so distinct chains must draw distinct starting vectors: that
-    ## independence is what keeps split R-hat meaningful once the argmax
-    ## selection has already pulled every start toward the mode (see the
+    ## independence is what keeps split R-hat meaningful (see the
     ## dispersion note on `ViablePrior`). A comprehension that accidentally
     ## hoisted the call out of the per-chain loop would still pass every
     ## other test in this file while giving every chain the same start.

@@ -2,7 +2,7 @@
 ## primitives in src/renewal.jl, the per-patch Rt and infection models, the
 ## per-province composition likelihood, and the bvd_joint composer.
 
-## The three-patch joint on the live observations, compiled once and drawn
+## The patch joint on the live observations, compiled once and drawn
 ## from once. Four items below read the same chain; building it per item
 ## cost four compilations of the largest model in the package.
 @testsnippet PatchJointChain begin
@@ -1460,8 +1460,7 @@ end
     @test K[near, 1] / K[far, 1] > flat[near, 1] / flat[far, 1]
     ## Symmetric with a zero diagonal, and the pairwise distances are the
     ## great-circle ones to the nearest kilometre. Ituri to Nord-Kivu and
-    ## Nord-Kivu to Sud-Kivu are read off the source centres, since the
-    ## patches pool them.
+    ## Nord-Kivu to Sud-Kivu are read off the source centres.
     @test D ≈ D'
     @test all(iszero, [D[i, i] for i in 1:np])
     @test haversine_km(
