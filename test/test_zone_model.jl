@@ -583,6 +583,31 @@ end
     @test size(lc, 1) == 4 * (length(inputs.patch_ranges) + 1)
     @test all(r -> isapprox(r, 1; rtol = 1.0e-8), lc[!, "Ratio"])
     @test lc[end, "Week ending"] == inputs.seeding + Day(inputs.n - 1)
+    @test lc[1, "Week ending"] == inputs.seeding + Day(inputs.n - 1 - 3 * 7)
+    ## The province model's column is the parent's sum over each window.
+    np = length(inputs.patch_ranges)
+    for w in 1:4, j in 1:(np + 1)
+        hi = inputs.n - (4 - w) * 7
+        ps = j <= np ? (j:j) : (1:np)
+        @test lc[(w - 1) * (np + 1) + j, "Joint"] ≈
+            sum(syn.I_bar[ps, (hi - 6):hi]) rtol = 1.0e-10
+    end
+    ## A parent with the first patch doubled halves that patch's ratio and
+    ## leaves the others at one.
+    doubled = copy(syn.chain)
+    doubled[:infections_patch] = map(
+        v -> vec(reshape(v, np, :) .* [2.0; ones(np - 1)]),
+        syn.chain[:infections_patch]
+    )
+    lc2 = BVDOutbreakSize.zone_patch_level_check(chn, inputs, doubled)
+    for row in eachrow(lc2), p in 1:np
+        row["Province"] == inputs.patch_labels[p] || continue
+        @test row["Ratio"] ≈ (p == 1 ? 0.5 : 1.0) rtol = 1.0e-8
+    end
+    ## Windows reaching before the first day are rejected.
+    @test_throws ErrorException BVDOutbreakSize.zone_patch_level_check(
+        chn, inputs, syn.chain; weeks = cld(inputs.n, 7) + 1
+    )
 end
 
 @testitem "zone forecast: the fitted model is unchanged and the split is proper" setup = [

@@ -389,7 +389,6 @@ function zone_meld_block(
     ## identity keeps every week's own marginal variance and gives up only
     ## the correlations, which is the direction the parent's own posterior
     ## is least able to support.
-    ## Each block is factorised on its own, so `L` is block diagonal.
     Σ = cov(S)
     L = zeros(Float64, d, d)
     for c in (1:d_inf, extra_cells)
