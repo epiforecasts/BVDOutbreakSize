@@ -78,6 +78,11 @@ per-stream cumulative totals at the cut-off (`reported_cases`,
 `exported_cases`, `exports_deaths`). A scalar with no explicit TOML block
 is taken from the final vintage of the matching history.
 
+A `[skip_dates]` block, keyed by history block name, lists vintages left out
+of the loaded history while staying in the manifest as printed, so the
+window before a skipped vintage merges into the next. A zone revision block
+follows its zone block's list. A date that matches no vintage is an error.
+
 The dated Uganda export series are grid day-indices (`export_case_days`,
 `export_death_days`), each a sorted list of detection or death days on or
 before the cut-off.
@@ -139,6 +144,55 @@ function load_observations(
     n = Int(date2epochdays(cutoff) - date2epochdays(seeding)) + 1
     _index(d) = n - _gap(d)
 
+    ## Vintages left out of a block's loaded history while staying in the
+    ## manifest as printed (`[skip_dates]`, keyed by block name). A skipped
+    ## vintage merges its window into the next one, so a report whose
+    ## cumulative is later withdrawn (SitRep 169's Ituri death harmonisation,
+    ## undone by SitRep 170) is not read as a step up and then a fall, which
+    ## the increment likelihood cannot score. Every listed date must match a
+    ## vintage of a block that exists, since a typo would otherwise skip
+    ## nothing while appearing to handle the revision.
+    skip_dates = Dict{String, Set{String}}()
+    if haskey(raw, "skip_dates")
+        for (key, ds) in raw["skip_dates"]
+            key == "source" && continue
+            haskey(raw, key) || error(
+                "skip_dates: $key names no block in the manifest"
+            )
+            blk = raw[key]
+            printed = if haskey(blk, "dates")
+                Set(String.(blk["dates"]))
+            else
+                Set(
+                    String(d) for sub in values(blk) if sub isa AbstractDict
+                        for zsub in (haskey(sub, "dates") ? (sub,) : values(sub))
+                        if zsub isa AbstractDict && haskey(zsub, "dates")
+                        for d in zsub["dates"]
+                )
+            end
+            for d in String.(ds)
+                d in printed || error(
+                    "skip_dates: $key has no vintage dated $d, so skipping " *
+                        "it would do nothing"
+                )
+            end
+            skip_dates[key] = Set(String.(ds))
+        end
+    end
+    ## Whether a block's vintage dated `d` is kept: on or before the cut-off
+    ## and not listed in `[skip_dates]` for that block.
+    ## A zone revision block follows its zone block, so a printed 24h figure
+    ## never sits on a vintage the zone history has dropped.
+    _skip_parent = Dict(
+        "zone_confirmed_revision_24h" => "zone_confirmed_history",
+        "zone_death_revision_24h" => "zone_death_history",
+    )
+    _skipped(key) = union(
+        get(skip_dates, key, Set{String}()),
+        get(skip_dates, get(_skip_parent, key, ""), Set{String}())
+    )
+    _kept(key, d) = Date(String(d)) <= cutoff && !(String(d) in _skipped(key))
+
     ## A dated cumulative history → grid day-indices and counts, sorted
     ## oldest-first so the model differences consecutive vintages into
     ## daily increments. Vintages after the cut-off are dropped. Empty
@@ -146,7 +200,7 @@ function load_observations(
     function history(key)
         haskey(raw, key) || return (; days = Int[], counts = Int[])
         block = raw[key]
-        keep = [Date(String(d)) <= cutoff for d in block["dates"]]
+        keep = [_kept(key, d) for d in block["dates"]]
         idx = Int[_index(d) for d in block["dates"][keep]]
         vals = Int.(block["values"][keep])
         ord = sortperm(idx)
@@ -241,7 +295,7 @@ function load_observations(
         !haskey(block, "dates") && return Dict{String, ProvHistory}()
         provinces = sort!([k for k in keys(block) if k != "dates" && k != "source"])
         result = Dict{String, ProvHistory}()
-        keep = [Date(String(d)) <= cutoff for d in block["dates"]]
+        keep = [_kept(key, d) for d in block["dates"]]
         idx = Int[_index(d) for d in block["dates"][keep]]
         ord = sortperm(idx)
         for prov in provinces
@@ -262,7 +316,7 @@ function load_observations(
         for (prov, sub) in raw[key]
             sub isa AbstractDict || continue
             haskey(sub, "dates") || continue
-            keep = [Date(String(d)) <= cutoff for d in sub["dates"]]
+            keep = [_kept(key, d) for d in sub["dates"]]
             idx = Int[_index(d) for d in sub["dates"][keep]]
             ord = sortperm(idx)
             vals = Int.(sub["values"][keep])
@@ -283,7 +337,7 @@ function load_observations(
         !haskey(raw, key) && return result
         block = raw[key]
         !haskey(block, "dates") && return result
-        keep = [Date(String(d)) <= cutoff for d in block["dates"]]
+        keep = [_kept(key, d) for d in block["dates"]]
         idx = Int[_index(d) for d in block["dates"][keep]]
         ord = sortperm(idx)
         for prov in sort!([k for k in keys(block) if block[k] isa AbstractDict])
@@ -320,7 +374,7 @@ function load_observations(
                     "$key: $prov.$zone has $(length(sub["values"])) " *
                         "values for $(length(sub["dates"])) dates"
                 )
-                keep = [Date(String(d)) <= cutoff for d in sub["dates"]]
+                keep = [_kept(key, d) for d in sub["dates"]]
                 idx = Int[_index(d) for d in sub["dates"][keep]]
                 ord = sortperm(idx)
                 vals = Int.(sub["values"][keep])
