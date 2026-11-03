@@ -1858,9 +1858,8 @@ cfr_prior_fig #hide
 
 # #### Symptom-onset reporting delay
 #
-# The digitised onset epidemic curve (the [Data](@ref methods-data) section) is the only direct observation of the onset series.
+# The digitised onset curve (see [Data](@ref methods-data)) is the only direct observation of the onset series.
 # Every other stream sees that series after a further convolution to a report, a death or a laboratory confirmation.
-# This stream can therefore identify things the other streams cannot on their own, plausibly including the split between reporting and laboratory receipt that the laboratory pipeline otherwise pins with the onset-to-sample constraint.
 #
 # The onset-to-report delay is a discrete-time hazard over delay $d = 0,\dots,D-1$ days, with $D = 28$.
 # By then the triangle's between-vintage increments have decayed into digitisation noise.
@@ -1875,9 +1874,9 @@ cfr_prior_fig #hide
 #
 # $Q$ is the sum-to-zero basis used for the patch deviations, so the delay deviations sum to zero and $\eta_0$ is the mean logit hazard.
 #
-# A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
-# It is a weekly-knot non-centred random walk on the logit scale, with knots every seven days from the first figure's report date, concentrated near zero ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$).
-# A flat reporting profile stays the default the data has to argue away from, while the walk can still follow a real drift in reporting speed:
+# A calendar-time effect on the report day $u + d$ modifies that hazard.
+# It is a non-centred random walk on the logit scale with knots every seven days from the first figure's report date.
+# Its step prior $\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$ is concentrated near zero, so a flat reporting profile is the default and the walk follows only a drift the data support:
 #
 # ```math
 # \gamma_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
@@ -1886,8 +1885,7 @@ cfr_prior_fig #hide
 # \tag{51}
 # ```
 #
-# The walk is zero up to the first figure's report date and moves only after it.
-# It changes the reporting delay, and a delay is seen only between figures, so before the first figure a shift in reporting speed cannot be told apart from $h_0$.
+# The walk is zero up to the first figure's report date, since a delay is seen only between figures and an earlier shift in reporting speed cannot be told apart from $h_0$.
 #
 # The cumulative reported proportion of onset date $u$'s eventual cases, reported within $\delta$ days, is the survival product of the daily hazards along that onset date's diagonal.
 # It is normalised to its own limit and multiplied by an explicit ascertainment level $\alpha(u)$:
@@ -1930,9 +1928,9 @@ cfr_prior_fig #hide
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
 # Re-dating is absorbed as observation noise rather than modelled.
 # $\sigma_u$ collects counting variation around the cell's own modelled mean and, for each digitised bar the cell differences, the $1/12$ variance of rounding an integer read and a fitted read SD $\tau$.
-# A correction therefore carries two reads' rounding and error and a first-snapshot level one read's.
-# Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
-# The rounding term is structural rather than fitted, and it is what keeps $\tau$ off zero on the many settled cells whose residual is exactly zero.
+# A correction therefore carries two reads' rounding and error, and a level one read's.
+# Every magnitude in $\sigma_u$ is modelled rather than observed, so the noise cannot feed its own variance.
+# The fixed rounding term keeps $\tau$ off zero on the many settled cells whose residual is exactly zero.
 # We use $\tau \sim \mathrm{LogNormal}(\log 0.3,\ 0.5)$, centred on one pixel of read error beyond the rounding.
 # One count spans a median of 3.2 pixels across the digitised figures (2.5 to 8.7), so one pixel is about 0.3 counts.
 #
@@ -2021,8 +2019,9 @@ cfr_prior_fig #hide
 #     \frac{\pi_{p,i}}{\sum_{q \ge p} \pi_{q,i}},\; \rho \Bigr). \tag{54}
 # ```
 #
-# $\rho$ is one overdispersion per composition, shared across patches and vintages, absorbing the extra-Binomial variation in how cases are attributed to provinces, such as reporting lags between the provincial and national tables and reassignment of cases between health zones.
-# At $\rho \to 0$ the allocation is Multinomial.
+# $\rho$ is one overdispersion per composition, shared across patches and vintages.
+# It absorbs extra-binomial variation in how cases are attributed to provinces, such as lags between the provincial and national tables and cases reassigned between health zones.
+# At $\rho \to 0$ the allocation is multinomial.
 # The priors are
 #
 # ```math
