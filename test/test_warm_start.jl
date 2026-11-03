@@ -148,21 +148,18 @@ end
     end
     put(s) = serialize(warm_start_file(dir, s.key), s)
     seed(key = "joint__bbbb") = fit_warm_start("joint", key; parent_dir = dir)
-    withenv("BVD_WARMSTART" => nothing, "BVD_WARMSTART_RULE" => nothing) do
+    withenv("BVD_WARMSTART" => nothing) do
         @test seed().parent === nothing
         put(state())
         @test seed().parent.key == "joint__aaaa"
-        ## The same key, a failed gate, a model change and an old schema
-        ## each fall back to the full warm-up.
+        ## The same key, a failed gate and an old schema each fall back to
+        ## the full warm-up. A model change is logged, not a fallback.
         @test seed("joint__aaaa").parent === nothing
         put(state(; gate = :fail))
         @test occursin("gate", seed().reason)
         put(state(; models = "x"))
-        @test occursin("src/models", seed().reason)
-        ## The coverage rule does not fall back on a model change.
-        withenv("BVD_WARMSTART_RULE" => "coverage") do
-            @test seed().parent !== nothing
-        end
+        @test seed().parent !== nothing
+        @test occursin("src/models changed", seed().reason)
         put(state(; schema = "v0"))
         @test occursin("schema", seed().reason)
         ## Another fit id's state is not a parent.
@@ -174,4 +171,37 @@ end
         @test warm_start_key() == "warm:off"
         @test seed().parent === nothing
     end
+end
+
+@testitem "warm start seeds only when the metric maps" begin
+    using Distributions: Normal, LogNormal
+    using Turing: @model
+    include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
+
+    @model function _two()
+        x ~ Normal(0.0, 1.0)
+        s ~ LogNormal(0.0, 0.5)
+    end
+    parent(layout) = (;
+        key = "joint__aaaa", metric_kind = :adapted_diag, step_size = 0.01,
+        layout, draws = randn(50, 2), chain_index = ones(Int, 50),
+    )
+    ws(layout) = FitWarmStart(
+        "joint", "joint__bbbb", parent(layout), "parent joint__aaaa",
+        "full", 0.0
+    )
+    ## Both variables map: seeded, with a 2 x 2 metric and the step size
+    ## left for the sampler to find.
+    w = ws(["x" => 1:1, "s" => 2:2])
+    seeded = BVDOutbreakSize.warm_start_settings(w, _two())
+    @test size(seeded.inverse_metric) == (2, 2)
+    @test seeded.step_size == 0.0
+    @test seeded.n_adapts == warm_start_adapts()
+    @test w.path == "seeded"
+    @test w.coverage == 1.0
+    ## Half the metric maps: the full warm-up.
+    w = ws(["x" => 1:1, "q" => 2:2])
+    @test BVDOutbreakSize.warm_start_settings(w, _two()) === nothing
+    @test w.path == "full"
+    @test occursin("50.0%", w.reason)
 end

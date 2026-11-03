@@ -35,12 +35,11 @@ warm_start_adapts() = parse(Int, get(ENV, "BVD_WARMSTART_ADAPTS", "300"))
 ## Weight on the identity when the parent's correlation matrix is shrunk.
 warm_start_shrink() = parse(Float64, get(ENV, "BVD_WARMSTART_SHRINK", "0.75"))
 
-## `models` falls back to the full warm-up whenever `src/models` changed
-## since the parent. `coverage` seeds whenever enough of the metric maps.
-warm_start_rule() = Symbol(strip(get(ENV, "BVD_WARMSTART_RULE", "models")))
-warm_start_min_coverage() = parse(
-    Float64, get(ENV, "BVD_WARMSTART_MIN_COVERAGE", "0.9")
-)
+## The least share of the metric that must map from the parent to seed.
+## A model change since the parent does not stop a seed on its own: the
+## metric affects only how fast the sampler moves, and the step size still
+## adapts.
+const WARM_START_MIN_COVERAGE = 0.9
 
 warm_start_parent_dir() = _repo_dir(
     get(ENV, "BVD_WARMSTART_PARENT", joinpath("logs", "warmstart_parent"))
@@ -55,13 +54,11 @@ function warm_start_key()
     warm_start_enabled() || return "warm:off"
     return string(
         "warm:", WARM_START_SCHEMA, ":", warm_start_adapts(), ":",
-        warm_start_shrink(), ":", warm_start_rule(), ":",
-        warm_start_min_coverage()
+        warm_start_shrink(), ":", WARM_START_MIN_COVERAGE
     )
 end
 
-## Digest of the model sources, which decides whether a parent's metric
-## still describes the model.
+## Digest of the model sources, logged when it differs from the parent's.
 warm_start_models_hash() = tree_sha256(joinpath(_PKG, "src", "models"))
 
 warm_start_file(dir, key) = joinpath(dir, key * ".warmstart.jls")
@@ -114,11 +111,11 @@ function fit_warm_start(id, key; parent_dir = warm_start_parent_dir())
     state.key == key && return none("parent is this fit")
     state.gate === :fail &&
         return none("parent $(state.key) failed the convergence gate")
-    if warm_start_rule() === :models &&
-            state.models_hash != warm_start_models_hash()
-        return none("src/models changed since parent $(state.key)")
+    reason = "parent $(state.key)"
+    if state.models_hash != warm_start_models_hash()
+        reason *= ", with src/models changed since"
     end
-    return FitWarmStart(id, key, state, "parent $(state.key)", "full", 0.0)
+    return FitWarmStart(id, key, state, reason, "full", 0.0)
 end
 
 """
@@ -176,8 +173,7 @@ function BVDOutbreakSize.warm_start_settings(ws::FitWarmStart, model)
         @info("warm start: full warm-up", id = ws.id, reason);
         nothing
     )
-    if warm_start_rule() === :coverage &&
-            seeded.coverage < warm_start_min_coverage()
+    if seeded.coverage < WARM_START_MIN_COVERAGE
         pct = round(100 * seeded.coverage; digits = 1)
         return fallback("only $pct% of the metric maps from the parent")
     end
@@ -188,7 +184,7 @@ function BVDOutbreakSize.warm_start_settings(ws::FitWarmStart, model)
     step_size = ws.parent.metric_kind === :fixed_dense ?
         ws.parent.step_size : 0.0
     ws.path = "seeded"
-    @info "warm start: seeded" id = ws.id parent = ws.parent.key coverage =
+    @info "warm start: seeded" id = ws.id reason = ws.reason coverage =
         seeded.coverage step_size n_adapts = warm_start_adapts()
     return (;
         inverse_metric = seeded.inverse_metric, step_size,
