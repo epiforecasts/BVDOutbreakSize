@@ -1586,7 +1586,9 @@ cut-off, and the density there, is the fitted model's.
     bvd_reports_matrix = n_patches > 1 ?
         _patch_reports(detected_onsets_matrix, cases_state.report_pmf) :
         nothing
-    care_asc = by_detection ? one.(patch_asc) : patch_asc
+    ## With the detection contrast in the reports, the care split takes them
+    ## as they are.
+    care_asc = suspected_ascertainment === nothing ? patch_asc : nothing
     treatment_state ~ to_submodel(
         treatment(
             isolation_history, cases_state.bvd_reports_daily,
