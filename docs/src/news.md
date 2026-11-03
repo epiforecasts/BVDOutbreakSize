@@ -288,7 +288,7 @@ A minor version: every affected province is its own patch, the importation kerne
 - The confirmed-cases and confirmed-deaths single-stream models are fitted at each of the three May frozen cut-offs and scored alongside the frozen joint (resolves #513).
   They are the only streams with truth to score from those cut-offs, so the frozen comparison of the joint against each stream's own model now covers every May cut-off rather than the one-week-back cut-off alone.
   Existing fitted values do not change.
-- The methods page, captions and limitations match the model code on priors, dispersions, likelihood terms, delays and the genetic bound (#1205).
+- The methods page states every production prior, the per-stream dispersions, the onset-to-sample constraint and the 139-genome genetic bound, and its captions and limitations match the code (#1205).
 
 ### Infrastructure
 

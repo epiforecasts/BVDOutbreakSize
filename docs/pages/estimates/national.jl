@@ -479,8 +479,8 @@ rt_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Daily reproduction number from the renewal start to the cut-off, with 30%, 60% and 90% credible ribbons and about a hundred sampled trajectories.
-#md # Red lines mark the start (dashed, the first situation report on 18 May 2026) and end (dotted) of the three-week response scale-up.
+#md # Daily reproduction number of the national trend, net of depletion, from the renewal start to the cut-off, with 30%, 60% and 90% credible ribbons and about a hundred sampled trajectories.
+#md # Red lines mark the centre of the logistic response ramp (dashed, the first situation report on 18 May 2026) and one 21-day ramp time scale after it (dotted).
 #md # Grey dashed lines mark a reproduction number of one and the cut-off.
 #md # </figcaption>
 #md # </figure>
@@ -512,7 +512,7 @@ intervention_table #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The response effect on the reproduction number as a multiplier.
-#md # A value below one is the factor by which the response lowers the reproduction number once the scale-up completes.
+#md # A value below one is the factor by which the response lowers the reproduction number once the ramp is complete.
 #md # </figcaption>
 #md # </figure>
 #md # ```

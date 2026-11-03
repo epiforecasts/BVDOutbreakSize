@@ -1304,7 +1304,7 @@ rt_stream_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The reproduction number at each release with one panel per dataset, on a shared calendar axis and the fixed range of the figure above.
-#md # A dataset the report also fits alone carries that fit's current-model band, and confirmed deaths carries none.
+#md # A dataset the report also fits alone carries that fit's current-model band.
 #md # Only the most recent releases published these estimates, so the panels span a shorter window than the overview.
 #md # </figcaption>
 #md # </figure>
