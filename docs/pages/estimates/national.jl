@@ -600,8 +600,7 @@ obs_delay_pair_fig #hide
 # ### Surveillance parameters
 #
 # The surveillance parameters cover the reporting fractions, the stream dispersions, the laboratory pipeline and the isolation and recovered streams.
-# The six count streams each have a negative-binomial dispersion, partially pooled around a population-level dispersion $k$ (see [surveillance dispersion](@ref "Surveillance dispersion")).
-# The four daily treatment-centre flows share a separate flow dispersion $k_{\text{flow}}$, centred on the treatment-centre stock dispersion $k_{\text{iso}}$.
+# The stream dispersions are defined in [surveillance dispersion](@ref "Surveillance dispersion") and the flow dispersion in [treatment-centre flow](@ref "Treatment-centre flow").
 
 #md # ```@raw html
 #md # <details><summary>Surveillance-parameter summary table</summary>

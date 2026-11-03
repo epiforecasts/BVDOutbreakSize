@@ -353,9 +353,7 @@ validation_stopped_fig #hide
 #
 # Nothing is dropped from the archive itself, and the score and overlay files in the data directory record everything that was scored.
 #
-# The symptom-onset stream is scored on the new reported count each vintage adds, because every vintage rereads the whole figure.
-# Its printed total therefore moves with the scan error as well as with late reporting, and on some vintages the reread total falls.
-# A window containing a falling vintage is left unscored, as the [province scores](@ref "Forecast by province across releases") do for a window holding a harmonisation-break day.
+# The symptom-onset stream is scored on the new reported count each vintage adds (see [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and forecast")), and on some vintages the reread total falls.
 # Read the onset row's skill against the baseline rather than its coverage, and as resting on a handful of windows.
 
 #md # ```@raw html
@@ -755,10 +753,6 @@ frozen_overlay_fig #hide
 #md # </figcaption>
 #md # </figure>
 #md # ```
-
-# The frozen re-fits below freeze the renewal data to an earlier cut-off and re-fit, so that a change driven by newer data can be distinguished from one driven by a change of method.
-# Every re-fit uses the headline sampler settings.
-# The one-week-back re-fit keeps the province patches, and the re-fits at earlier cut-offs are single-population.
 
 #md # ```@raw html
 #md # <details><summary>Freeze the renewal data to a cut-off and re-fit</summary>
