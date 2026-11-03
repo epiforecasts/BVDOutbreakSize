@@ -80,7 +80,8 @@ end
     ## An origin whose fraction would pass one sends everything it generates.
     @test all(==(1.0), E[3, :])
     ## With no ramp effect the fraction is flat over the days.
-    @test all(q -> allequal(E[q, :]), axes(importation_epsilon_matrix(0.1, dev, 0.0, ramp), 1))
+    E0 = importation_epsilon_matrix(0.1, dev, 0.0, ramp)
+    @test all(allequal, eachrow(E0))
 end
 
 @testitem "convolve_pmf: mass, identity and symmetry" setup = [
