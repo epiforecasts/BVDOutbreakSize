@@ -1220,8 +1220,7 @@ cfr_prior_fig #hide
 # These are read from the situation-report Tableau 6 patient-movement table.
 # Two parallel processes act on each patient.
 # A clinical course governs how long a patient occupies a bed and how they leave it, and so sets the total occupancy and every discharge flow.
-# A laboratory label runs alongside it and only relabels a patient from suspected to confirmed.
-# This carves the suspect/confirmed split of the census.
+# A laboratory label runs alongside it and only relabels a patient from suspected to confirmed, which sets the suspected and confirmed split of the census.
 # Death is clinical and happens under either label, so a true case may die before its test confirms it.
 # Separating the two keeps the operational churn in the suspected pool out of the part of the occupancy the infection estimate leans on.
 #
@@ -1241,7 +1240,7 @@ cfr_prior_fig #hide
 # The death-stay prior is the admission-to-death delay from the line-list reanalysis [bdbv_linelist_analysis_2026](@cite), and the non-BVD rule-out stay is its own delay, centred on the report-to-receipt laboratory turnaround with wider priors.
 # The stays are discretised delays with priors on the admission delay mean $\mathrm{Normal}(2,\ 1)$ and SD $\mathrm{Normal}(1.5,\ 1)$, the death-stay Gamma shape $\mathrm{Normal}(2.15,\ 0.60)$ and scale $\mathrm{Normal}(3.91,\ 1.38)$, the recovery-stay mean $\mathrm{Normal}(14,\ 5)$ and SD $\mathrm{Normal}(8,\ 4)$, and the rule-out-stay mean $\mathrm{Normal}(4.5,\ 2)$ and SD $\mathrm{Normal}(4,\ 1.5)$, each truncated below.
 #
-# Occupancy is the running balance of these latent events rather than a length-of-stay convolution: each day the bed stock is yesterday's stock plus the day's admissions less the day's deaths, recoveries, rule-outs and absconds.
+# Occupancy is the running balance of these latent events rather than a length-of-stay convolution.
 # The abscond outflow drains the suspected pool at a small daily fraction $\kappa$ of the previous day's suspected occupancy,
 #
 # ```math
@@ -1258,8 +1257,7 @@ cfr_prior_fig #hide
 # with $A = A_{\text{bvd}} + A_{\text{bg}}$.
 # The stay lives entirely in the discharge flows, each an admission stream convolved with its outcome density.
 #
-# Absconding competes with the clinical exits rather than adding to them.
-# The length-of-stay densities integrate to one, so the clinical schedules alone already account for every admitted patient, and an unthinned schedule plus an abscond outflow discharges more than was admitted.
+# Absconding competes with the clinical exits rather than adding to them, since the stay densities integrate to one and already discharge every admitted patient.
 # Each discharge flow is therefore thinned by the abscond survival over the stay, written here for deaths,
 #
 # ```math
@@ -1270,14 +1268,12 @@ cfr_prior_fig #hide
 # ```
 #
 # and likewise for recoveries and rule-outs.
-# The discount runs on stay-day rather than calendar day: a patient resident ten days faces ten days of abscond hazard, not one for every day of the grid.
+# The discount runs on stay-day rather than calendar day.
 # Only the suspected pool absconds, so $U_{t,j} = \prod_{u<j}(1 - h_{\text{conf},\,t+u})$ is the probability a cohort admitted on day $t$ is still unconfirmed at stay-day $j$, with $h_{\text{conf}}$ the in-care confirmation hazard, and the discount stops once a cohort is confirmed.
 # Background admissions are never confirmed, so $U \equiv 1$ there and the rule-out schedule thins by $(1-\kappa)^d$.
 #
-# In-care deaths combine the two labels.
-# A true case who dies before its test returns is a suspected death, and one who dies after is a confirmed death.
-# The report records the two together.
-# The death flow is therefore the in-care fatality applied to the BVD inflow over the admission-to-death stay, scored against the combined deaths directly and never gated by confirmation.
+# The report records in-care deaths under both labels together.
+# The death flow is therefore the in-care fatality applied to the BVD inflow over the admission-to-death stay, scored against the combined deaths and never gated by confirmation.
 # The in-care fatality is a sampled log-odds modifier $\beta_{\text{iso}}$ on the infection case-fatality ratio:
 #
 # ```math
@@ -1286,14 +1282,14 @@ cfr_prior_fig #hide
 # ```
 #
 # It is a fatality conditional on admission rather than a causal treatment effect, sitting below the infection case-fatality ratio where care lowers mortality.
-# It is reported with $\beta_{\text{iso}}$ and the overall length of stay (the death/recovery mixture mean).
+# We report it with $\beta_{\text{iso}}$ and the mean length of stay over deaths and recoveries.
 # The priors are $p_{\text{iso}} \sim \mathrm{Beta}(2,\ 2)$, $\delta_{\text{iso}} \sim \mathrm{Normal}^{+}(0,\ 0.75)$, $\beta_{\text{iso}} \sim \mathrm{Normal}(0,\ 0.5)$ and $\kappa \sim \mathrm{Normal}^{+}(0.01,\ 0.01)$.
 #
 # The laboratory label carves the census into a confirmed and a suspected sub-stock.
 # Confirmation relabels a true case already in a bed at the daily hazard $\rho\,\tau_{\text{test}}\,p_{\text{pos},t}$, with an in-care rate modifier $\log \rho \sim \mathrm{Normal}(0,\ 0.5)$.
 # The community confirmation hazard $\tau_{\text{test}}\,p_{\text{pos},t}$ (the share of suspects routed to the laboratory times the day's positivity) is borrowed from the confirmed-case pipeline rather than re-estimated.
-# The in-care confirmed stock is therefore a subset of the total confirmed by construction.
-# The confirmed-in-care stock is tracked by admission cohort.
+# The in-care confirmed stock is therefore a subset of the total confirmed.
+# It is tracked by admission cohort.
 # Each true-case admission carries two clocks from the day it enters a bed, a confirmation clock and a clinical-stay clock.
 # It counts toward the confirmed census only once it has been confirmed and while it is still in a bed,
 #
@@ -1309,7 +1305,7 @@ cfr_prior_fig #hide
 #     \bigl(1 - \rho\,\tau_{\text{test}}\,p_{\text{pos},j}\bigr),
 # ```
 #
-# a cumulative product along the cohort's age rather than a fixed distribution because the hazard is time-varying, and $S_{\text{clin}}$ the clinical-stay survival,
+# a product over the cohort's age because the hazard varies in time, and $S_{\text{clin}}$ the clinical-stay survival,
 #
 # ```math
 # S_{\text{clin}}(d) = 1 - \sum_{j=0}^{d} (1 - \kappa)^j
@@ -1317,19 +1313,17 @@ cfr_prior_fig #hide
 #     + (1 - \text{CFR}_{\text{iso}})\, f^{\text{rec}}_j\bigr),
 # ```
 #
-# the probability an admitted case is still in a bed after $d$ days, the discharge-complement of the death/recovery mixture built from the same admission-to-death and admission-to-recovery stays the discharge flows use, thinned by the abscond survival $(1 - \kappa)^j$.
+# the probability an admitted case is still in a bed after $d$ days, built from the death and recovery stays the discharge flows use and thinned by the abscond survival $(1 - \kappa)^j$.
 #
-# Cohort tracking is needed because deaths and recoveries are observed combined across the two labels, so the data do not say which departing patients had already been confirmed.
-# Carrying the confirmation and stay clocks separately excludes cases that die before their test returns from the confirmed pool.
+# Cohort tracking is needed because deaths and recoveries are reported across both labels, so the data do not say which departing patients had been confirmed.
 # The suspected sub-stock is the remainder $O_{\text{susp},t} = D_t - O_{\text{conf},t}$, holding the not-yet-confirmed BVD occupancy together with the non-case occupancy awaiting rule-out.
-# Recoveries among the confirmed (the published recovery total) are the confirmed subset of recoveries and are modelled as a separate confirmed-recovery stream (below).
+# The published recoveries among the confirmed are a separate stream, [recovered among confirmed](@ref "Recovered among confirmed").
 #
-# Capacity enters only as a censored observation.
-# The latent demand is never capped, because the demand is the quantity of interest.
+# Capacity enters only as a censored observation, and the latent demand is never capped.
 # The log bed capacity is a local linear trend on weekly knots, with the weekly growth following a random walk.
 # Capacity can slow or fall where the data show a sustained decline.
-# The growth starts at $g_0 \sim \mathrm{N}(0, 0.05)$ and its weekly steps have SD $\sigma_{\text{growth}} \sim \mathrm{N}^{+}(0, 0.05)$.
-# Capacity first moves over the first week, at the starting growth plus the first step, so we sample that first week's growth directly from its prior $\mathrm{N}\bigl(0, \sqrt{0.05^2 + \sigma_{\text{growth}}^2}\bigr)$.
+# The growth starts at $g_0 \sim \mathrm{Normal}(0, 0.05)$ and its weekly steps have SD $\sigma_{\text{growth}} \sim \mathrm{Normal}^{+}(0, 0.05)$.
+# Capacity first moves over the first week, at the starting growth plus the first step, so we sample that week's growth directly from its prior $\mathrm{Normal}\bigl(0, \sqrt{0.05^2 + \sigma_{\text{growth}}^2}\bigr)$.
 # The starting capacity is $C_0 \sim \mathrm{LogNormal}(\log 450,\ 0.42)$.
 # It is pinned by the implied bed count, the reported occupancy divided by the reported occupancy rate, from 9 June.
 # The occupied beds are scored as the latent demand right-censored at the recorded implied capacity, or at the observed count where that is higher.
@@ -1351,11 +1345,10 @@ cfr_prior_fig #hide
 # \log\bigl(1/\sqrt{k_{\text{flow}}}\bigr) \sim \mathrm{Normal}\bigl(\log(1/\sqrt{k_{\text{iso}}}),\ \tfrac{1}{2}\log 3\bigr).
 # ```
 #
-# Here $1/\sqrt{k}$ is the coefficient of variation that overdispersion adds to a count beyond Poisson, so the prior is on the log ratio of the flows' extra coefficient of variation to the stocks'.
-# A ratio of one gives the flows the stock dispersion.
-# We assume the ratio lies within a factor of three either way with 95% prior probability.
+# Here $1/\sqrt{k}$ is the coefficient of variation that overdispersion adds beyond Poisson.
+# The prior therefore puts the flows' extra coefficient of variation within a factor of three of the stocks' either way with 95% probability.
 # The implied capacity is carried by a NegBinomial of its own.
-# Demand above a saturated capacity is only partially identified, since the occupancy reveals that demand was at least the beds filled but not how much more.
+# Demand above a saturated capacity is only partially identified, since the occupancy shows only that demand was at least the beds filled.
 # The bed shortfall above capacity is therefore informed by the demand model and its priors rather than measured.
 # The model exposes the cut-off occupancy on the reported scale (the demand plus the reclassification offset, floored at zero) and the cut-off bed demand (the need under unconstrained supply).
 # It also exposes the bed shortfall (the bed demand above the national beds) and the utilisation (the modelled occupancy over the beds).
@@ -1371,7 +1364,7 @@ cfr_prior_fig #hide
 # The early window, with only the total occupancy reported, fits the backbone alone while the latent admissions still drive the stock.
 # The split is scored only where the borrowed confirmation hazard is non-zero, that is, where the laboratory pipeline of the full model supplies it.
 #
-# One reporting artefact is modelled, on identified days only: an overnight reclassification of the total.
+# One reporting artefact is modelled, an overnight reclassification of the total on identified days.
 # The published start-of-day in-bed count is differenced against the previous report day's occupancy, and days whose gap exceeds a threshold are listed by hand as break days.
 # One step is fitted per listed day, with a prior centred on zero with SD 25 beds, so the fit can attribute part of a gap to genuine change in demand.
 # The steps accumulate into a persistent additive offset $\Delta_t$ on the modelled total occupancy, carried forward to every later day.
@@ -1387,7 +1380,8 @@ cfr_prior_fig #hide
 #
 # A suspect is admitted before testing, so the admissions do not carry the confirmation contrast of the case composition.
 #
-# Each patch takes a daily share $W_{p,t}$ of the non-BVD admissions.
+# We assume a province's admission of non-BVD suspects can differ from its share of them and can change as treatment centres open.
+# Each patch therefore takes a daily share $W_{p,t}$ of the non-BVD admissions.
 # It is the patch's share $w_p$ of the non-BVD suspects (defined with the province compositions below), moved by a static deviation and a weekly random walk:
 #
 # ```math
@@ -1406,8 +1400,7 @@ cfr_prior_fig #hide
 # We assume a province admits between half and twice the national share of its non-BVD suspects, and the level prior keeps two SDs of a deviation within twofold at its median scale.
 # The walk $\boldsymbol{\eta}$ is zero on the first day the province admissions are printed and has a knot $k$ every seven days to the last such day.
 # It is interpolated linearly between the knots and held flat outside them.
-# With $\tau_{\text{bga}} = \sigma_{\text{bga}} = 0$ each patch admits the share of the non-BVD suspects it reports, and without province admissions data $W_{p,t} = w_p$.
-# We assume a province's admission of non-BVD suspects can differ from its share of them and can change as treatment centres open.
+# Without province admissions data $W_{p,t} = w_p$.
 # Each patch's approximate stock is its BVD admissions through the clinical-stay survival plus its non-BVD admissions through the rule-out stay, and the national demand $D_t$ is shared out in proportion:
 #
 # ```math
@@ -1418,7 +1411,7 @@ cfr_prior_fig #hide
 # D_{p,t} = D_t\, \frac{\tilde O_{p,t}}{\sum_q \tilde O_{q,t}}.
 # ```
 #
-# $S_{\text{ro}}$ is the rule-out cohort's exact survival under the running balance (36), absconding included.
+# $S_{\text{ro}}$ is the rule-out cohort's exact survival under the running balance of Equation (36), absconding included.
 # The confirmation relabelling and the absconding of unconfirmed cases are shared across patches, so they cancel from the shares only approximately.
 # Each patch's capacity on day $t$ is a share $s_{p,t}$ of the national capacity walk.
 # Beds are allocated in response to cases, so we centre the share on the patch's modelled cumulative admissions to date, BVD and background together:
@@ -1435,7 +1428,7 @@ cfr_prior_fig #hide
 # A shift shared by every patch cancels in the normalisation, so the deviations sum to zero and no patch is a reference.
 # The floor $a_0$ is one admission, so a patch with no admissions yet still holds some beds.
 # The deviations are static, and the share moves over time only through its centre.
-# On a day $j$ on which the provinces $\mathcal{P}_j$ print, taken in patch order, the printed counts are allocated across them by the stick-breaking of equation (54):
+# On a day $j$ on which the provinces $\mathcal{P}_j$ print, taken in patch order, the printed counts are allocated across them by the stick-breaking of Equation (54):
 #
 # ```math
 # O_{p,j} \sim \mathrm{BetaBinomial}\Bigl(
