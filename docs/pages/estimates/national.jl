@@ -336,7 +336,7 @@ start_date_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The posterior of the outbreak start date (left) and the joint posterior of the outbreak age and the early doubling time (right).
+#md # The posterior of the outbreak start date (left) and the joint posterior of the outbreak age and the doubling time at the cut-off (right).
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -479,7 +479,7 @@ rt_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Daily reproduction number from the genetic bound to the cut-off, with 30%, 60% and 90% credible ribbons and about a hundred sampled trajectories.
+#md # Daily reproduction number from the renewal start to the cut-off, with 30%, 60% and 90% credible ribbons and about a hundred sampled trajectories.
 #md # Red lines mark the start (dashed, the first situation report on 18 May 2026) and end (dotted) of the three-week response scale-up.
 #md # Grey dashed lines mark a reproduction number of one and the cut-off.
 #md # </figcaption>
@@ -558,7 +558,7 @@ obs_delay_summary #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The delays from onset to report, death and hospitalisation abroad, the report-to-receipt delay and the mean lengths of stay.
+#md # The delays from onset to report, onset to admission, admission to death and onset to detection abroad, the report-to-receipt delay and the mean lengths of stay.
 #md # The lengths of stay are the isolation stay of a BVD patient, the rule-out stay of a non-BVD patient and the delay from confirmation to recovery.
 #md # </figcaption>
 #md # </figure>
@@ -878,7 +878,7 @@ no_onward_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Deaths still expected among people infected by the cut-off, net of those already observed (left), and the projected total deaths (right).
+#md # Deaths still expected among people infected by the cut-off, net of the deaths the model expects by the cut-off (left), and the observed deaths plus those still expected (right).
 #md # The right axis starts at the observed death count.
 #md # </figcaption>
 #md # </figure>
