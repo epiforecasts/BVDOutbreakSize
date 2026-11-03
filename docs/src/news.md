@@ -315,6 +315,8 @@ A minor version: every affected province is its own patch, the importation kerne
   They run by default, the benchmark workflow's run included, and `BVD_BENCH_ZONE=false` leaves them out of a local run.
   The zone tests and the benchmark build that dataset from one shared fixture.
   The kernels take their inputs from the zone model's own draw construction, so they follow any change to the model.
+- The repository docs, workflow comments, Taskfile descriptions and script comments drop filler, emphasis caps and development narrative (#1196).
+  Fitted values do not change.
 
 ### Fixed
 
