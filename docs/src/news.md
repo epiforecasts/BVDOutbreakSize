@@ -11,6 +11,8 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Performance
 
+- The treatment flow no longer re-splits each patch's BVD admissions by weights of one when the per-patch reports carry the suspected-case detection (#1212).
+  The model does not change.
 - The sum-to-zero bases the patch submodels build on every evaluation pass no derivative, so Mooncake no longer tapes them (#1213).
   The model does not change.
 - Hand-written Mooncake rules for the health-zone pre-grid convolution and vintage window weights keep the per-draw rebuild of the zone delays to about 5% of the full zone gradient, from 24% without them (local timings in #1085).
