@@ -851,7 +851,7 @@ cfr_prior_fig #hide
 #
 # #### Shared observation submodels
 #
-# Several parameters are assumed shared across the streams: the surveillance dispersion, the ascertainment fractions, the laboratory testing priors and the traveller volume.
+# The streams share the surveillance dispersion, the ascertainment fractions, the laboratory priors and the traveller volume.
 #
 # ##### Surveillance dispersion
 #
@@ -884,10 +884,10 @@ cfr_prior_fig #hide
 
 # ##### Ascertainment
 #
-# Two surveillance systems detect cases: DRC passive community surveillance (the reported suspected-case count) and Uganda's point-of-entry / hospital surveillance (the exported-case count).
+# Two surveillance systems detect cases, DRC passive community surveillance (the suspected cases) and Uganda's point-of-entry and hospital surveillance (the exported cases).
 # Each captures a fraction of the true cases passing through it.
-# The two ascertainment fractions $p_{\text{DRC}}$ and $p_{\text{Uganda}}$ share a logit-scale hyperprior with mean $\mu$ and pooling strength $\tau$, centred on a reporting fraction of $75\%$.
-# This reflects the active case-finding of a declared Ebola response rather than baseline passive surveillance:
+# The two ascertainment fractions $p_{\text{DRC}}$ and $p_{\text{Uganda}}$ share a logit-scale hyperprior with mean $\mu$ and pooling strength $\tau$.
+# It is centred on a reporting fraction of $75\%$, which reflects the active case-finding of a declared Ebola response rather than baseline passive surveillance:
 #
 # ```math
 # \mu \sim \mathrm{Normal}(\mathrm{logit}(0.75),\ 1),
@@ -918,19 +918,18 @@ cfr_prior_fig #hide
 
 # ##### Laboratory priors
 #
-# We model the process of confirming cases via laboratory testing.
 # The testing fraction $\tau_{\text{test}}$ is the share of suspected cases routed to the laboratory.
 # A truly BVD specimen tests positive with the assay sensitivity $s$, and a non-BVD specimen tests positive with the false-positive rate $1 - \mathrm{spec}$ from the assay specificity.
-# We assume that more severe cases, more likely to be Ebola, are preferentially tested.
-# This is captured by an enrichment factor $\delta_0$ that raises the tested BVD share above the suspect-pool composition early on and relaxes towards it as testing broadens.
+# We assume more severe cases, which are more likely to be BVD, are tested preferentially.
+# An enrichment factor $\delta_0$ raises the tested BVD share above the suspect-pool composition early on and relaxes towards it as testing broadens.
 # The death analysed volume scales the case analysed volume by the suspected death-to-case ratio, so the specimens per suspected death $\tau_{\text{death}}$ are not a share and may exceed one for the same reason the case side is not bounded by the suspect count.
 # Confirmation runs on the altona RealStar Filovirus Screen RT-PCR [rieger2016](@cite) rather than the Zaire-specific GeneXpert Ebola assay.
 # The GeneXpert assay does not reliably detect Bundibugyo virus [cepheid_xpert_ebola_ifu, pinsky2015, semper2016](@cite).
-# A single assay draw is sensitive to about 85%, but a suspect is confirmed or ruled out through repeat control tests rather than one draw.
-# The effective process sensitivity is therefore higher, about 98% with two controls, so we put the sensitivity prior's mode near there (97%, mean 95%) and give it a tight spread.
+# A single assay draw has a sensitivity of about 85%, but a suspect is confirmed or ruled out through repeat control tests.
+# With two controls the process sensitivity is about 98%, so the sensitivity prior has its mode at 97% (mean 95%) and a tight spread.
 # The specificity is high but imperfect.
-# The severity enrichment is moderate and one-sided (triage upsamples BVD, never down).
-# The death testing-intensity scaling is a tight log-normal centred on one, since no death-testing data grounds it:
+# The severity enrichment is moderate and one-sided, since triage can raise the tested BVD share but never lower it.
+# The death testing-intensity scaling is centred on one with a tight spread, since no death-testing data inform it:
 #
 # ```math
 # \tau_{\text{test}} \sim \mathrm{Beta}(5,\ 2), \qquad
@@ -1065,12 +1064,11 @@ cfr_prior_fig #hide
 
 # ##### Traveller volume
 #
-# The number of people crossing from the source area to Uganda each day sets the travel rate in the exports likelihood.
-# We treat it as an estimated quantity rather than a fixed input.
+# The number of people crossing from the source area to Uganda each day sets the travel rate in the exports likelihood, and we estimate it.
 # McCabe et al. Table 3 records mean weekly passenger counts across seven points of entry.
-# The Ituri-side daily total of $1871$ is a sample mean across roughly $15$-$21$ point-of-entry-weeks.
-# We use a Normal prior centred on $1871$ with SD $200$ ($\approx 10\%$ CV), truncated at zero, covering point-of-entry variation and the sitrep sampling uncertainty.
-# The source population is kept fixed (census):
+# The Ituri-side daily total of $1871$ is a sample mean over roughly 15 to 21 point-of-entry-weeks.
+# Its prior is a Normal centred on $1871$ with SD $200$ (a coefficient of variation of about 10%), truncated at zero, to cover point-of-entry variation and sampling uncertainty.
+# The source population is fixed at its census value:
 #
 # ```math
 # N_{\text{travel}} \sim \mathrm{Normal}^{+}(1871,\ 200). \tag{32}
@@ -1113,17 +1111,15 @@ cfr_prior_fig #hide
 # ```math
 # \lambda_{\text{bg},t} = \lambda_\mu \exp\!\bigl(w_t\bigr), \qquad
 # w_t = \mathrm{interp}\Bigl(\sigma_{\text{bg}} \sum_{s < k} z_s\Bigr),
-# \qquad z_s \sim \mathcal N(0, 1),
+# \qquad z_s \sim \mathrm{Normal}(0, 1).
 # ```
 #
-# This rate is gated to zero before the surveillance onset, a report-to-receipt lead before the first suspected-case report, since the background does not exist before surveillance began.
+# The rate is zero before the surveillance onset, a report-to-receipt lead before the first suspected-case report.
 # It ramps in linearly over the first seven days after the onset.
 # It is shared, with one innovation SD $\sigma_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 0.3)$, between the suspected-case and suspected-death streams.
-# The background is degenerate with outbreak size, so a wide $\sigma_{\text{bg}}$ would let single windows absorb arbitrary suspected counts, and the half-normal keeps the time variation a small perturbation of the baseline.
-# Weekly knots, as in the reproduction-number walk, keep the background a gentle drift over a small number of innovations.
-# The baseline carries a half-normal $\mathrm{Normal}^{+}(0, 20)$ prior on the natural scale.
-# A log-scale level would have a heavy right tail the background/outbreak-size degeneracy could exploit, whereas the natural-scale half-normal bounds it.
-# It is wide enough that the laboratory positivity (only $210/755 \approx 0.28$ of specimens analysed to 28 May are positive) identifies the background.
+# The background is degenerate with outbreak size, so this tight prior and the weekly knots keep its time variation a small drift around the baseline.
+# The baseline $\lambda_\mu$ has a $\mathrm{Normal}^{+}(0, 20)$ prior on the natural scale, which bounds the right tail a log-scale prior would leave open to the same degeneracy.
+# The laboratory positivity identifies the background, since only $210/755 \approx 0.28$ of specimens analysed to 28 May are positive.
 # The background is inferred to be the majority of the suspect pool.
 # The daily expected suspected case count is
 #
@@ -1131,7 +1127,7 @@ cfr_prior_fig #hide
 # c_t = p_{\text{DRC}}\, \text{bvd}_t + \lambda_{\text{bg},t}.
 # ```
 #
-# With the province compositions, each patch $p$ detects a BVD onset as a suspected case with its own probability $p_{\text{DRC},p}$, defined with the [province compositions](@ref methods-province-compositions) below.
+# Each patch $p$ detects a BVD onset as a suspected case with its own probability $p_{\text{DRC},p}$, defined with the [province compositions](@ref methods-province-compositions) below.
 # Write $\text{bvd}_{p,t}$ for patch $p$'s onsets through $f_{\text{rep}}$.
 # The onsets in $\text{bvd}_t$ are then each patch's weighted by $p_{\text{DRC},p} / p_{\text{DRC}}$, so that
 #
@@ -1149,17 +1145,16 @@ cfr_prior_fig #hide
 #     \sum_{t = d_{i-1}+1}^{d_i} c_t,\ k_{\text{cases}}\Bigr). \tag{33}
 # ```
 #
-# We freeze the national cumulative suspected total at 26 May and instead fit the daily new-suspect count that the confirmed-based reports publish (the daily new-suspect count $a_j$ on report day $t_j$, from 4 June to the cut-off).
-# This is a genuine daily incidence, not a cumulative total.
-# It is scored against the modelled daily suspected count $c_{t_j}$ on that day directly (a single-day mean, not a between-vintage sum), with the same dispersion $k_{\text{cases}}$:
+# The cumulative suspected total is frozen at 26 May (see [Data](@ref methods-data)).
+# From 4 June to the cut-off the daily new-suspect count $a_j$ on report day $t_j$ is scored against the modelled daily count $c_{t_j}$ on that day, a single-day mean rather than a between-vintage sum, with the same dispersion:
 #
 # ```math
 # a_j \sim \mathrm{NegBinomial}(c_{t_j},\ k_{\text{cases}}).
 # ```
 #
-# The daily report days fall strictly after the frozen cumulative series ends, so the two suspected likelihoods cover disjoint days and do not double-count.
-# The suspected-death stream is fitted the same way.
-# The cumulative suspected-death total freezes at 26 May, and the daily new suspected-death count ("cas suspects du jour N (M deces)", 7 June to 11 July) is scored against the modelled daily suspected-death count on each report day with a NegBinomial with the suspected-death dispersion $k_{\text{deaths}}$.
+# The daily report days fall after the frozen cumulative series ends, so the two suspected likelihoods do not double-count.
+# The suspected deaths are fitted the same way.
+# Their cumulative total freezes at 26 May, and the daily new suspected-death count from 7 June to 11 July is scored against the modelled daily suspected deaths with a NegBinomial with dispersion $k_{\text{deaths}}$.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: reported_cases_model</summary>
@@ -1183,8 +1178,7 @@ cfr_prior_fig #hide
 # These are read from the situation-report Tableau 6 patient-movement table.
 # Two parallel processes act on each patient.
 # A clinical course governs how long a patient occupies a bed and how they leave it, and so sets the total occupancy and every discharge flow.
-# A laboratory label runs alongside it and only relabels a patient from suspected to confirmed.
-# This carves the suspect/confirmed split of the census.
+# A laboratory label runs alongside it and only relabels a patient from suspected to confirmed, which sets the suspected and confirmed split of the census.
 # Death is clinical and happens under either label, so a true case may die before its test confirms it.
 # Separating the two keeps the operational churn in the suspected pool out of the part of the occupancy the infection estimate leans on.
 #
@@ -1204,7 +1198,7 @@ cfr_prior_fig #hide
 # The death-stay prior is the admission-to-death delay from the line-list reanalysis [bdbv_linelist_analysis_2026](@cite), and the non-BVD rule-out stay is its own delay, centred on the report-to-receipt laboratory turnaround with wider priors.
 # The stays are discretised delays with priors on the admission delay mean $\mathrm{Normal}(2,\ 1)$ and SD $\mathrm{Normal}(1.5,\ 1)$, the death-stay Gamma shape $\mathrm{Normal}(2.15,\ 0.60)$ and scale $\mathrm{Normal}(3.91,\ 1.38)$, the recovery-stay mean $\mathrm{Normal}(14,\ 5)$ and SD $\mathrm{Normal}(8,\ 4)$, and the rule-out-stay mean $\mathrm{Normal}(4.5,\ 2)$ and SD $\mathrm{Normal}(4,\ 1.5)$, each truncated below.
 #
-# Occupancy is the running balance of these latent events rather than a length-of-stay convolution: each day the bed stock is yesterday's stock plus the day's admissions less the day's deaths, recoveries, rule-outs and absconds.
+# Occupancy is the running balance of these latent events rather than a length-of-stay convolution.
 # The abscond outflow drains the suspected pool at a small daily fraction $\kappa$ of the previous day's suspected occupancy,
 #
 # ```math
@@ -1221,8 +1215,7 @@ cfr_prior_fig #hide
 # with $A = A_{\text{bvd}} + A_{\text{bg}}$.
 # The stay lives entirely in the discharge flows, each an admission stream convolved with its outcome density.
 #
-# Absconding competes with the clinical exits rather than adding to them.
-# The length-of-stay densities integrate to one, so the clinical schedules alone already account for every admitted patient, and an unthinned schedule plus an abscond outflow discharges more than was admitted.
+# Absconding competes with the clinical exits rather than adding to them, since the stay densities integrate to one and already discharge every admitted patient.
 # Each discharge flow is therefore thinned by the abscond survival over the stay, written here for deaths,
 #
 # ```math
@@ -1233,14 +1226,13 @@ cfr_prior_fig #hide
 # ```
 #
 # and likewise for recoveries and rule-outs.
-# The discount runs on stay-day rather than calendar day: a patient resident ten days faces ten days of abscond hazard, not one for every day of the grid.
-# Only the suspected pool absconds, so $U_{t,j} = \prod_{u<j}(1 - h_{\text{conf},\,t+u})$ is the probability a cohort admitted on day $t$ is still unconfirmed at stay-day $j$, with $h_{\text{conf}}$ the in-care confirmation hazard, and the discount stops once a cohort is confirmed.
+# The discount runs on stay-day rather than calendar day.
+# Only the suspected pool absconds.
+# $U_{t,j} = \prod_{u<j}(1 - h_{\text{conf},\,t+u})$ is the probability a cohort admitted on day $t$ is still unconfirmed at stay-day $j$, with $h_{\text{conf}}$ the in-care confirmation hazard, so the discount stops once a cohort is confirmed.
 # Background admissions are never confirmed, so $U \equiv 1$ there and the rule-out schedule thins by $(1-\kappa)^d$.
 #
-# In-care deaths combine the two labels.
-# A true case who dies before its test returns is a suspected death, and one who dies after is a confirmed death.
-# The report records the two together.
-# The death flow is therefore the in-care fatality applied to the BVD inflow over the admission-to-death stay, scored against the combined deaths directly and never gated by confirmation.
+# The report records in-care deaths under both labels together.
+# The death flow is therefore the in-care fatality applied to the BVD inflow over the admission-to-death stay, scored against the combined deaths and never gated by confirmation.
 # The in-care fatality is a sampled log-odds modifier $\beta_{\text{iso}}$ on the infection case-fatality ratio:
 #
 # ```math
@@ -1249,14 +1241,14 @@ cfr_prior_fig #hide
 # ```
 #
 # It is a fatality conditional on admission rather than a causal treatment effect, sitting below the infection case-fatality ratio where care lowers mortality.
-# It is reported with $\beta_{\text{iso}}$ and the overall length of stay (the death/recovery mixture mean).
+# We report it with $\beta_{\text{iso}}$ and the mean length of stay over deaths and recoveries.
 # The priors are $p_{\text{iso}} \sim \mathrm{Beta}(2,\ 2)$, $\delta_{\text{iso}} \sim \mathrm{Normal}^{+}(0,\ 0.75)$, $\beta_{\text{iso}} \sim \mathrm{Normal}(0,\ 0.5)$ and $\kappa \sim \mathrm{Normal}^{+}(0.01,\ 0.01)$.
 #
 # The laboratory label carves the census into a confirmed and a suspected sub-stock.
 # Confirmation relabels a true case already in a bed at the daily hazard $\rho\,\tau_{\text{test}}\,p_{\text{pos},t}$, with an in-care rate modifier $\log \rho \sim \mathrm{Normal}(0,\ 0.5)$.
 # The community confirmation hazard $\tau_{\text{test}}\,p_{\text{pos},t}$ (the share of suspects routed to the laboratory times the day's positivity) is borrowed from the confirmed-case pipeline rather than re-estimated.
-# The in-care confirmed stock is therefore a subset of the total confirmed by construction.
-# The confirmed-in-care stock is tracked by admission cohort.
+# The in-care confirmed stock is therefore a subset of the total confirmed.
+# It is tracked by admission cohort.
 # Each true-case admission carries two clocks from the day it enters a bed, a confirmation clock and a clinical-stay clock.
 # It counts toward the confirmed census only once it has been confirmed and while it is still in a bed,
 #
@@ -1272,7 +1264,7 @@ cfr_prior_fig #hide
 #     \bigl(1 - \rho\,\tau_{\text{test}}\,p_{\text{pos},j}\bigr),
 # ```
 #
-# a cumulative product along the cohort's age rather than a fixed distribution because the hazard is time-varying, and $S_{\text{clin}}$ the clinical-stay survival,
+# a product over the cohort's age because the hazard varies in time, and $S_{\text{clin}}$ the clinical-stay survival,
 #
 # ```math
 # S_{\text{clin}}(d) = 1 - \sum_{j=0}^{d} (1 - \kappa)^j
@@ -1280,19 +1272,18 @@ cfr_prior_fig #hide
 #     + (1 - \text{CFR}_{\text{iso}})\, f^{\text{rec}}_j\bigr),
 # ```
 #
-# the probability an admitted case is still in a bed after $d$ days, the discharge-complement of the death/recovery mixture built from the same admission-to-death and admission-to-recovery stays the discharge flows use, thinned by the abscond survival $(1 - \kappa)^j$.
+# the probability an admitted case is still in a bed after $d$ days, built from the death and recovery stays the discharge flows use and thinned by the abscond survival $(1 - \kappa)^j$.
 #
-# Cohort tracking is needed because deaths and recoveries are observed combined across the two labels, so the data do not say which departing patients had already been confirmed.
-# Carrying the confirmation and stay clocks separately excludes cases that die before their test returns from the confirmed pool.
+# Cohort tracking is needed because deaths and recoveries are reported across both labels, so the data do not say which departing patients had been confirmed.
+# Carrying the confirmation and stay clocks separately keeps cases that die before their test returns out of the confirmed pool.
 # The suspected sub-stock is the remainder $O_{\text{susp},t} = D_t - O_{\text{conf},t}$, holding the not-yet-confirmed BVD occupancy together with the non-case occupancy awaiting rule-out.
-# Recoveries among the confirmed (the published recovery total) are the confirmed subset of recoveries and are modelled as a separate confirmed-recovery stream (below).
+# The published recoveries among the confirmed are a separate stream, [recovered among confirmed](@ref "Recovered among confirmed").
 #
-# Capacity enters only as a censored observation.
-# The latent demand is never capped, because the demand is the quantity of interest.
+# Capacity enters only as a censored observation, and the latent demand is never capped.
 # The log bed capacity is a local linear trend on weekly knots, with the weekly growth following a random walk.
 # Capacity can slow or fall where the data show a sustained decline.
-# The growth starts at $g_0 \sim \mathrm{N}(0, 0.05)$ and its weekly steps have SD $\sigma_{\text{growth}} \sim \mathrm{N}^{+}(0, 0.05)$.
-# Capacity first moves over the first week, at the starting growth plus the first step, so we sample that first week's growth directly from its prior $\mathrm{N}\bigl(0, \sqrt{0.05^2 + \sigma_{\text{growth}}^2}\bigr)$.
+# The growth starts at $g_0 \sim \mathrm{Normal}(0, 0.05)$ and its weekly steps have SD $\sigma_{\text{growth}} \sim \mathrm{Normal}^{+}(0, 0.05)$.
+# Capacity first moves over the first week, at the starting growth plus the first step, so we sample that week's growth directly from its prior $\mathrm{Normal}\bigl(0, \sqrt{0.05^2 + \sigma_{\text{growth}}^2}\bigr)$.
 # The starting capacity is $C_0 \sim \mathrm{LogNormal}(\log 450,\ 0.42)$.
 # It is pinned by the implied bed count, the reported occupancy divided by the reported occupancy rate, from 9 June.
 # The occupied beds are scored as the latent demand right-censored at the recorded implied capacity, or at the observed count where that is higher.
@@ -1314,11 +1305,10 @@ cfr_prior_fig #hide
 # \log\bigl(1/\sqrt{k_{\text{flow}}}\bigr) \sim \mathrm{Normal}\bigl(\log(1/\sqrt{k_{\text{iso}}}),\ \tfrac{1}{2}\log 3\bigr).
 # ```
 #
-# Here $1/\sqrt{k}$ is the coefficient of variation that overdispersion adds to a count beyond Poisson, so the prior is on the log ratio of the flows' extra coefficient of variation to the stocks'.
-# A ratio of one gives the flows the stock dispersion.
-# We assume the ratio lies within a factor of three either way with 95% prior probability.
+# Here $1/\sqrt{k}$ is the coefficient of variation that overdispersion adds beyond Poisson.
+# The prior therefore puts the flows' extra coefficient of variation within a factor of three of the stocks' either way with 95% probability.
 # The implied capacity is carried by a NegBinomial of its own.
-# Demand above a saturated capacity is only partially identified, since the occupancy reveals that demand was at least the beds filled but not how much more.
+# Demand above a saturated capacity is only partially identified, since the occupancy shows only that demand was at least the beds filled.
 # The bed shortfall above capacity is therefore informed by the demand model and its priors rather than measured.
 # The model exposes the cut-off occupancy on the reported scale (the demand plus the reclassification offset, floored at zero) and the cut-off bed demand (the need under unconstrained supply).
 # It also exposes the bed shortfall (the bed demand above the national beds) and the utilisation (the modelled occupancy over the beds).
@@ -1334,7 +1324,7 @@ cfr_prior_fig #hide
 # The early window, with only the total occupancy reported, fits the backbone alone while the latent admissions still drive the stock.
 # The split is scored only where the borrowed confirmation hazard is non-zero, that is, where the laboratory pipeline of the full model supplies it.
 #
-# One reporting artefact is modelled, on identified days only: an overnight reclassification of the total.
+# One reporting artefact is modelled, an overnight reclassification of the total on identified days.
 # The published start-of-day in-bed count is differenced against the previous report day's occupancy, and days whose gap exceeds a threshold are listed by hand as break days.
 # One step is fitted per listed day, with a prior centred on zero with SD 25 beds, so the fit can attribute part of a gap to genuine change in demand.
 # The steps accumulate into a persistent additive offset $\Delta_t$ on the modelled total occupancy, carried forward to every later day.
@@ -1350,7 +1340,8 @@ cfr_prior_fig #hide
 #
 # A suspect is admitted before testing, so the admissions do not carry the confirmation contrast of the case composition.
 #
-# Each patch takes a daily share $W_{p,t}$ of the non-BVD admissions.
+# We assume a province's admission of non-BVD suspects can differ from its share of them and can change as treatment centres open.
+# Each patch therefore takes a daily share $W_{p,t}$ of the non-BVD admissions.
 # It is the patch's share $w_p$ of the non-BVD suspects (defined with the province compositions below), moved by a static deviation and a weekly random walk:
 #
 # ```math
@@ -1369,8 +1360,7 @@ cfr_prior_fig #hide
 # We assume a province admits between half and twice the national share of its non-BVD suspects, and the level prior keeps two SDs of a deviation within twofold at its median scale.
 # The walk $\boldsymbol{\eta}$ is zero on the first day the province admissions are printed and has a knot $k$ every seven days to the last such day.
 # It is interpolated linearly between the knots and held flat outside them.
-# With $\tau_{\text{bga}} = \sigma_{\text{bga}} = 0$ each patch admits the share of the non-BVD suspects it reports, and without province admissions data $W_{p,t} = w_p$.
-# We assume a province's admission of non-BVD suspects can differ from its share of them and can change as treatment centres open.
+# Without province admissions data $W_{p,t} = w_p$.
 # Each patch's approximate stock is its BVD admissions through the clinical-stay survival plus its non-BVD admissions through the rule-out stay, and the national demand $D_t$ is shared out in proportion:
 #
 # ```math
@@ -1381,7 +1371,7 @@ cfr_prior_fig #hide
 # D_{p,t} = D_t\, \frac{\tilde O_{p,t}}{\sum_q \tilde O_{q,t}}.
 # ```
 #
-# $S_{\text{ro}}$ is the rule-out cohort's exact survival under the running balance (36), absconding included.
+# $S_{\text{ro}}$ is the rule-out cohort's exact survival under the running balance of Equation (36), absconding included.
 # The confirmation relabelling and the absconding of unconfirmed cases are shared across patches, so they cancel from the shares only approximately.
 # Each patch's capacity on day $t$ is a share $s_{p,t}$ of the national capacity walk.
 # Beds are allocated in response to cases, so we centre the share on the patch's modelled cumulative admissions to date, BVD and background together:
@@ -1398,7 +1388,7 @@ cfr_prior_fig #hide
 # A shift shared by every patch cancels in the normalisation, so the deviations sum to zero and no patch is a reference.
 # The floor $a_0$ is one admission, so a patch with no admissions yet still holds some beds.
 # The deviations are static, and the share moves over time only through its centre.
-# On a day $j$ on which the provinces $\mathcal{P}_j$ print, taken in patch order, the printed counts are allocated across them by the stick-breaking of equation (54):
+# On a day $j$ on which the provinces $\mathcal{P}_j$ print, taken in patch order, the printed counts are allocated across them by the stick-breaking of Equation (54):
 #
 # ```math
 # O_{p,j} \sim \mathrm{BetaBinomial}\Bigl(
@@ -1450,10 +1440,9 @@ cfr_prior_fig #hide
 # #### Suspected deaths
 #
 # Suspected deaths are the ascertained, CFR-weighted convolution of the daily onsets with the onset-to-death PMF $f_d$, plus a non-BVD background.
-# This is modelled on the incidence scale.
 # The cumulative death history ends at its 26 May freeze, and its last value is the final increment, so the total is not scored separately.
-# A fatal BVD infection enters the suspected-death count only when ascertained.
-# The BVD deaths therefore carry a death ascertainment $p_{\text{death}}$, the death analogue of the case ascertainment $p_{\text{DRC}}$, with an informative prior centred high (a death is more reliably reported than a living suspect).
+# A fatal BVD infection enters the count only when ascertained, with the death ascertainment $p_{\text{death}}$, the death analogue of $p_{\text{DRC}}$.
+# Its prior is centred high because a death is more reliably reported than a living suspect.
 # The non-BVD background suspected deaths are a background CFR $\mathrm{cfr}_{\text{bg}}$ applied to the per-day non-BVD suspected-case background $\lambda_{\text{bg},t}$, lagged by the same onset-to-death delay so a background death follows its background case.
 # The daily death series is
 #
@@ -1489,7 +1478,7 @@ cfr_prior_fig #hide
 # #### Laboratory pipeline
 #
 # The laboratory pipeline fits a single analysed-specimen volume.
-# It is the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus the non-BVD background $\lambda_{\text{bg}}$) carried through the report-to-analysed delay $f_{\text{rec}}$, thinned by the testing fraction $\tau_{\text{test}}$ (the share of suspected cases routed to the laboratory), and multiplied by the specimens analysed per suspect sampled $\varrho$,
+# It is the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus the non-BVD background $\lambda_{\text{bg}}$) carried through the report-to-analysed delay $f_{\text{rec}}$, thinned by the testing fraction $\tau_{\text{test}}$, and multiplied by the sampled specimens analysed per suspect $\varrho$,
 #
 # ```math
 # v_t = \varrho\, \tau_{\text{test}} \sum_{s \ge 0}
@@ -1500,7 +1489,7 @@ cfr_prior_fig #hide
 # $\varrho$ can exceed one because repeat exclusion testing, swabbed community deaths and screened contacts all put specimens into the laboratory denominator without adding a reported suspect.
 # Its prior is $\varrho \sim \mathrm{LogNormal}(0,\ 0.25)$, with median one.
 #
-# This analysed volume is gated to zero before the testing onset.
+# The analysed volume is zero before the testing onset.
 # The first confirmed vintage is treated as the baseline and the early confirmed increments are scored from it.
 # The suspected-case count itself is not gated, as those cases did accumulate over the cryptic phase.
 #
@@ -1514,7 +1503,7 @@ cfr_prior_fig #hide
 # Where INSP publishes a 24h analysed count after the cumulative series stops, that count is scored as a NegBinomial of the modelled volume $v_t$ on that day with the same dispersion.
 #
 # The confirmed positives in each laboratory window $v$ are scored as a beta-binomial of the observed specimens-analysed denominator $A_v$ with a per-window tested-positive probability $p_{\text{pos},v}$.
-# Where no analysed count is observed (the early and unanchored windows), the modelled volume $v_t$ is the denominator instead.
+# Where no analysed count is observed, the modelled volume is the denominator instead, as set out below.
 # We tie that probability to the composition of the tested pool, so the confirmed data help identify the non-BVD background.
 # The suspect-pool composition $\varphi_v$ is the BVD share among the specimens analysed in the window, carried through the same delay as the volume so composition and volume share one clock:
 #
@@ -1531,6 +1520,7 @@ cfr_prior_fig #hide
 #     \delta_0\, e^{-c_v / \text{decay}}\bigr).
 # ```
 #
+# Here $c_v$ is the cumulative modelled laboratory volume at window $v$, the clock on which the enrichment decays.
 # The false-positive term carries the non-BVD share:
 #
 # ```math
@@ -1541,12 +1531,10 @@ cfr_prior_fig #hide
 # C_v \sim \mathrm{BetaBinomial}(A_v,\ p_{\text{pos},v},\ \rho_{\text{conf}}), \qquad \rho_{\text{conf}} \sim \mathrm{Beta}(1, 24), \tag{43}
 # ```
 #
-# where the beta-binomial has mean $A_v p_{\text{pos},v}$ and intra-window correlation $\rho_{\text{conf}}$, which tends to the binomial as $\rho_{\text{conf}}$ tends to zero.
-# We use this prior, with mean about 0.04, so the spread is set by the confirmed positives themselves.
-# Here $c_v$ is the cumulative modelled laboratory volume at window $v$, the clock on which the enrichment decays.
+# where the beta-binomial has mean $A_v p_{\text{pos},v}$ and intra-window correlation $\rho_{\text{conf}}$, and tends to the binomial as $\rho_{\text{conf}}$ tends to zero.
+# The prior on $\rho_{\text{conf}}$ has mean about 0.04, which leaves the spread to the confirmed positives themselves.
 # The confirmed vintages before the first laboratory date, and later days with no published 24h analysed count, carry no observed analysed denominator.
-# They are scored as NegBinomial counts against the modelled laboratory volume $V_v$, the daily modelled volume $v_t$ summed over the window, with the same composition-linked positivity.
-# This way all the confirmed data are used:
+# They are scored as NegBinomial counts against the modelled laboratory volume $V_v$, the daily modelled volume $v_t$ summed over the window, with the same positivity:
 #
 # ```math
 # C_v^{\text{no-denom}} \sim
@@ -1616,7 +1604,7 @@ cfr_prior_fig #hide
 # ```
 #
 # The false-positive term $(1-\mathrm{spec})(1-q_{\text{death}})$ makes the confirmed deaths respond to the non-BVD death share.
-# The death background (the background CFR applied to the case background, lagged by the onset-to-death delay) keeps the composition below one.
+# The death background keeps the composition below one.
 # The daily confirmed deaths are the positivity times the death analysed volume,
 #
 # ```math
@@ -1652,7 +1640,7 @@ cfr_prior_fig #hide
 # #### Recovered among confirmed
 #
 # Recoveries ("cumul guéris") are the survivors among laboratory-confirmed cases, the incidence analogue of the convolution-and-scaling secondary-observation model of EpiNow2 [epinow2](@cite).
-# The modelled daily confirmed incidence $\text{confirmed}_t$ (the per-window tested-positive probability on the modelled analysed volume, the same daily series the cumulative-confirmed trajectory uses) is scaled by the recovery proportion $p_{\text{rec}}$ and convolved with a sampled confirmation-to-recovery delay $f_{\text{cr}}$,
+# The modelled daily confirmed incidence $\text{confirmed}_t$ (the tested-positive probability times the modelled analysed volume) is scaled by the recovery proportion $p_{\text{rec}}$ and convolved with a sampled confirmation-to-recovery delay $f_{\text{cr}}$,
 #
 # ```math
 # \text{recovered}_t = p_{\text{rec}} \sum_{s \ge 0}
@@ -1660,17 +1648,16 @@ cfr_prior_fig #hide
 # ```
 #
 # $f_{\text{cr}}$ is a discretised LogNormal with mean $\sim \mathrm{Normal}(14,\ 5)$ and SD $\sim \mathrm{Normal}(8,\ 4)$, both truncated below at one day.
-# A recovered case is one that did not die, so the recovery proportion is grounded on the case-fatality ratio rather than estimated independently.
-# It is the complement $1 - \mathrm{CFR}$ adjusted on the log-odds scale by a sampled offset $\delta_{\text{rec}} \sim \mathrm{Normal}(0, 0.5)$, since the confirmed cases are a slightly different population from the one the CFR is defined over,
+# A recovered case is one that did not die, so the recovery proportion is tied to the case-fatality ratio.
+# It is $1 - \mathrm{CFR}$ shifted on the log-odds scale by a sampled offset $\delta_{\text{rec}} \sim \mathrm{Normal}(0, 0.5)$, since the confirmed cases differ slightly from the population the CFR is defined over,
 #
 # ```math
 # p_{\text{rec}} = \operatorname{logistic}\!\bigl(
 #     \operatorname{logit}(1 - \mathrm{CFR}) + \delta_{\text{rec}}\bigr).
 # ```
 #
-# A case is taken to be confirmed before it is recorded as recovered (the report counts recoveries among confirmed cases).
-# A positive result could in principle return after a patient has already recovered, but we assume the reported total reflects confirmed cases recorded as recovered.
-# The cumulative recovered series ends at the cut-off, so its per-vintage increments are fitted, like the confirmed and confirmed-death streams, with a NegBinomial with the recovered-stream dispersion $k_{\text{rec}}$:
+# We assume a case is confirmed before it is recorded as recovered, although a positive result could return after recovery.
+# The per-vintage increments are scored with a NegBinomial with the recovered-stream dispersion $k_{\text{rec}}$:
 #
 # ```math
 # Y_{\text{rec},i} - Y_{\text{rec},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
@@ -1742,12 +1729,10 @@ cfr_prior_fig #hide
 # ```
 #
 # We model outbound travel only, not return, so this term would overestimate the infections on its own.
-# Each observed Uganda import is fitted at its reported detection date.
-# An import detected on a given day is scored as a Poisson of the rise in cumulative export intensity between consecutive detection dates.
+# Each Uganda import is scored at its reported detection date as a Poisson of the rise in cumulative export intensity since the previous detection.
 # A term before the earliest detection $d_1$ is observed at zero, since no export is expected then.
 # After the last detection date we stop modelling exports rather than scoring further zeros.
-# Travellers' reasons for crossing the border change over the outbreak, so the baseline travel rate no longer applies beyond it.
-# The export clock is therefore truncated there:
+# Travellers' reasons for crossing the border change over the outbreak, so the baseline travel rate no longer applies beyond it and the export clock is truncated there:
 #
 # ```math
 # Y_{\text{exports},i} \sim
@@ -1834,9 +1819,8 @@ cfr_prior_fig #hide
 
 # #### Symptom-onset reporting delay
 #
-# The digitised onset epidemic curve (the [Data](@ref methods-data) section) is the only direct observation of the onset series.
+# The digitised onset curve (see [Data](@ref methods-data)) is the only direct observation of the onset series.
 # Every other stream sees that series after a further convolution to a report, a death or a laboratory confirmation.
-# This stream can therefore identify things the other streams cannot on their own, plausibly including the split between reporting and laboratory receipt that the laboratory pipeline otherwise pins with the onset-to-sample constraint.
 #
 # The onset-to-report delay is a discrete-time hazard over delay $d = 0,\dots,D-1$ days, with $D = 28$.
 # By then the triangle's between-vintage increments have decayed into digitisation noise.
@@ -1851,9 +1835,9 @@ cfr_prior_fig #hide
 #
 # $Q$ is the sum-to-zero basis used for the patch deviations, so the delay deviations sum to zero and $\eta_0$ is the mean logit hazard.
 #
-# A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
-# It is a weekly-knot non-centred random walk on the logit scale, with knots every seven days from the first figure's report date, concentrated near zero ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$).
-# A flat reporting profile stays the default the data has to argue away from, while the walk can still follow a real drift in reporting speed:
+# A calendar-time effect on the report day $u + d$ modifies that hazard.
+# It is a non-centred random walk on the logit scale with knots every seven days from the first figure's report date.
+# Its step prior $\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$ is concentrated near zero, so a flat reporting profile is the default and the walk follows only a drift the data support:
 #
 # ```math
 # \gamma_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
@@ -1862,8 +1846,7 @@ cfr_prior_fig #hide
 # \tag{51}
 # ```
 #
-# The walk is zero up to the first figure's report date and moves only after it.
-# It changes the reporting delay, and a delay is seen only between figures, so before the first figure a shift in reporting speed cannot be told apart from $h_0$.
+# The walk is zero up to the first figure's report date, since a delay is seen only between figures and an earlier shift in reporting speed cannot be told apart from $h_0$.
 #
 # The cumulative reported proportion of onset date $u$'s eventual cases, reported within $\delta$ days, is the survival product of the daily hazards along that onset date's diagonal.
 # It is normalised to its own limit and multiplied by an explicit ascertainment level $\alpha(u)$:
@@ -1906,9 +1889,9 @@ cfr_prior_fig #hide
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
 # Re-dating is absorbed as observation noise rather than modelled.
 # $\sigma_u$ collects counting variation around the cell's own modelled mean and, for each digitised bar the cell differences, the $1/12$ variance of rounding an integer read and a fitted read SD $\tau$.
-# A correction therefore carries two reads' rounding and error and a first-snapshot level one read's.
-# Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
-# The rounding term is structural rather than fitted, and it is what keeps $\tau$ off zero on the many settled cells whose residual is exactly zero.
+# A correction therefore carries two reads' rounding and error, and a level one read's.
+# Every magnitude in $\sigma_u$ is modelled rather than observed, so the noise cannot feed its own variance.
+# The fixed rounding term keeps $\tau$ off zero on the many settled cells whose residual is exactly zero.
 # We use $\tau \sim \mathrm{LogNormal}(\log 0.3,\ 0.5)$, centred on one pixel of read error beyond the rounding.
 # One count spans a median of 3.2 pixels across the digitised figures (2.5 to 8.7), so one pixel is about 0.3 counts.
 #
@@ -1997,8 +1980,9 @@ cfr_prior_fig #hide
 #     \frac{\pi_{p,i}}{\sum_{q \ge p} \pi_{q,i}},\; \rho \Bigr). \tag{54}
 # ```
 #
-# $\rho$ is one overdispersion per composition, shared across patches and vintages, absorbing the extra-Binomial variation in how cases are attributed to provinces, such as reporting lags between the provincial and national tables and reassignment of cases between health zones.
-# At $\rho \to 0$ the allocation is Multinomial.
+# $\rho$ is one overdispersion per composition, shared across patches and vintages.
+# It absorbs extra-binomial variation in how cases are attributed to provinces, such as lags between the provincial and national tables and cases reassigned between health zones.
+# At $\rho \to 0$ the allocation is multinomial.
 # The priors are
 #
 # ```math
@@ -2025,7 +2009,8 @@ cfr_prior_fig #hide
 #
 # A third composition scores the per-province analysed-specimen volume by calendar week, conditional on the national analysed total the laboratory pipeline already scores.
 # Write $c_{p,t}$ for patch $p$'s onsets carried through the onset-to-report and report-to-receipt delays, and $\lambda^{\text{rec}}_t = (\lambda_{\text{bg}} * f_{\text{rec}})_t$ for the national non-BVD background carried to receipt.
-# The national BVD volume $\sum_q p_{\text{DRC},q}\, c_{q,t}$ is split by the relative case ascertainment times incidence, so the two compositions agree on how many of a patch's cases reach the laboratory, and each patch adds its share $w_p$ of the background.
+# The national BVD volume $\sum_q p_{\text{DRC},q}\, c_{q,t}$ is split by the relative case ascertainment times incidence, so the two compositions agree on how many of a patch's cases reach the laboratory.
+# Each patch also adds its share $w_p$ of the background.
 # Summed over the printed days $t$ of week $i$, the modelled split is
 #
 # ```math
@@ -2036,7 +2021,7 @@ cfr_prior_fig #hide
 # ```
 #
 # The national testing fraction multiplies every term, so it cancels, and the term samples no contrast of its own.
-# The weeks are allocated by the stick-breaking of equation (54) with an overdispersion $\rho^{\text{lab}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
+# The weeks are allocated by the stick-breaking of Equation (54) with an overdispersion $\rho^{\text{lab}} \sim \mathrm{Normal}^{+}(0,\ 0.1)$ on $[0, 1]$.
 # The per-province positives are not fitted.
 #
 # The background share $w_p$ is a simplex centred on population share, with sum-to-zero deviations as for the bed shares:
