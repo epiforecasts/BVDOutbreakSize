@@ -327,6 +327,7 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Fixed
 
+- Report-side docstrings and the counterfactual axis label match the code (#1208).
 - The province and zone in-sample pages give their estimate-evolution sections their own anchors, so the links to the national section resolve again (follows #1174).
 - The embedded dashboard map grows its frame to fit its page in the narrow layout, so the layer switch no longer scrolls out of reach inside the frame (resolves #1052).
 - The onset forecast model no longer boxes its sampled scan scale inside the interval comprehension, so the boxed-captures check passes again.
