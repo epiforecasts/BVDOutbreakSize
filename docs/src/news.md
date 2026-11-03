@@ -109,6 +109,13 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Data
 
+- The model cut-off advances to SitRep 169, 30 October.
+  SitRep 169 harmonises Ituri's deaths, so national confirmed deaths step 346 against 32 printed.
+  The step is recorded as printed, and whether 30 October becomes a break day is raised in #1188.
+  Yakoma (Nord-Ubangi) joins the health-zone blocks at SitRep 167, and the laboratory scanner reads three new phrasings.
+  The national bed capacity has no entry from 26 October, because Ituri prints no beds and the remaining provinces' sum falls below the isolation tile (#1190).
+  `data/onset_dashboard_history.csv` adds the dashboard snapshots of 28 October to 1 November.
+  Fitted values change with the new data.
 - The model cut-off advances to SitRep 164, 25 October (#1185).
   Its isolation tile is blank, so the national isolation and bed series stop at 24 October, and Nord-Kivu's misprinted admissions are left out.
 - The model cut-off advances to SitRep 163, 24 October (#1166).
