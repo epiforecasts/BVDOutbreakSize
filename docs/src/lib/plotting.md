@@ -1,7 +1,7 @@
 # Plotting
 
 Every figure in the report.
-The functions take a chain and the observations and return a Makie `Figure`, so a page renders a figure in one call.
+The functions take a chain, a forecast or a score table and return a Makie `Figure`, so a page renders a figure in one call.
 
 ## Index
 

@@ -39,7 +39,7 @@ runs:
           exit 0
         fi
         # `actions/checkout` leaves the pull request's merge commit at HEAD,
-        # so its first parent is the base and this is exactly what the pull
+        # so its first parent is the base and this is what the pull
         # request changes. Using the merge commit rather than the recorded
         # base sha means a base that has moved since the pull request opened
         # does not show as a change.

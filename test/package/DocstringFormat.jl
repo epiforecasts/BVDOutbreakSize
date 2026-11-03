@@ -85,9 +85,7 @@
         @static if VERSION >= v"1.11"
             if isdefined(BVDOutbreakSize, :public)
                 try
-                    # Try to access public symbols via module metadata
-                    # Julia 1.11+ should provide this but API is still developing
-                    # For now, return empty array as public API isn't finalized
+                    # Public symbols are not read from module metadata
                     return Symbol[]
                 catch
                     return Symbol[]

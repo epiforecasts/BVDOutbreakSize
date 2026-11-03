@@ -154,9 +154,8 @@ end
     ## case ratio, exactly, and is not capped at one.
     @test sb.τ_death ≈ sb.scaling * 6.0 / 20.0
     @test sb.expected_confirmed_deaths >= 0
-    ## And it is genuinely uncapped: a laboratory analysing four specimens
-    ## per suspected case puts the death intensity above one, where the
-    ## previous cap would have pinned it at exactly one.
+    ## It is uncapped: a laboratory analysing four specimens per suspected
+    ## case puts the death intensity above one.
     wide = confirmed_deaths_model(
         17, 246, deaths_daily, bvd_deaths, bg_death,
         5.0; case_analysed_daily = fill(80.0, 40),
@@ -283,8 +282,7 @@ end
     ## Nulling the cut-off scalar is the generator gate, so `predict` resamples
     ## the increments while the dated history still supplies the vintage grid
     ## and the published discrepancy the step is centred on. Emptying the
-    ## history instead loses the discrepancy, which is why the scalar is the
-    ## gate on this stream as it already is on the cases stream.
+    ## history instead loses the discrepancy.
     hist = (; days = [20, 30, 35, 40], counts = [200, 240, 476, 490])
     gen = confirmed_deaths_only_model(
         40, missing, 800;

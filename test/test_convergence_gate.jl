@@ -12,7 +12,7 @@
     @test convergence_verdict(clean).status === :pass
     @test isempty(convergence_verdict(clean).failures)
 
-    ## Where the headline joint fit currently sits: converged, mixing badly.
+    ## A fit that converged but mixes badly.
     borderline = (
         max_rhat = 1.057, min_ess_bulk = 48.0, min_ess_tail = 120.0,
         n_divergent = 6, n_draws = 3200,
@@ -23,7 +23,7 @@
     @test any(occursin("max R-hat", m) for m in v.warnings)
     @test any(occursin("min bulk ESS", m) for m in v.warnings)
 
-    ## A chain stuck at its initialisation, as the v2.0.0 joint fit was.
+    ## A chain stuck at its initialisation.
     stuck = (
         max_rhat = 2.6, min_ess_bulk = 8.0, min_ess_tail = 9.0,
         n_divergent = 252, n_draws = 3200,
@@ -115,7 +115,7 @@ end
     include(joinpath(@__DIR__, "..", "docs", "fits", "convergence.jl"))
 
     ## kept: a trivial two-parameter Gaussian is the cheapest target that
-    ## still carries R-hat, both effective sample sizes and a divergence
+    ## carries R-hat, both effective sample sizes and a divergence
     ## flag, which is all the gate reads.
     @model function _gate_synthetic()
         x ~ Normal(0, 1)
@@ -151,9 +151,7 @@ end
     include(joinpath(@__DIR__, "..", "docs", "fits", "convergence.jl"))
 
     ## The grouped table counts elements past an R-hat threshold, and that
-    ## threshold has to be the one the rest of the report is quoting. A
-    ## report whose footer and whose tables disagree about what counts as a
-    ## bad R-hat says two things at once.
+    ## threshold has to be the one the rest of the report is quoting.
     per_parameter = DataFrame(
         parameter = ["a", "b"], index = [0, 0],
         rhat = [1.3, 1.01], ess_bulk = [12.0, 900.0],
@@ -243,8 +241,7 @@ end
     end
 
     ## `nan` and `inf` parse as numbers and then turn the threshold off in
-    ## silence, since nothing compares greater than either. A gate a typo can
-    ## disable without saying so is the failure this gate exists to prevent.
+    ## silence, since nothing compares greater than either.
     for bad in ("nan", "inf", "-inf")
         withenv("BVD_CONVERGENCE_FAIL_ESS_BULK" => bad) do
             e = try

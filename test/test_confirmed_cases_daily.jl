@@ -20,7 +20,7 @@ end
     using BVDOutbreakSize: confirmed_positivity_windows
 
     ## Last cumulative laboratory date is day 20, so days 21-23 are late
-    ## late windows. A published 24h analysed count on day 22 flags that
+    ## windows. A published 24h analysed count on day 22 flags that
     ## window for the observed-denominator Binomial; the others stay unanchored.
     confirmed = (; days = [5, 20, 21, 22, 23], counts = [10, 50, 60, 75, 90])
     lab = (; days = [10, 20], counts = [100, 300])
@@ -197,9 +197,9 @@ end
         (Int[], Float64[])
 
     ## A missing/short gross is read as a gross of zero, so the centre is the
-    ## WHOLE increment: all of it attributed to the artefact rather than
-    ## erroring. Conservative, not neutral — a centre near zero over a
-    ## de-anchored day is the configuration that wrecks the geometry.
+    ## whole increment: all of it attributed to the artefact rather than
+    ## erroring. This is conservative, not neutral. A centre near zero over a
+    ## de-anchored day wrecks the geometry.
     @test break_step_centres([21, 22], [10, 369], [22], Int[])[2] == [369.0]
 
     ## No break days at all is empty.
@@ -266,8 +266,8 @@ end
         @test d in obs.lab_daily_history.days
         @test w.late_analysed[pos] == 0
 
-        ## The step is centred on the vintage increment the model actually
-        ## scores, which must exceed the printed gross count for the day to be
+        ## The step is centred on the vintage increment the model scores,
+        ## which must exceed the printed gross count for the day to be
         ## a harmonisation at all.
         @test w.late_increments[pos] > 0
     end

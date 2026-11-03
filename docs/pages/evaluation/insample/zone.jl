@@ -40,7 +40,7 @@ frozen_local = load_fit("local_frozen_validation");
 # ## [Zone compositions](@id zone-compositions)
 #
 # The zone compositions sit one level below the [province compositions](@ref province-compositions).
-# The cases run on the infection-to-report delay and the deaths on the infection-to-confirmed-death delay, each with its own overdispersion, so the two are checked separately.
+# The cases run on the infection-to-receipt delay and the deaths on the infection-to-confirmed-death delay, each with its own overdispersion, so the two are checked separately.
 
 #md # ```@raw html
 #md # <details><summary>Load the zone fit's inputs and prior</summary>

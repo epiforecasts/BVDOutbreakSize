@@ -32,8 +32,8 @@
 % ---- Sampled (melded) banner ---------------------------------------------------
 \node[joint, text width=14.45cm, anchor=north] (meld) at (-0.08,-1.75)
   {\textbf{Sampled from the joint fit (melded)}: a normal fitted to the joint
-   draws of log weekly patch infections and, when zones mix, log origin
-   intensities at the cut-off\\[4pt]
+   draws of log weekly patch infections, log generation-interval and delay
+   parameters and, when zones mix, log origin intensities at the cut-off\\[4pt]
    $\eta \sim \mathrm{Normal}(0, I)$, \quad $\zeta = L\eta$, \quad
    $I_{p,t} = \bar I_{p,t} \exp \zeta_p(t)$, \quad
    $\varepsilon_q = \bar\varepsilon_q \exp \zeta^{\varepsilon}_q$\\[4pt]
@@ -58,7 +58,7 @@
 
 \node[latent, text width=\ws] (ren) at (\xs,-10.6)
   {\textbf{Zone renewal} from day $t_0$\\[2pt]
-   $\Lambda_{z,t} = \sum_{s \ge 1} \J{\bar g_s}\, I_{z,t-s}$, \qquad
+   $\Lambda_{z,t} = \sum_{s \ge 1} \J{g_s}\, I_{z,t-s}$, \qquad
    $u_{z,t} = \exp(\delta_{z,t})\, \Lambda_{z,t}$\\[2pt]
    $u$ sets each zone's share. The patch total is the sampled $\J{I_{p,t}}$.\\[1pt]
    {\footnotesize $t_0$ is 42 days before the first zone table. Before it,
@@ -90,7 +90,7 @@
 
 \node[latent, text width=\ws] (exc) at (\xs,-22.25)
   {\textbf{Expected confirmed cases and deaths} in the window of table $v$\\[2pt]
-   $C_{z,v} = \sum_{t \in (d_{v-1}, d_v]} (\J{\bar f} * I_z)_t$, \enspace
+   $C_{z,v} = \sum_{t \in (d_{v-1}, d_v]} (\J{f} * I_z)_t$, \enspace
    $D_{z,v}$ the same through the \J{death delay}\\[2pt]
    $\pi^{C}_{z,v} = \dfrac{a_z C_{z,v}}{\sum_{z' \in p} a_{z'} C_{z',v}}$, \qquad
    $\pi^{D}_{z,v} = \dfrac{\theta_z D_{z,v}}{\sum_{z' \in p} \theta_{z'} D_{z',v}}$\\[2pt]
@@ -125,7 +125,7 @@
 \node[joint, text width=\wj] (j1) at (\xj,\yP)
   {\badge{prior} $\sigma_{\delta,p}$ drift scales,\\ $\rho_{\text{corr}}$ deviation correlation};
 \node[joint, text width=\wj] (j2) at (\xj,-10.6)
-  {\badge{mean} $\bar g$ generation interval\\[2pt]
+  {\badge{sampled} $g$ generation interval\\[2pt]
    \badge{sampled} $I_{p,t}$ patch infections};
 \node[joint, text width=\wj] (j3) at (\xj,-14.3)
   {\badge{sampled} $I_{p,t}$, $\varepsilon_q$\\[2pt]
@@ -133,8 +133,8 @@
    \badge{mean} $s_{pq,t}$ share of $p$'s arrivals sent by $q$, from $\bar\varepsilon$,
    $K$ and $\bar I$};
 \node[joint, text width=\wj] (j5) at (\xj,-22.25)
-  {\badge{mean} $\bar f$ infection to confirmed case: incubation then receipt delay\\[2pt]
-   \badge{mean} death delay: incubation, onset to death, receipt\\[2pt]
+  {\badge{sampled} $f$ infection to confirmed case: incubation, onset to report, receipt\\[2pt]
+   \badge{sampled} death delay: incubation, onset to death, receipt\\[2pt]
    \badge{prior} $\sigma_a$ ascertainment scale};
 \node[joint, text width=\wj] (j6) at (\xj,-25.75)
   {\badge{prior} $\rho$, $\rho_{\text{death}}$\\ intra-class correlations};

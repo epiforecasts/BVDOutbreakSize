@@ -185,9 +185,8 @@ end
     ## 2^9, the cryptic-phase realised size at the renewal start
     C_T_prior = 512.0
 
-    ## The renewal-start seed magnitude is `2^m` directly — passed through
-    ## unchanged, no back-scaling by a rate. This keeps `r` (hence the
-    ## single R0) out of the seed magnitude.
+    ## The renewal-start seed magnitude is `2^m`, with no back-scaling by a
+    ## rate. This keeps `r` (hence the single R0) out of the seed magnitude.
     @test seed_at_renewal_start(C_T_prior) === C_T_prior
     @test seed_at_renewal_start(C_T_prior) > 0
 end

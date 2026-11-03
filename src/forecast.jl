@@ -200,9 +200,9 @@ observes them, one row per draw, read from the posterior-predictive draws
 `pp` of a fit carrying the triangle ([`forecast_draws`](@ref)). It
 separates cases that have had their onset but are not yet reported from
 cases whose onset has not happened. The model runs the fitted reporting
-hazard, ascertainment and scan noise forward to a future vintage
-`horizon` days past the cut-off, which must be a whole number of weeks
-(see [`onset_forecast_model`](@ref)). Columns, all per draw:
+hazard and ascertainment forward, with scan noise drawn from its prior, to
+a future vintage `horizon` days past the cut-off, which must be a whole
+number of weeks (see [`onset_forecast_model`](@ref)). Columns, all per draw:
 
   - `onsets_to_date`: symptom onsets that have happened by the cut-off.
   - `onset_reports_to_date`: of those, the number the triangle should
@@ -339,8 +339,8 @@ posterior-predictive draws `pp` of the patch joint
 the fitted national walk and the province's correlated, mean-reverting
 deviation, and each province renews with the fitted importation. Its
 confirmed cases and confirmed deaths are the national forecast counts split
-each week by the fitted province compositions, with the province's own
-delays, relative ascertainment and severity, so the provinces add up to the
+each week by the fitted province compositions, through the national delays
+and the province's relative ascertainment and severity, so the provinces add up to the
 national forecast in every draw (see [`bvd_joint`](@ref)).
 
 Returns one row per province and draw, with columns `patch`, `province`
@@ -451,19 +451,17 @@ Only the incident and level quantities are archived: `confirmed cases` and
 `onset reports` new over the horizon, and the supply-limited `isolation beds`
 occupancy. The cumulative totals are revised across data vintages, so they
 are not archived. The reporting triangle's own total is revised by more than
-the rest, since the printed total falls between consecutive vintages (2531 to 2523, and
-2018 to 1996), which late reporting cannot produce.
+the rest, since the printed total falls between some consecutive vintages,
+which late reporting cannot produce.
 
 When the forecast carries the confirmed/suspect ward split
 (`confirmed_occupancy` / `suspect_occupancy`, the occupancy partitioned by
 the cut-off confirmed share), the two ward occupancy levels are archived too
 as `treatment beds` (confirmed) and `isolation beds (suspected)`, each scored
 against its own Tableau 6 occupancy sub-stock. The total `isolation beds`
-occupancy stays as its own stream. Nothing produces those two columns yet:
-[`forecast_reported`](@ref) projects the total occupancy alone, so the two
-ward entries are reachable only from a forecast a caller has partitioned
-itself, which today is the tests. Streams a forecast does not carry are
-skipped, so this costs a real forecast nothing. `thin` keeps every
+occupancy stays as its own stream. [`forecast_reported`](@ref) projects the
+total occupancy alone, so only a forecast a caller has partitioned itself
+carries them. Streams a forecast does not carry are skipped. `thin` keeps every
 `thin`-th draw so the archive stays compact when it is saved as a release
 asset.
 """
@@ -562,8 +560,8 @@ one row per confirmed stream (laboratory-confirmed cases and confirmed
 deaths) and quantity (cumulative total by the cut-off plus the horizon, or
 new this week), reporting the equal-tailed 30/60/90% credible interval
 endpoints (`lower_90 … upper_90`) used by the other summary tables. The
-suspected reported-case and suspected-death streams are no longer reported,
-so they are not shown as forecast targets.
+suspected reported-case and suspected-death streams are not shown as
+forecast targets.
 """
 function forecast_table(fc::DataFrame; digits::Integer = 0)
     _row(
@@ -714,11 +712,6 @@ scored against it too as a single level row. Returns a `DataFrame` with the
 observed count, the equal-tailed 30/60/90% predictive intervals (the same
 endpoints as the other summary tables), and whether the observed count falls
 inside the 90% interval.
-
-Note that at a one-week-back freeze the bed capacity is weakly informed (the
-reported occupancy rate starts only on 9 June), so the projected bed
-occupancy rides the capacity random walk back to the freeze date and its
-interval is wide.
 """
 function forecast_vs_truth(
         fc::DataFrame;
