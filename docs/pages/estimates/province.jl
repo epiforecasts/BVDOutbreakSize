@@ -288,7 +288,7 @@ province_imports_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Imported infections by province.
-#md # Every arrival is debited from its origin on the same day, so the figure shows where infection occurred rather than extra infection.
+#md # Every arrival is debited from its origin on the same day, so the figure shows where infection occurred.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -356,7 +356,7 @@ province_rt_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The reproduction number of each province, with the national trajectory in grey.
-#md # The grey band is the central trend the provinces pool toward, net of depletion, rather than any one province.
+#md # The grey band is the central trend the provinces pool toward, net of depletion.
 #md # Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi hold few confirmed cases, so their panels are carried mostly by the deviation prior and their widths are not measurements.
 #md # </figcaption>
 #md # </figure>
@@ -573,7 +573,7 @@ province_pair_figs[8] #hide
 # ## Data currency
 #
 # The province blocks are the provincial tables of the situation reports: confirmed cases, confirmed deaths and the 24-hour laboratory volumes.
-# A block that stops updating shows its last date before the cut-off rather than a flat series.
+# A block that stops updating shows its last date before the cut-off.
 
 #md # ```@raw html
 #md # <details><summary>Province block currency</summary>
