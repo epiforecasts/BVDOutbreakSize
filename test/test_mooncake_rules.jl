@@ -28,7 +28,8 @@
         zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
         convolve_rows, _share_out, _admission_centred_shares,
         _background_admission_shares, sum_to_zero_basis,
-        _embedded_sum_to_zero_basis, knot_days
+        _embedded_sum_to_zero_basis, knot_days, importation_epsilon_matrix,
+        sigmoid_ramp
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -590,6 +591,23 @@
         for R in (0.6, 1.0, 1.6)
             add!("R = $R", euler_lotka_r, R, g40; perf = R == 1.6)
         end
+
+        ## The importation fraction by origin and day: the model's eight
+        ## patches over the fitted grid, origins either side of the cap of
+        ## one (each well clear of it), and no breakpoint, a flat ramp.
+        erng = Xoshiro(5113)
+        add!(
+            "8 patches, n = 260", importation_epsilon_matrix, 0.01,
+            0.5 .* randn(erng, 8), 0.4, sigmoid_ramp(260, 120); perf = true
+        )
+        add!(
+            "two origins capped", importation_epsilon_matrix, 0.5,
+            [-2.0, -1.0, 1.5, 2.0], 0.5, sigmoid_ramp(30, 15)
+        )
+        add!(
+            "no breakpoint", importation_epsilon_matrix, 0.02,
+            0.5 .* randn(erng, 3), -0.3, sigmoid_ramp(20, missing)
+        )
         return cases
     end
 end
