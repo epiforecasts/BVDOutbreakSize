@@ -358,7 +358,7 @@ province_rt_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The reproduction number of each province, with the national trajectory in grey.
-#md # The grey band is the reproduction number implied by the summed provinces, the incidence-weighted middle of the panels rather than any one province.
+#md # The grey band is the central trend the provinces pool toward, net of depletion, rather than any one province.
 #md # Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi hold few confirmed cases, so their panels are carried mostly by the deviation prior and their widths are not measurements.
 #md # </figcaption>
 #md # </figure>

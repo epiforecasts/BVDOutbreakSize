@@ -35,7 +35,7 @@
   The onset-to-death delay does not propagate cross-outbreak uncertainty, and the [genetic seeding bound](@ref "Genetic bound on outbreak age") does not propagate the choice of tree prior.
 - The export model counts every border crossing by an undetected infection as a possible detection in Uganda, so a traveller who returns to the DRC before detection is over-counted.
   A constant share of such round trips is absorbed into the Uganda ascertainment, but a share that changes over the window is not.
-- The intervention ramp in the [reproduction number](@ref "Reproduction number") is fixed in time, with an assumed start and three-week duration, and only its size is estimated.
+- The intervention ramp in the [reproduction number](@ref "Reproduction number") is a logistic curve fixed in time, centred on the first situation report with an assumed 21-day time scale, and only its size is estimated.
 - The share of reported suspects admitted to a treatment-centre bed has a weakly-informative prior that no external evidence sets.
 - Occupancy shows demand only up to the beds filled, so the bed shortfall above capacity is not measured and comes from the [treatment-centre flow](@ref "Treatment-centre flow") model and its priors.
 
