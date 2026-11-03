@@ -1176,8 +1176,9 @@ provinces. The default `n_patches = 1` collapses it onto the
 single-population model, since the sum-to-zero deviations vanish, there is
 nothing to import between, and no per-province likelihood is scored.
 
-The spatial information enters through two composition terms. The
-per-province confirmed cases and confirmed deaths in the situation
+The spatial information enters through three composition terms and the
+province care splits. The per-province confirmed cases and confirmed
+deaths in the situation
 reports' spatial tables are exact partitions of the national totals, so
 scoring them with their own count likelihoods would put the same data into
 the joint density twice. [`province_composition_model`](@ref) scores each
@@ -1188,8 +1189,8 @@ with `province_death_days`, both built by
 [`province_increment_matrix`](@ref). Omit them and the composition terms
 are skipped. The case composition identifies only the product of a
 province's incidence and its case-finding. The death composition
-identifies the incidence split, since the case-fatality ratio and the
-death-confirmation probability are national, and the case composition then
+identifies the incidence split, under tight priors on the province death
+ascertainment and case-fatality contrasts, and the case composition then
 identifies the relative case ascertainment as the residual.
 
 With the case composition on, the relative case ascertainment is split
@@ -1745,7 +1746,8 @@ cut-off, and the density there, is the fitted model's.
     ## Per-patch quantities, as vector deterministics (one entry per patch).
     if n_patches > 1 && size(treatment_state.capacity_patch, 1) == n_patches
         ## Cut-off beds, demand, occupancy and shortfall by patch
-        ## ([`cutoff_occupancy`](@ref)); the national figures are their sums.
+        ## ([`cutoff_occupancy`](@ref)). Beds and occupancy sum to the national
+        ## figures; the per-province shortfall does not.
         ## Present only when a province split scored them.
         province_bed_capacity := treatment_state.beds_patch_T
         province_bed_demand := treatment_state.demand_patch[:, n]

@@ -566,9 +566,9 @@ const CHAMLA_CONFIRMED_CENTRAL = [
 [chamla2026](@citet) week-12 (24 June 2026) cumulative confirmed-case
 projection under their three transmissibility scenarios, as
 `(scenario, median, lower_90, upper_90)` tuples (low `R₀ = 1.42`, central
-`R₀ = 1.71`, high `R₀ = 2.08`). Week 12 is the forward horizon closest to
-this analysis's current cut-off, so the scenario spread sits beside the
-observed confirmed count and our matched-date projection. The bounds are
+`R₀ = 1.71`, high `R₀ = 2.08`). Week 12 is the last forward horizon in the
+comparison window, so the scenario spread sits beside the observed
+confirmed count and our matched-date projection. The bounds are
 90% prediction intervals. The same estimand caveat as
 [`CHAMLA_CONFIRMED_CENTRAL`](@ref) applies. These are confirmed cases,
 not ascertainment-corrected total cases.
