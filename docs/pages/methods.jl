@@ -1241,7 +1241,7 @@ cfr_prior_fig #hide
 # The death-stay prior is the admission-to-death delay from the line-list reanalysis [bdbv_linelist_analysis_2026](@cite), and the non-BVD rule-out stay is its own delay, centred on the report-to-receipt laboratory turnaround with wider priors.
 # The stays are discretised delays with priors on the admission delay mean $\mathrm{Normal}(2,\ 1)$ and SD $\mathrm{Normal}(1.5,\ 1)$, the death-stay Gamma shape $\mathrm{Normal}(2.15,\ 0.60)$ and scale $\mathrm{Normal}(3.91,\ 1.38)$, the recovery-stay mean $\mathrm{Normal}(14,\ 5)$ and SD $\mathrm{Normal}(8,\ 4)$, and the rule-out-stay mean $\mathrm{Normal}(4.5,\ 2)$ and SD $\mathrm{Normal}(4,\ 1.5)$, each truncated below.
 #
-# Occupancy is the running balance of these latent events rather than a length-of-stay convolution.
+# Each day's occupancy is the previous day's bed stock plus the day's admissions, less its deaths, recoveries, rule-outs and absconds.
 # The abscond outflow drains the suspected pool at a small daily fraction $\kappa$ of the previous day's suspected occupancy,
 #
 # ```math
