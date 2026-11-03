@@ -1518,7 +1518,7 @@ cfr_prior_fig #hide
 # #### Laboratory pipeline
 #
 # The laboratory pipeline fits a single analysed-specimen volume.
-# It is the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus the non-BVD background $\lambda_{\text{bg}}$) carried through the report-to-analysed delay $f_{\text{rec}}$, thinned by the testing fraction $\tau_{\text{test}}$ (the share of suspected cases routed to the laboratory), and multiplied by the specimens analysed per suspect sampled $\varrho$,
+# It is the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus the non-BVD background $\lambda_{\text{bg}}$) carried through the report-to-analysed delay $f_{\text{rec}}$, thinned by the testing fraction $\tau_{\text{test}}$, and multiplied by the sampled specimens analysed per suspect $\varrho$,
 #
 # ```math
 # v_t = \varrho\, \tau_{\text{test}} \sum_{s \ge 0}
@@ -1529,7 +1529,7 @@ cfr_prior_fig #hide
 # $\varrho$ can exceed one because repeat exclusion testing, swabbed community deaths and screened contacts all put specimens into the laboratory denominator without adding a reported suspect.
 # Its prior is $\varrho \sim \mathrm{LogNormal}(0,\ 0.25)$, with median one.
 #
-# This analysed volume is gated to zero before the testing onset.
+# The analysed volume is zero before the testing onset.
 # The first confirmed vintage is treated as the baseline and the early confirmed increments are scored from it.
 # The suspected-case count itself is not gated, as those cases did accumulate over the cryptic phase.
 #
@@ -1543,7 +1543,6 @@ cfr_prior_fig #hide
 # Where INSP publishes a 24h analysed count after the cumulative series stops, that count is scored as a NegBinomial of the modelled volume $v_t$ on that day with the same dispersion.
 #
 # The confirmed positives in each laboratory window $v$ are scored as a beta-binomial of the observed specimens-analysed denominator $A_v$ with a per-window tested-positive probability $p_{\text{pos},v}$.
-# Where no analysed count is observed (the early and unanchored windows), the modelled volume $v_t$ is the denominator instead.
 # We tie that probability to the composition of the tested pool, so the confirmed data help identify the non-BVD background.
 # The suspect-pool composition $\varphi_v$ is the BVD share among the specimens analysed in the window, carried through the same delay as the volume so composition and volume share one clock:
 #
@@ -1560,6 +1559,7 @@ cfr_prior_fig #hide
 #     \delta_0\, e^{-c_v / \text{decay}}\bigr).
 # ```
 #
+# Here $c_v$ is the cumulative modelled laboratory volume at window $v$, the clock on which the enrichment decays.
 # The false-positive term carries the non-BVD share:
 #
 # ```math
@@ -1570,12 +1570,10 @@ cfr_prior_fig #hide
 # C_v \sim \mathrm{BetaBinomial}(A_v,\ p_{\text{pos},v},\ \rho_{\text{conf}}), \qquad \rho_{\text{conf}} \sim \mathrm{Beta}(1, 24), \tag{43}
 # ```
 #
-# where the beta-binomial has mean $A_v p_{\text{pos},v}$ and intra-window correlation $\rho_{\text{conf}}$, which tends to the binomial as $\rho_{\text{conf}}$ tends to zero.
-# We use this prior, with mean about 0.04, so the spread is set by the confirmed positives themselves.
-# Here $c_v$ is the cumulative modelled laboratory volume at window $v$, the clock on which the enrichment decays.
+# where the beta-binomial has mean $A_v p_{\text{pos},v}$ and intra-window correlation $\rho_{\text{conf}}$, and tends to the binomial as $\rho_{\text{conf}}$ tends to zero.
+# The prior on $\rho_{\text{conf}}$ has mean about 0.04, which leaves the spread to the confirmed positives themselves.
 # The confirmed vintages before the first laboratory date, and later days with no published 24h analysed count, carry no observed analysed denominator.
-# They are scored as NegBinomial counts against the modelled laboratory volume $V_v$, the daily modelled volume $v_t$ summed over the window, with the same composition-linked positivity.
-# This way all the confirmed data are used:
+# They are scored as NegBinomial counts against the modelled laboratory volume $V_v$, the daily modelled volume $v_t$ summed over the window, with the same positivity:
 #
 # ```math
 # C_v^{\text{no-denom}} \sim
@@ -1645,7 +1643,7 @@ cfr_prior_fig #hide
 # ```
 #
 # The false-positive term $(1-\mathrm{spec})(1-q_{\text{death}})$ makes the confirmed deaths respond to the non-BVD death share.
-# The death background (the background CFR applied to the case background, lagged by the onset-to-death delay) keeps the composition below one.
+# The death background keeps the composition below one.
 # The daily confirmed deaths are the positivity times the death analysed volume,
 #
 # ```math
@@ -1681,7 +1679,7 @@ cfr_prior_fig #hide
 # #### Recovered among confirmed
 #
 # Recoveries ("cumul guéris") are the survivors among laboratory-confirmed cases, the incidence analogue of the convolution-and-scaling secondary-observation model of EpiNow2 [epinow2](@cite).
-# The modelled daily confirmed incidence $\text{confirmed}_t$ (the per-window tested-positive probability on the modelled analysed volume, the same daily series the cumulative-confirmed trajectory uses) is scaled by the recovery proportion $p_{\text{rec}}$ and convolved with a sampled confirmation-to-recovery delay $f_{\text{cr}}$,
+# The modelled daily confirmed incidence $\text{confirmed}_t$ (the tested-positive probability times the modelled analysed volume) is scaled by the recovery proportion $p_{\text{rec}}$ and convolved with a sampled confirmation-to-recovery delay $f_{\text{cr}}$,
 #
 # ```math
 # \text{recovered}_t = p_{\text{rec}} \sum_{s \ge 0}
@@ -1689,17 +1687,16 @@ cfr_prior_fig #hide
 # ```
 #
 # $f_{\text{cr}}$ is a discretised LogNormal with mean $\sim \mathrm{Normal}(14,\ 5)$ and SD $\sim \mathrm{Normal}(8,\ 4)$, both truncated below at one day.
-# A recovered case is one that did not die, so the recovery proportion is grounded on the case-fatality ratio rather than estimated independently.
-# It is the complement $1 - \mathrm{CFR}$ adjusted on the log-odds scale by a sampled offset $\delta_{\text{rec}} \sim \mathrm{Normal}(0, 0.5)$, since the confirmed cases are a slightly different population from the one the CFR is defined over,
+# A recovered case is one that did not die, so the recovery proportion is tied to the case-fatality ratio.
+# It is $1 - \mathrm{CFR}$ shifted on the log-odds scale by a sampled offset $\delta_{\text{rec}} \sim \mathrm{Normal}(0, 0.5)$, since the confirmed cases differ slightly from the population the CFR is defined over,
 #
 # ```math
 # p_{\text{rec}} = \operatorname{logistic}\!\bigl(
 #     \operatorname{logit}(1 - \mathrm{CFR}) + \delta_{\text{rec}}\bigr).
 # ```
 #
-# A case is taken to be confirmed before it is recorded as recovered (the report counts recoveries among confirmed cases).
-# A positive result could in principle return after a patient has already recovered, but we assume the reported total reflects confirmed cases recorded as recovered.
-# The cumulative recovered series ends at the cut-off, so its per-vintage increments are fitted, like the confirmed and confirmed-death streams, with a NegBinomial with the recovered-stream dispersion $k_{\text{rec}}$:
+# We assume a case is confirmed before it is recorded as recovered, although a positive result could return after recovery.
+# The per-vintage increments are scored with a NegBinomial with the recovered-stream dispersion $k_{\text{rec}}$:
 #
 # ```math
 # Y_{\text{rec},i} - Y_{\text{rec},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
@@ -1771,12 +1768,10 @@ cfr_prior_fig #hide
 # ```
 #
 # We model outbound travel only, not return, so this term would overestimate the infections on its own.
-# Each observed Uganda import is fitted at its reported detection date.
-# An import detected on a given day is scored as a Poisson of the rise in cumulative export intensity between consecutive detection dates.
+# Each Uganda import is scored at its reported detection date as a Poisson of the rise in cumulative export intensity since the previous detection.
 # A term before the earliest detection $d_1$ is observed at zero, since no export is expected then.
 # After the last detection date we stop modelling exports rather than scoring further zeros.
-# Travellers' reasons for crossing the border change over the outbreak, so the baseline travel rate no longer applies beyond it.
-# The export clock is therefore truncated there:
+# Travellers' reasons for crossing the border change over the outbreak, so the baseline travel rate no longer applies beyond it and the export clock is truncated there:
 #
 # ```math
 # Y_{\text{exports},i} \sim
