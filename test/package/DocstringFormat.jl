@@ -41,9 +41,7 @@
         end
     end
 
-    # `names` returns the exported names, and on Julia 1.11+ any `public`
-    # ones too. Split them into types and functions (constants such as
-    # ITURI_POPULATION are neither).
+    # Constants such as ITURI_POPULATION are neither types nor functions.
     exported_symbols = names(BVDOutbreakSize)
     all_types = [
         name
@@ -142,26 +140,18 @@ end
                                 for method in methods_list
                                     try
                                         arg_names = Base.method_argnames(method)
-                                        if length(arg_names) > 1
-                                            relevant_args = arg_names[2:end]
-                                            method_args = []
-
-                                            for arg in relevant_args
+                                        function_has_args |= any(
+                                            arg -> begin
                                                 arg_str = string(arg)
-                                                if arg ≠ Symbol("#unused#") &&
-                                                        !startswith(arg_str, "#") &&
-                                                        !startswith(arg_str, "var\"") &&
-                                                        arg ≠ Symbol("") &&
-                                                        !occursin("##", arg_str) &&
-                                                        length(arg_str) > 1
-                                                    push!(method_args, arg)
-                                                end
-                                            end
-
-                                            if !isempty(method_args)
-                                                function_has_args = true
-                                            end
-                                        end
+                                                arg ≠ Symbol("#unused#") &&
+                                                    !startswith(arg_str, "#") &&
+                                                    !startswith(arg_str, "var\"") &&
+                                                    arg ≠ Symbol("") &&
+                                                    !occursin("##", arg_str) &&
+                                                    length(arg_str) > 1
+                                            end,
+                                            arg_names[2:end]
+                                        )
 
                                         # Check for keyword arguments
                                         if method.nkw > 0
