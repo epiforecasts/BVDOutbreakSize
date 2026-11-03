@@ -3,7 +3,7 @@
 # cached independently, one per CI matrix job or HPC task, and the
 # docs build then loads the chains through the content-addressed cache
 # instead of refitting them inline. `build_fit_specs` mirrors the model
-# calls in the report pages under `docs/pages/`; keep the two in step.
+# calls in the `docs/pages/` scripts; keep the two in step.
 #
 # A health-zone fit adds `needs`, the ids it is melded from, and runs in a
 # second stage once those are cached (`base_fit_specs`,
@@ -502,7 +502,7 @@ function build_fit_specs(
         ## `n_patches = 1` it collapses exactly onto the single-population
         ## model (the sum-to-zero deviations vanish, no importation, no
         ## composition terms), so there is one model rather than two. The
-        ## headline runs it over the three affected provinces.
+        ## headline runs it over the eight affected provinces.
         fit_spec(
             "joint",
             () -> bvd_joint(

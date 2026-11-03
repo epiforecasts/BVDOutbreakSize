@@ -1371,10 +1371,9 @@ prevalence is the infections convolved with its survival
 `P(delay > τ) = 1 − Σ_{u ≤ τ} f_det(u)`. Summing the daily at-risk prevalence
 is the discrete person-time integral. Summing `q · onsets` instead would
 charge each case only a single day of travel risk. The onset-to-detection
-delay is the line-list onset-to-admission Gamma the suspect-case report uses
+prior is the line-list onset-to-admission Gamma the suspected cases use
 (shape `LogNormal(log 1.178, 0.25)`, scale `LogNormal(log 3.694, 0.32)`),
-taken as the delay from symptom onset to detection at a point of entry
-abroad.
+the delay from symptom onset to detection at a point of entry abroad.
 
 ## Dated per-day likelihood
 
@@ -1878,8 +1877,8 @@ a_\\text{bg}(t) = κ\\,O_\\text{susp}(t-1)\\,
 ```
 
 The confirmation overlay relabels occupied true cases at the daily hazard
-`conf_hazard(t) = ρ · τ_test · p_pos(t)`, the lab pipeline's hazard scaled by
-the in-care modifier `ρ`, so the
+`conf_hazard(t) = ρ · τ_test · p_pos(t)`, the lab pipeline's hazard scaled
+by the in-care modifier `ρ`, so the
 confirmed sub-stock is the confirmed subset of `O_bvd`, never an extra
 compartment, draining at the confirmed share of the BVD discharges:
 
@@ -2049,8 +2048,8 @@ O_\\text{conf}(t) = \\sum_{u \\le t} A_\\text{bvd}(u)\\,
 a product of two clocks running from admission. The confirmation clock is
 the per-cohort cumulative confirmation probability under the time-varying
 daily hazard `conf_hazard(t) = ρ · τ_test · p_pos(t)`, the lab pipeline's
-hazard scaled by the in-care modifier `ρ`, with exposure from the day after
-admission:
+hazard scaled by the in-care modifier `ρ`, with exposure from the day
+after admission:
 
 ```math
 \\text{CDF}_\\text{conf}(u, t) = 1 - \\prod_{j = u+1}^{t}\\bigl(1 -
@@ -3095,8 +3094,9 @@ return after a patient has already recovered and been discharged, but
 "cumul guéris" is assumed to count confirmed cases recorded as recovered.
 
 The cumulative recovered series ends at the cut-off, so its between-vintage
-increments are fitted with a NegativeBinomial. In the joint its dispersion
-is the pooled `k_external`; standalone it is sampled here. The convolution
+increments are fitted with a NegativeBinomial whose dispersion is passed in
+(`k_external`, the joint's pooled stream dispersion) or, standalone, sampled
+here. The convolution
 right-censors recoveries that have not yet resolved by the cut-off, so a
 small observed recovered count is consistent with a high eventual survival
 fraction and a long recovery delay. Empty by default. A `missing` cut-off
@@ -4432,22 +4432,22 @@ end
 _logit_shift(p::Real, s::AbstractVector) = logistic.(logit(p) .+ s)
 
 """
-Per-province composition of the confirmed cases, from the Tableau 1
+Per-province composition of a national count, from the situation reports'
 spatial tables.
 
 ### Why a composition and not per-province counts
 
 The per-province confirmed totals are an exact partition of the national
-ones: at every shared vintage the provinces sum to the national confirmed
-count [`confirmed_cases_model`](@ref) already scores. Fitting the
-per-province counts with their own count likelihood would put the same
-observations into the joint density twice.
+ones: at every shared vintage the provinces sum to the national count the
+matching stream already scores. Fitting the per-province counts with their
+own count likelihood would put the same observations into the joint
+density twice.
 
 The information the spatial tables add is purely *spatial*, how the
 confirmed cases divide between provinces, so the likelihood factorises as
 
 ```math
-P(y_1, y_2, y_3) = P(N) \\; P(y_1, y_2, y_3 \\mid N),
+P(y_1, \\dots, y_P) = P(N) \\; P(y_1, \\dots, y_P \\mid N),
 \\qquad N = \\textstyle\\sum_p y_p,
 ```
 

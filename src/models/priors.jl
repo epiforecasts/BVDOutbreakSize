@@ -1083,14 +1083,7 @@ Shared pooling SD `σ_bg` for the non-BVD background walk
 ([`background_walk_model`](@ref)). Sampled once at the composer level and
 passed to the suspected-case background, whose level the suspected-death
 background inherits, so one time-variation scale serves both streams. The
-prior is a half-normal of scale 0.3.
-
-The background is degenerate with outbreak size, so the prior still
-regularises rather than freeing the scale. A wide random effect would let
-individual windows absorb arbitrary suspected counts and re-open the
-posterior mode in which the background explains the majority of suspected
-cases, and regularising `σ_bg` toward zero keeps the time variation a
-perturbation of the informative scalar baselines. Returns `(; σ_bg)`.
+prior is a half-normal of scale 0.3. Returns `(; σ_bg)`.
 """
 @model function background_pooling_model(;
         pooling_prior = truncated(Normal(0.0, 0.3); lower = 0)
@@ -1288,7 +1281,9 @@ by [`censored_delay_model`](@ref) so it convolves cleanly onto the
 renewal onsets. The mean and SD carry weakly-informative priors centred
 on a short turnaround with a heavy right tail allowing for specimen
 shipment to a confirmatory lab. No per-sample outbreak data grounds this
-delay, so the likelihood does not identify the turnaround mean or SD. The
+delay alone. In [`bvd_joint`](@ref) its mean and SD enter the cohort
+onset-to-sample term with the onset-to-report delay
+([`nejm_onset_to_sample`](@ref)). The
 priors are kept tight around the documented turnaround belief (mean
 ≈ 4.5 d, SD ≈ 4 d), since a wide prior on an unidentified nuisance delay
 only makes the sampler wander it, dragging the confirmation PMFs convolved
@@ -1594,15 +1589,8 @@ correlation carries information the sds do not.
 
 ### What the data can and cannot identify here
 
-The composition of the confirmed cases identifies the contrast between
-provinces. Sud-Kivu, Tshopo, Bas-Uele, Sud-Ubangi and Nord-Ubangi carry
-little signal. Expect `Ω` to be largely prior-driven and those patches'
-`Rt` to be pinned mostly by the deviation prior rather than by data, which
-is why `Σ` is given a proper shrinkage prior rather than a flat one.
-
-`σ_drift → 0`, and with it every `σ_δ`, recovers a common `Rt` shape shared by every
-province, a fixed ratio between them. It is a special case of this model rather than an
-assumption baked into it. `σ_δ` is the headline spatial
+`σ_drift → 0`, and with it every `σ_δ`, leaves each province's deviation
+decaying from its first-knot level toward the trend. `σ_δ` is the headline spatial
 diagnostic, and a posterior pushed away from zero is evidence that
 provincial `Rt` trajectories are separating, which is what a response
 concentrated on the Ituri epicentre would produce.

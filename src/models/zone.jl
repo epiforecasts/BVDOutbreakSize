@@ -1611,8 +1611,8 @@ support keeps the composition mass finite.
 
 Every scale the two levels share takes its prior from the province
 posterior fitted to its draws (`zd.parent_priors`): the drift scale, the
-two composition overdispersions, the relative ascertainment and fatality
-scales, and the deviation correlation. A zone starts at its
+two composition overdispersions, the relative ascertainment scale and the
+deviation correlation. A zone starts at its
 province's estimate and departs only as far as its own counts require.
 
 ### The shared quantity
