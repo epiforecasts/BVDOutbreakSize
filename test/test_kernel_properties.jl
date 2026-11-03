@@ -68,6 +68,21 @@ end
     @test out[:, 7] ≈ fill(demand[7] / 4, 4)
 end
 
+@testitem "patch_rt_matrix: the national Rt scaled by each patch's deviation" setup = [
+    KernelProperties,
+] begin
+    using BVDOutbreakSize: patch_rt_matrix, interpolate_knots, knot_days
+    rng = Xoshiro(3)
+    days = knot_days(50)
+    R = 1 .+ rand(rng, 50)
+    K = 0.3 .* randn(rng, 4, length(days))
+    Rt = patch_rt_matrix(R, K, days)
+    @test size(Rt) == (4, 50)
+    @test all(p -> Rt[p, :] ≈ R .* exp.(interpolate_knots(K[p, :], days, 50)), 1:4)
+    ## Zero deviations give the national series in every patch.
+    @test all(==(R), eachrow(patch_rt_matrix(R, zero(K), days)))
+end
+
 @testitem "convolve_pmf: mass, identity and symmetry" setup = [
     KernelProperties,
 ] begin
