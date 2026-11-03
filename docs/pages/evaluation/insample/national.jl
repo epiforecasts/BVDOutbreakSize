@@ -1465,7 +1465,7 @@ r0_stream_fig #hide
 # ### Delay sensitivity
 #
 # The death stream dates the outbreak from how far deaths lag symptom onset, so the assumed onset-to-death delay sets the implied infection count.
-# The baseline uses the hospital-pathway delay from the Isiro 2012 line-list reanalysis (onset to admission then admission to death, implied mean about 13 d).
+# The baseline uses the hospital-pathway delay from the line-list reanalysis in the [onset-to-death delay](@ref "Onset-to-death delay") Methods section (implied mean about 13 d).
 # We refit the joint model under the community-pathway delay from the same reanalysis, for deaths in the community without a recorded admission (implied mean about 8 d).
 # The refit is the headline model with the headline's sampler settings and changes only the delay.
 
