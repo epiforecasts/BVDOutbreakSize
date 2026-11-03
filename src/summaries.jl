@@ -1174,15 +1174,6 @@ function patch_summary_table(
         _prettify(select(df, Not(:patch)))
 end
 
-## Per-patch draws of the final column of a `(n_patches × n_vintages)` matrix
-## deterministic (`province_shares`, `province_death_shares`): the modelled
-## split at the most recent vintage.
-function _per_patch_last_share(chn, sym::Symbol, np::Integer)
-    ms = [collect(v) for v in vec(collect(chn[sym]))]
-    nv = size(first(ms), 2)
-    return [[m[p, nv] for m in ms] for p in 1:np]
-end
-
 """
 Per-province case-fatality ratios, set against the national ones the
 [`confirmed_cfr_table`](@ref) reports. `res` is a

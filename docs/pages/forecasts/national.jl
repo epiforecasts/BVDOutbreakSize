@@ -116,7 +116,7 @@ forecast_fig #hide
 #md # </figure>
 #md # ```
 
-# The reported count of patients in isolation is the occupied-bed count, so it measures bed use limited by supply, and bed demand is the unobserved number who need a bed.
+# Bed demand is defined in the [treatment-centre flow](@ref "Treatment-centre flow") Methods section.
 # The national occupancy is censored at the national beds, so the national shortfall understates local unmet need (see [limitations](@ref "Limitations")).
 
 #md # ```@raw html

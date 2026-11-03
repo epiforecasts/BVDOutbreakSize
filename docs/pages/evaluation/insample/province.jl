@@ -432,7 +432,7 @@ province_pairs_fig #hide
 # ## [Estimate evolution across releases](@id province-estimate-evolution)
 #
 # How each province's estimates have moved as releases accrued, read from the estimates each release published at its own cut-off.
-# Releases began publishing per-province estimates recently, so each panel fills in as releases accumulate.
+# Each panel starts at the first release that published per-province estimates.
 
 #md # ```@raw html
 #md # <details><summary>Load the per-province estimates of each release</summary>
@@ -550,7 +550,7 @@ province_cfr_release_fig #hide
 # We refit the joint model with its eight patches reduced to one well-mixed population.
 # Splitting the country into provinces adds no national data, so the national outbreak size should not move far either way.
 # The two still differ, because the country grows at the force-weighted mean of the provinces' reproduction numbers, which sits above the central trend they pool toward.
-# That gap is first order in the deviation scale, so a large gap between the two posteriors would point at the deviation priors rather than at the data.
+# That gap is first order in the deviation scale, so a large gap between the two posteriors would point at the deviation priors.
 
 spatial_sensitivity_table = streams_table(
     "Meta-population (headline)" => posterior_C_joint,
@@ -718,7 +718,7 @@ spatial_quantities_table #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The cumulative infections, reproduction number at the cut-off, case-fatality ratio, outbreak age and latest growth rate under both structures, as credible intervals.
-#md # This is where the agreement is read rather than from the figures.
+#md # The agreement is read from this table.
 #md # </figcaption>
 #md # </figure>
 #md # ```

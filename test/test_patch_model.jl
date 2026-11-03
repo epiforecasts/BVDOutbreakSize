@@ -1210,9 +1210,9 @@ end
     )
 
     ## The chain read contract: every key that src/ or docs/ pulls off a
-    ## joint chain. A key surfaced by a submodel rather than the composer's
-    ## body, or attached under the wrong prefix, samples the same parameters
-    ## and fails only at render, so assert against what is read.
+    ## joint chain. A key can be absent or wrongly prefixed while the
+    ## parameter set is unchanged, so a parameter-count check passes and only
+    ## the render fails. Assert against what is read.
     for q in (
             :bed_capacity, :CFR, :C_T, :cumulative_confirmed,
             :cumulative_infections, :cumulative_onsets,

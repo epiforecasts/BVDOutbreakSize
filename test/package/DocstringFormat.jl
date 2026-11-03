@@ -21,44 +21,6 @@
         return "No documentation found."
     end
 
-    # Helper to extract function signature and arguments
-    function extract_function_info(func_name, mod = BVDOutbreakSize)
-        methods_list = methods(getfield(mod, func_name))
-        all_args = Set{Symbol}()
-        has_kwargs = false
-
-        for method in methods_list
-            try
-                # Get argument names from method signature
-                arg_names = Base.method_argnames(method)
-                if length(arg_names) > 1
-                    # Skip first argument (function name) and filter out internal arguments
-                    relevant_args = arg_names[2:end]
-                    for arg in relevant_args
-                        arg_str = string(arg)
-                        if arg ≠ Symbol("#unused#") &&
-                                !startswith(arg_str, "#") &&
-                                !startswith(arg_str, "var\"") &&
-                                arg ≠ Symbol("") &&
-                                !occursin("##", arg_str)
-                            all_args = union(all_args, [arg])
-                        end
-                    end
-                end
-
-                # Check if method has keyword arguments
-                if method.nkw > 0
-                    has_kwargs = true
-                end
-            catch e
-                # Skip methods that can't be introspected
-                continue
-            end
-        end
-
-        return collect(all_args), has_kwargs
-    end
-
     # Helper to check if an object is a type (not a function)
     function is_type_export(name, mod)
         try
@@ -79,80 +41,18 @@
         end
     end
 
-    # Get public symbols (Julia 1.11+) and exported symbols
-    function get_public_symbols()
-        # Get public symbols if available (Julia 1.11+)
-        @static if VERSION >= v"1.11"
-            if isdefined(BVDOutbreakSize, :public)
-                try
-                    # Public symbols are not read from module metadata
-                    return Symbol[]
-                catch
-                    return Symbol[]
-                end
-            else
-                return Symbol[]
-            end
-        else
-            return Symbol[]
-        end
-    end
-
-    # Automatically discover all exports and public symbols
-    function discover_all_symbols()
-        # Get exported symbols
-        exported_symbols = names(BVDOutbreakSize)
-
-        # Get public symbols
-        public_symbols = get_public_symbols()
-
-        # Combine exported and public, remove duplicates
-        all_symbols = unique(vcat(exported_symbols, public_symbols))
-
-        # Split into types and functions (only include actual functions,
-        # not constants like ITURI_POPULATION)
-        all_types = [
-            name
-                for name in all_symbols if is_type_export(name, BVDOutbreakSize)
-        ]
-        all_functions = [
-            name
-                for name in all_symbols
-                if is_function_export(name, BVDOutbreakSize)
-        ]
-
-        # Also track which are exported vs public
-        exported_types = [
-            name
-                for name in exported_symbols
-                if is_type_export(name, BVDOutbreakSize)
-        ]
-        exported_functions = [
-            name
-                for name in exported_symbols
-                if is_function_export(name, BVDOutbreakSize)
-        ]
-
-        public_types = [
-            name
-                for name in public_symbols
-                if is_type_export(name, BVDOutbreakSize)
-        ]
-        public_functions = [
-            name
-                for name in public_symbols
-                if is_function_export(name, BVDOutbreakSize)
-        ]
-
-        return (
-            all_types, all_functions, exported_types,
-            exported_functions, public_types, public_functions,
-        )
-    end
-
-    # Assign discovered symbols as variables for use in test items
-    all_types, all_functions, exported_types, exported_functions,
-        public_types, public_functions = discover_all_symbols()
+    # Constants such as ITURI_POPULATION are neither types nor functions.
+    exported_symbols = names(BVDOutbreakSize)
+    all_types = [
+        name
+            for name in exported_symbols
+            if is_type_export(name, BVDOutbreakSize)
+    ]
+    all_functions = [
+        name
+            for name in exported_symbols
+            if is_function_export(name, BVDOutbreakSize)
+    ]
 end
 
 @testitem "Type Documentation Format" setup = [DocstringHelpers] tags = [:quality] begin
@@ -211,7 +111,7 @@ end
     end
 
     # Report discovered structure for debugging
-    @info "Discovered symbols" all_types = all_types exported_types = exported_types public_types = public_types
+    @info "Discovered symbols" all_types = all_types
 end
 
 @testitem "Function Documentation Format" setup = [DocstringHelpers] tags = [:quality] begin
@@ -240,44 +140,18 @@ end
                                 for method in methods_list
                                     try
                                         arg_names = Base.method_argnames(method)
-                                        if length(arg_names) > 1
-                                            relevant_args = arg_names[2:end]
-                                            method_args = []
-
-                                            for arg in relevant_args
+                                        function_has_args |= any(
+                                            arg -> begin
                                                 arg_str = string(arg)
-                                                if arg ≠ Symbol("#unused#") &&
-                                                        !startswith(arg_str, "#") &&
-                                                        !startswith(arg_str, "var\"") &&
-                                                        arg ≠ Symbol("") &&
-                                                        !occursin("##", arg_str) &&
-                                                        length(arg_str) > 1
-                                                    push!(method_args, arg)
-                                                end
-                                            end
-
-                                            if !isempty(method_args)
-                                                function_has_args = true
-
-                                                # Check that documented arguments are reasonable for this function
-                                                args_section_match = match(
-                                                    r"# Arguments(.*?)(?=# [A-Z]|@|\z)"s, doc_str
-                                                )
-                                                if args_section_match !== nothing
-                                                    args_section = args_section_match.captures[1]
-                                                    # At least some of this method's args should be documented
-                                                    # (allowing for multiple methods to have different args)
-                                                    method_args_found = 0
-                                                    for arg in method_args
-                                                        arg_pattern = "- `$(arg)"
-                                                        if occursin(arg_pattern, args_section)
-                                                            method_args_found += 1
-                                                        end
-                                                    end
-                                                    # Allow flexibility: if this method contributes some documented args, that's good
-                                                end
-                                            end
-                                        end
+                                                arg ≠ Symbol("#unused#") &&
+                                                    !startswith(arg_str, "#") &&
+                                                    !startswith(arg_str, "var\"") &&
+                                                    arg ≠ Symbol("") &&
+                                                    !occursin("##", arg_str) &&
+                                                    length(arg_str) > 1
+                                            end,
+                                            arg_names[2:end]
+                                        )
 
                                         # Check for keyword arguments
                                         if method.nkw > 0
@@ -312,14 +186,11 @@ end
                                 @test true
                             end
 
-                            # All exported/public functions should have examples
+                            # All exported functions should have examples
                             # BVDOutbreakSize uses a Literate walkthrough in place of
                             # per-function @example blocks; mark as a known gap.
-                            if func_name in exported_functions ||
-                                    func_name in public_functions
-                                @test_broken occursin("@example", doc_str) ||
-                                    occursin("```@example", doc_str)
-                            end
+                            @test_broken occursin("@example", doc_str) ||
+                                occursin("```@example", doc_str)
 
                             # Check for TYPEDSIGNATURES macro usage (from DocStringExtensions) or function signature
                             @test occursin("TYPEDSIGNATURES", doc_str) ||
@@ -341,7 +212,7 @@ end
     end
 
     # Report discovered structure for debugging
-    @info "Discovered functions" all_functions = all_functions exported_functions = exported_functions public_functions = public_functions
+    @info "Discovered functions" all_functions = all_functions
 end
 
 @testitem "Cross-Reference Validation" setup = [DocstringHelpers] tags = [:quality] begin

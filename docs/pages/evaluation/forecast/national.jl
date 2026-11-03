@@ -343,7 +343,7 @@ validation_stopped_fig #hide
 #
 # Each row shows the number of matched forecasts it rests on.
 #
-# Four things are excluded from the scores, each for a stated reason rather than for scoring badly:
+# Four things are excluded from the scores, each for the reason given:
 #
 # - One whole reconstruction (`results-v1.6.0`), whose chain forecasts a near-zero median at every horizon and stream with an occasional five- or six-digit upper tail, the signature of a chain that failed to sample.
 # - In the frozen section only, the confirmed-death rows of the fourteen frozen reconstructions cut between 16 July and 15 August 2026.
@@ -353,10 +353,8 @@ validation_stopped_fig #hide
 #
 # Nothing is dropped from the archive itself, and the score and overlay files in the data directory record everything that was scored.
 #
-# The symptom-onset stream is scored on the new reported count each vintage adds, because every vintage rereads the whole figure.
-# Its printed total therefore moves with the scan error as well as with late reporting, and on some vintages the reread total falls.
-# A window containing a falling vintage is left unscored, as the [province scores](@ref "Forecast by province across releases") do for a window holding a harmonisation-break day.
-# Read the onset row's skill against the baseline rather than its coverage, and as resting on a handful of windows.
+# The symptom-onset stream is scored on the new reported count each vintage adds (see [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and forecast")), and on some vintages the reread total falls.
+# Read the onset row through its skill against the baseline, and as resting on a handful of windows.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
@@ -493,7 +491,7 @@ forecast_skill_by_cutoff_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Relative skill against the baseline release by release, so a run of releases that lost to the baseline reads as a run rather than as an average.
+#md # Relative skill against the baseline release by release, so a run of releases that lost to the baseline shows as a run.
 #md # </figcaption>
 #md # </figure>
 #md # <details><summary>Scores by release</summary>
@@ -533,7 +531,7 @@ forecast_overlay_fig #hide
 # The current model, frozen at earlier data cut-offs (see [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), is scored as the cross-release forecasts above, against the same baseline.
 # The tables in this section are the frozen joint model's, one row per stream.
 # Each still-reported stream's own frozen fit is scored at the one-week-back cut-off, and confirmed cases and confirmed deaths also at each May cut-off.
-# These single-stream fits appear in the skill figures rather than the tables.
+# These single-stream fits appear in the skill figures.
 # The May cut-offs predate the first reported bed occupancy and recoveries, so those windows are left unscored.
 # The baseline snapshot was taken weeks after the frozen cut-off, so it can hold later revisions to earlier days (see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline")).
 
@@ -710,8 +708,8 @@ frozen_skill_by_vintage_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Skill at each cut-off that more than one release forecast, one point per release rather than pooled.
-#md # Releases run in the order they were cut, evenly spaced rather than to calendar scale.
+#md # Skill at each cut-off that more than one release forecast, one point per release.
+#md # Releases run in the order they were cut, evenly spaced.
 #md # </figcaption>
 #md # </figure>
 #md # <details><summary>Frozen scores by release</summary>
@@ -755,10 +753,6 @@ frozen_overlay_fig #hide
 #md # </figcaption>
 #md # </figure>
 #md # ```
-
-# The frozen re-fits below freeze the renewal data to an earlier cut-off and re-fit, so that a change driven by newer data can be distinguished from one driven by a change of method.
-# Every re-fit uses the headline sampler settings.
-# The one-week-back re-fit keeps the province patches, and the re-fits at earlier cut-offs are single-population.
 
 #md # ```@raw html
 #md # <details><summary>Freeze the renewal data to a cut-off and re-fit</summary>
