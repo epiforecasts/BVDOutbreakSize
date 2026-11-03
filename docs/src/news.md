@@ -288,6 +288,7 @@ A minor version: every affected province is its own patch, the importation kerne
 - The confirmed-cases and confirmed-deaths single-stream models are fitted at each of the three May frozen cut-offs and scored alongside the frozen joint (resolves #513).
   They are the only streams with truth to score from those cut-offs, so the frozen comparison of the joint against each stream's own model now covers every May cut-off rather than the one-week-back cut-off alone.
   Existing fitted values do not change.
+- Report-side docstrings and the counterfactual axis label match the code (#1208).
 
 ### Infrastructure
 
