@@ -416,19 +416,36 @@ function nuts_sample(
             max_depth, ϵ = seeded.step_size, adtype
         )
     end
-    chn = sample(
-        rng,
-        model,
-        alg,
-        MCMCThreads(),
-        samples, chains;
-        initial_params = inits,
-        progress = progress,
-        check_model = check_model,
-        cb_kwargs...,
-        warmup_kwargs...,
-        kwargs...
-    )
+    ## A dense metric multiplies a vector by the full inverse metric every
+    ## leapfrog step. BLAS threads on top of the chains' own threads
+    ## oversubscribe the cores and make that step costlier than the
+    ## gradient, so a seeded fit runs it on one thread.
+    blas_threads = BLAS.get_num_threads()
+    if seeded !== nothing
+        BLAS.set_num_threads(1)
+        @info(
+            "nuts_sample: fixed dense metric",
+            dim = size(seeded.inverse_metric, 1), seeded.n_adapts,
+            blas_threads = BLAS.get_num_threads()
+        )
+    end
+    chn = try
+        sample(
+            rng,
+            model,
+            alg,
+            MCMCThreads(),
+            samples, chains;
+            initial_params = inits,
+            progress = progress,
+            check_model = check_model,
+            cb_kwargs...,
+            warmup_kwargs...,
+            kwargs...
+        )
+    finally
+        BLAS.set_num_threads(blas_threads)
+    end
     warm_start_record(warm_start, model, chn, alg)
     return chn
 end

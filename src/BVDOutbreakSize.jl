@@ -1,7 +1,7 @@
 module BVDOutbreakSize
 
 using Statistics: quantile, mean, cor, median, cov, std, var
-using LinearAlgebra: axpy!, dot, cholesky, Symmetric, I, Diagonal, diag,
+using LinearAlgebra: BLAS, axpy!, dot, cholesky, Symmetric, I, Diagonal, diag,
     issuccess, mul!, LowerTriangular
 using TOML: TOML
 using Printf: Printf

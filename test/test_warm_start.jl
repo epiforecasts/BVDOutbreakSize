@@ -104,7 +104,7 @@ end
         chain_index = repeat(1:2; inner = 200),
     )
     child = ["a" => 1:2, "b" => 3:6, "c" => 7:7]
-    no_shrink = seeded_inverse_metric(parent, child; shrink = 0.0)
+    no_shrink = seeded_inverse_metric(parent, child; correlation = 1.0)
     M = no_shrink.inverse_metric
     @test size(M) == (7, 7)
     @test no_shrink.coverage ≈ 5 / 7
@@ -122,8 +122,9 @@ end
     @test M[7, 7] ≈ sort(diag(S))[3]
     @test all(iszero, M[6, [1:5; 7]])
     @test all(iszero, M[7, 1:6])
-    ## Full shrinkage keeps the variances and drops every correlation.
-    D = seeded_inverse_metric(parent, child; shrink = 1.0).inverse_metric
+    ## No correlation weight keeps the variances and drops every
+    ## correlation.
+    D = seeded_inverse_metric(parent, child; correlation = 0.0).inverse_metric
     @test diag(D) ≈ diag(M)
     @test D[1, 2] == 0
     shrunk = seeded_inverse_metric(parent, child).inverse_metric
@@ -204,4 +205,43 @@ end
     @test BVDOutbreakSize.warm_start_settings(w, _two()) === nothing
     @test w.path == "full"
     @test occursin("50.0%", w.reason)
+end
+
+@testitem "nuts_sample with a seed samples FixedMetricNUTS" tags = [
+    :slow,
+] begin
+    using Distributions: Normal, LogNormal
+    using LinearAlgebra: BLAS
+    using Turing: @model
+    import BVDOutbreakSize
+    using BVDOutbreakSize: nuts_sample, FixedMetricNUTS
+
+    @model function _two()
+        x ~ Normal(0.0, 1.0)
+        s ~ LogNormal(0.0, 0.5)
+    end
+    struct _Seeds
+        seen::Base.RefValue{Any}
+    end
+    function BVDOutbreakSize.warm_start_settings(::_Seeds, model)
+        return (;
+            inverse_metric = [1.0 0.1; 0.1 0.25], step_size = 0.0,
+            n_adapts = 30,
+        )
+    end
+    function BVDOutbreakSize.warm_start_record(w::_Seeds, model, chn, alg)
+        w.seen[] = alg
+        return nothing
+    end
+    before = BLAS.get_num_threads()
+    w = _Seeds(Ref{Any}(nothing))
+    chn = nuts_sample(_two(); samples = 20, chains = 2, warm_start = w)
+    alg = w.seen[]
+    @test alg isa FixedMetricNUTS
+    @test alg.n_adapts == 30
+    @test length(alg.step_size_traces) == 2
+    @test all(t -> length(t) == 30, alg.step_size_traces)
+    ## The BLAS thread count set for the dense metric is restored.
+    @test BLAS.get_num_threads() == before
+    @test size(chn) == (20, 2)
 end

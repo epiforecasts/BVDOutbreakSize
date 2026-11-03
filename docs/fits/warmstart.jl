@@ -32,8 +32,12 @@ warm_start_enabled() = lowercase(strip(get(ENV, "BVD_WARMSTART", "true"))) in
 ## Warm-up iterations of a seeded fit. The full warm-up is the joint's.
 warm_start_adapts() = parse(Int, get(ENV, "BVD_WARMSTART_ADAPTS", "300"))
 
-## Weight on the identity when the parent's correlation matrix is shrunk.
-warm_start_shrink() = parse(Float64, get(ENV, "BVD_WARMSTART_SHRINK", "0.75"))
+## Weight kept on the parent's correlations when they are shrunk towards
+## the identity. Scored on the SitRep 164 to 169 transfer, 0.7 to 0.8 gives
+## the widest stable step.
+warm_start_correlation() = parse(
+    Float64, get(ENV, "BVD_WARMSTART_CORRELATION", "0.8")
+)
 
 ## The least share of the metric that must map from the parent to seed.
 ## A model change since the parent does not stop a seed on its own: the
@@ -54,7 +58,7 @@ function warm_start_key()
     warm_start_enabled() || return "warm:off"
     return string(
         "warm:", WARM_START_SCHEMA, ":", warm_start_adapts(), ":",
-        warm_start_shrink(), ":", WARM_START_MIN_COVERAGE
+        warm_start_correlation(), ":", WARM_START_MIN_COVERAGE
     )
 end
 
@@ -119,17 +123,21 @@ function fit_warm_start(id, key; parent_dir = warm_start_parent_dir())
 end
 
 """
-    seeded_inverse_metric(state, layout; shrink = warm_start_shrink())
+    seeded_inverse_metric(state, layout;
+                          correlation = warm_start_correlation())
 
 The inverse metric for a model with linked `layout`, from the parent
-`state`'s draws: their within-chain covariance with the correlations
-shrunk towards the identity by `shrink`. A variable in both maps on the
+`state`'s draws: their within-chain covariance, with the correlation
+matrix `R` replaced by `correlation * R + (1 - correlation) * I`. A
+variable in both maps on the
 leading entries the two share. A variable or entry new since the parent
 takes the median parent variance of its variable, or of all parameters
 when its variable is new, with no correlation. Returns
 `(; inverse_metric, coverage)`, `coverage` the share of entries mapped.
 """
-function seeded_inverse_metric(state, layout; shrink = warm_start_shrink())
+function seeded_inverse_metric(
+        state, layout; correlation = warm_start_correlation()
+    )
     X = copy(state.draws)
     for c in unique(state.chain_index)
         rows = state.chain_index .== c
@@ -156,7 +164,8 @@ function seeded_inverse_metric(state, layout; shrink = warm_start_shrink())
     Σ[child, child] .= S[source, source]
     sd = sqrt.(max.(diag(Σ), 1.0e-12))
     R = Σ ./ (sd * sd')
-    Rs = (1 - shrink) .* R .+ shrink .* Matrix{Float64}(I, dim, dim)
+    Id = Matrix{Float64}(I, dim, dim)
+    Rs = correlation .* R .+ (1 - correlation) .* Id
     return (; inverse_metric = Rs .* (sd * sd'), coverage = length(child) / dim)
 end
 
