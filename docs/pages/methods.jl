@@ -2548,35 +2548,38 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 #
 # Forecasts are drawn from the fitted model run past the cut-off, with each later day an observation that is missing.
 # Each posterior draw keeps its fitted parameters and draws the missing observations from the model.
-# The reproduction number continues its weekly walk with fresh innovations at its fitted step size, the intervention ramp carries on, and the walks for the non-BVD background and the bed capacity continue the same way.
 # The renewal, every delay and ascertainment, and each stream's own likelihood then produce the future counts, so the forecast carries parameter and observation uncertainty.
 # Up to the cut-off the model and its density are unchanged, so the forecast needs no refit.
+#
+# The reproduction number continues its weekly walk with fresh innovations at its fitted step size, the intervention ramp carries on, and the walks for the non-BVD background and the bed capacity continue the same way.
 # The test positivity and the onset hazard's calendar effect and ascertainment are held at their last fitted values.
 # The model defines them only over the laboratory windows and the triangle's grid, and already holds them flat beyond those up to the cut-off.
+#
 # Two smaller departures remain.
 # Exports accrue at the full modelled rate every future day, and the onset figure's increment is drawn once per future vintage on its total rather than per onset date.
 #
 # We forecast the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the recovered total, the patients in isolation and the beds.
 # A future day has no published analysed count, so its confirmed cases take the negative binomial the model uses for confirmed windows without one.
+# The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
+# Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
+# The results are in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results").
+#
 # The occupied beds, admissions and in-care flows are the fitted treatment model run forward, so the latent stock is not capped.
 # The national occupancy is drawn from the negative binomial censored at the national beds, and the national admissions from the uncensored negative binomial.
+# The in-care deaths and rule-outs are drawn nationally around the modelled flows.
+# We also report the modelled bed demand and its excess over the national beds.
+#
 # With province care data each national draw is split across the provinces by the fitted province split, on the provinces' demand for the occupancy and on their modelled admissions for the admissions.
 # Each split carries its fitted overdispersion, so the provinces add up to the national forecast and the national spread is the fitted one.
 # Each province's beds are its share of the capacity walk past the cut-off.
-# The in-care deaths and rule-outs are drawn nationally around the modelled flows.
-# We also report the modelled bed demand and its excess over the national beds.
-# The reported case and suspected death streams are no longer published, so their forecasts extend the last published cumulative total.
-# Exports are forecast only for the per-stream comparison, since cross-border travel is unlikely to continue at its baseline rate.
 #
 # Each release saves its forecast as an asset so it can later be scored against what is observed.
 # For a release that did not store one, the forecast is reconstructed by re-running that release's own model code on its own data and fit, in the same archive schema.
 # Dependencies are re-resolved at current versions, since the release manifests were not pinned, so a reconstruction is not an exact rebuild.
-# Reconstruction reaches back to the first release that carried any forecast, and the streams differ by release.
-# v1.0.0 to v1.2.0 reconstruct the reported case, suspected death and export streams, from each tag's own inline model code.
-# v1.3.0 reconstructs the confirmed case and death streams.
-# v1.4.0 reconstructs the incident case and death streams, extending to all four streams from v1.6.0 once the recovered and isolation series entered the data.
 # Reconstructed forecasts are published as a separate backfill release and scored with the stored ones in [forecast scoring across releases](@ref "Forecast scoring across releases").
-# The results are in the [one-week-ahead forecast results](@ref "One-week-ahead forecast results").
+#
+# The backfill holds every release that carried a forecast, each with the streams its own model covered.
+# These are the reported cases, suspected deaths and exports for v1.0.0 to v1.2.0, the confirmed cases and deaths for v1.3.0, the incident cases and deaths from v1.4.0, and those plus the recovered and isolation series from v1.6.0.
 #
 # #### Symptom-onset nowcast and forecast
 #
@@ -2607,6 +2610,7 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # Onsets past the cut-off come from the renewal run past the cut-off, as for the other streams.
 # The calendar-time effect $\gamma$ and the ascertainment level are held flat at their last fitted values across the horizon.
 # The increment is drawn with the Student-t the scored cells take.
+#
 # Its scale is that of a correction read off two bars, plus the calibration error of each figure's total, $\sigma_{\text{scan}}^2 \bigl(S(T + h)^2 + S(T)^2\bigr)$ added to the variance.
 # The scan error dominates the interval on the increment.
 # $\sigma_{\text{scan}}$ is not fitted, since the scored cells carry no per-figure level.
@@ -2624,9 +2628,11 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # The province forecast is drawn from the same run of the fitted patch model past the cut-off.
 # Each province's deviation from the national walk reverts at the fitted half-life and takes fresh innovations with the fitted cross-province correlation.
 # The provinces keep exchanging infections through the [importation kernel](@ref "Mixing and importation") at each origin's fitted intensity.
+#
 # Each week's national forecast of confirmed cases and deaths is split across the provinces by the fitted province compositions.
 # The split carries each province's onsets through the national delays and weights them by its relative ascertainment and, for deaths, its relative case-fatality ratio.
 # The patients in isolation, the beds and the admissions are forecast by province as above, so every province forecast adds up to the national one.
+#
 # The symptom-onset curve is national only, so there is no province nowcast.
 # Each release archives the projection with its method recorded, and only forecasts of the current method are scored.
 #
@@ -2755,17 +2761,19 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # An undetected case stays in the community until it dies or recovers.
 # It dies with the province case-fatality ratio as its probability, after the onset-to-death delay.
 # We assume an undetected survivor recovers after the onset-to-admission delay plus the treatment-centre stay of a patient who recovers.
+#
 # The probability of being symptomatic and undetected $s$ days after infection sums, over each possible incubation period, its probability times the probability of still being in the community for the rest of the $s$ days.
 # The people in the community are those infected but not yet symptomatic plus those symptomatic and undetected.
 #
 # Each posterior draw of the joint fit has its own infections and delays, so the intervals include the uncertainty in both.
+# Rates are per 100,000 residents, from the province populations and the WorldPop zone populations.
+#
 # For the zones we apply the same weights to the daily infections of the [health-zone model](@ref "Health-zone model"), with each zone draw's own incubation, reporting and death delays.
 # The health-zone model does not estimate the treatment-centre stay, so zone draw $j$ takes it from joint draw $j$.
 # It estimates each zone's ascertainment and fatality relative to its province.
 # A zone's case-fatality ratio is its province's from joint draw $j$ shifted on the logit scale by the zone's contrast.
 # A zone's detection probability is its province's from joint draw $j$ shifted on the logit scale by the log of the zone's relative ascertainment.
 # The zone ascertainment contrast is fitted to confirmed cases, so we assume that suspected-case detection varies between the zones of a province with their confirmed-case ascertainment.
-# Rates are per 100,000 residents, from the province populations and the WorldPop zone populations.
 #
 # ### Comparison with published estimates
 #
