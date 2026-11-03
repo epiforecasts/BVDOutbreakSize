@@ -2089,9 +2089,10 @@ cfr_prior_fig #hide
 #
 # The joint model runs the patch infection process once, stages each patch to daily symptom-onset incidence, and routes the summed onsets into every national observation stream, the symptom-onset reporting triangle included.
 # It samples partially pooled per-stream dispersions and the pooled ascertainment fractions, threading $p_{\text{DRC}}$ to the suspected-case, laboratory and confirmed-death likelihoods and $p_{\text{Uganda}}$ to the two Uganda-side likelihoods.
-# The three province compositions are scored alongside the national streams, the Uganda streams take the export-weighted patch sum, and the genetic seeding bound constrains the outbreak age.
+# The province case, death and analysed-specimen compositions and the province occupancy, bed and admission splits are scored alongside the national streams.
+# The Uganda streams take the export-weighted patch sum, and the genetic seeding bound constrains the outbreak age.
 # Each observation stream argument may be dropped, so the same model generates prior- and posterior-predictive draws.
-# With one patch it is the single-population model, with no deviations, importation or composition terms.
+# With one patch it is the single-population model, with no deviations, importation, compositions or splits.
 #
 # Single-stream models fit the exported cases and the deaths among exports together, the suspected deaths, the suspected cases, the laboratory-confirmed cases, the confirmed deaths, the treatment-centre streams and the symptom-onset reporting triangle.
 # Other variants reuse these models with the data cut to an earlier date or with counts dropped.
@@ -2413,6 +2414,7 @@ cfr_prior_fig #hide
 # It is reported from the day the zone's cumulative infections reach ten in the median draw.
 # For a zone without innovations it is the patch value scaled by the zone's decaying deviation level.
 # This is exact when zones do not mix and approximate when they do, since imported infections also enter the zone.
+# We report the posterior probability that each zone's reproduction number exceeds one and rank the zones by it.
 #
 # #### Zone model assumptions
 #
@@ -2512,10 +2514,8 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # Each release saves its forecast as an asset so it can later be scored against what is observed.
 # For a release that did not store one, the forecast is reconstructed by re-running that release's own model code on its own data and fit, in the same archive schema.
 # Dependencies are re-resolved at current versions, so a reconstruction is not an exact rebuild.
-# Reconstructed forecasts are published as a separate backfill release and scored with the stored ones in [forecast scoring across releases](@ref "Forecast scoring across releases").
-#
-# The backfill holds every release that carried a forecast, each with the streams its own model covered.
-# These are the reported cases, suspected deaths and exports for v1.0.0 to v1.2.0, the confirmed cases and deaths for v1.3.0, the incident cases and deaths from v1.4.0, and those plus the recovered and isolation series from v1.6.0.
+# Reconstructed forecasts cover every release that carried a forecast, each with the streams its own model forecast.
+# They are published as a separate backfill release and scored with the stored ones in [forecast scoring across releases](@ref "Forecast scoring across releases").
 #
 # #### Symptom-onset nowcast and forecast
 #
@@ -2665,6 +2665,12 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # For a count stream that is the horizon-length window ending on the day the forecast was made, and for occupancy it is that day alone.
 # The earliest releases archived their cut-off totals without the dated vintage record, so their forecasts have no baseline either.
 # Neither case is scored, so those forecasts keep their own scores and carry no relative skill.
+#
+# The health-zone split is scored patch by patch with the multinomial log score of the observed zone split of the patch's weekly total, and the zone model's score is the log of its draw-averaged multinomial mass at the forecast shares.
+# Two persistence rules give the baseline split, each with a pseudo-count of 0.5 per zone.
+# Share persistence takes the cumulative zone shares at the cut-off, and naive persistence takes the zone split of the last seven days.
+# The patch total is scored with the CRPS against a naive persistence total, the last seven days' count with negative-binomial noise at dispersion 5.
+# A patch with no observed case over the week is not scored.
 
 # ### [Point prevalence](@id methods-prevalence)
 #
