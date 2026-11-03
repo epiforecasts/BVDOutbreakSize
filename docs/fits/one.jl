@@ -32,9 +32,9 @@ const DRYRUN = lowercase(strip(get(ENV, "BVD_FIT_DRYRUN", ""))) in ("1", "true",
 
 obs = load_observations()
 # Build the full spec set (including the sensitivity re-fits and both stages)
-# so this job can resolve any id either matrix enumerates — the matrices
-# decide which fits run; here we only fit the single requested `id`, so
-# listing all is cheap.
+# so this job can resolve any id either matrix enumerates. The matrices
+# decide which fits run. Only the requested `id` is fitted, so listing all is
+# cheap.
 specs = build_fit_specs(obs; run_sensitivity = true, cache_dir = CACHE)
 isempty(ID) && error(
     "set BVD_FIT_ID to one of: " *

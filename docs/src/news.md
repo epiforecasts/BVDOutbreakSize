@@ -111,6 +111,19 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Data
 
+- A `[skip_dates]` manifest block leaves listed vintages out of a loaded history while keeping them in the manifest as printed, so a report whose cumulative a later report withdraws merges into the next window rather than reading as a fall (#1194).
+- The model cut-off advances to SitRep 170, 31 October.
+  SitRep 170 drops the SitRep 169 Ituri harmonisation without comment, so its national confirmed deaths (5 103) fall 269 below SitRep 169's 5 372.
+  30 October is skipped for the national, province and zone deaths and the zone cases, so their 29 to 31 October step matches the two days' printed counts (#1188).
+  `data/onset_dashboard_history.csv` adds the dashboard snapshot of 2 November.
+  Fitted values change with the new data.
+- The model cut-off advances to SitRep 169, 30 October.
+  SitRep 169 harmonises Ituri's deaths, so national confirmed deaths step 346 against 32 printed.
+  The step is recorded as printed, and whether 30 October becomes a break day is raised in #1188.
+  Yakoma (Nord-Ubangi) joins the health-zone blocks at SitRep 167, and the laboratory scanner reads three new phrasings.
+  The national bed capacity has no entry from 26 October, because Ituri prints no beds and the remaining provinces' sum falls below the isolation tile (#1190).
+  `data/onset_dashboard_history.csv` adds the dashboard snapshots of 28 October to 1 November.
+  Fitted values change with the new data.
 - The model cut-off advances to SitRep 164, 25 October (#1185).
   Its isolation tile is blank, so the national isolation and bed series stop at 24 October, and Nord-Kivu's misprinted admissions are left out.
 - The model cut-off advances to SitRep 163, 24 October (#1166).
@@ -279,6 +292,7 @@ A minor version: every affected province is its own patch, the importation kerne
 - The confirmed-cases and confirmed-deaths single-stream models are fitted at each of the three May frozen cut-offs and scored alongside the frozen joint (resolves #513).
   They are the only streams with truth to score from those cut-offs, so the frozen comparison of the joint against each stream's own model now covers every May cut-off rather than the one-week-back cut-off alone.
   Existing fitted values do not change.
+- The methods page states every production prior, the per-stream dispersions, the onset-to-sample constraint and the 139-genome genetic bound, and its captions and limitations match the code (#1205).
 
 ### Infrastructure
 
@@ -297,6 +311,7 @@ A minor version: every affected province is its own patch, the importation kerne
 - The joint-model fits, and the health-zone fits that take their warm-up, run 1000 warm-up steps where they ran 500 (#1109, part of #1060).
   In one CI build on SitRep 143 the headline joint reached R-hat 1.03 with bulk ESS 95, against 1.10 and 1.11 in main's last two builds, and took 2 h 53 min, about 35 minutes longer.
   `frozen_validation` still reached R-hat 1.09.
+- Every fit in the docs build, the parameter-recovery fits and the health-zone scripts run 750 warm-up steps where they ran 1000 (#1193, part of #1186).
 - Four slow test items that each built their own live-data `bvd_joint` sample `production_joint` instead, which the suite compiles anyway (#1005).
   The two-phase seeding test checks its identities on prior draws and takes one Mooncake gradient, rather than a NUTS fit of a model with no data.
   The gradient keeps the coverage job running the renewal and knot-interpolation rules, which the AD job tests but does not report coverage for.
@@ -309,9 +324,13 @@ A minor version: every affected province is its own patch, the importation kerne
   They run by default, the benchmark workflow's run included, and `BVD_BENCH_ZONE=false` leaves them out of a local run.
   The zone tests and the benchmark build that dataset from one shared fixture.
   The kernels take their inputs from the zone model's own draw construction, so they follow any change to the model.
+- Test comments and the comments and docstrings of the report-side source drop filler, emphasis caps and development narrative (#1197).
+- The repository docs, workflow comments, Taskfile descriptions and script comments drop filler, emphasis caps and development narrative (#1196).
+  Fitted values do not change.
 
 ### Fixed
 
+- Report-side docstrings and the counterfactual axis label match the code (#1208).
 - The province and zone in-sample pages give their estimate-evolution sections their own anchors, so the links to the national section resolve again (follows #1174).
 - The embedded dashboard map grows its frame to fit its page in the narrow layout, so the layer switch no longer scrolls out of reach inside the frame (resolves #1052).
 - The onset forecast model no longer boxes its sampled scan scale inside the interval comprehension, so the boxed-captures check passes again.

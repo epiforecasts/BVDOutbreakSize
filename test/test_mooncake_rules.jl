@@ -1,9 +1,9 @@
 ## Correctness and speed gates for the hand-written reverse rules in
 ## `src/mooncake_rules.jl`.
 ##
-## A wrong derivative is worse than a slow one, and a hand-written rule
-## replaces the one place a backend would otherwise derive it for itself,
-## so nothing else in the suite would notice it drifting. `ADRuleCases`
+## A hand-written rule replaces the one place a backend would otherwise
+## derive it for itself, so nothing else in the suite would notice it
+## drifting. `ADRuleCases`
 ## lists every rule with the argument types its call sites pass and the
 ## edge cases its guards take. Mooncake's `test_rule` checks each case
 ## against finite differences with `is_primitive = true`, which also proves

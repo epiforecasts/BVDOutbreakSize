@@ -1,7 +1,7 @@
 ## Smoke tests for the per-stream DRC / Uganda ascertainment submodel.
 ## Exercises the real `pooled_ascertainment_model` from
-## `src/models/priors.jl`, which samples each fraction independently from
-## its own Beta prior (the name is retained for API compatibility).
+## `src/models/priors.jl`, which draws the two fractions from a
+## non-centred logit-normal hierarchy with a shared mean and pooling SD.
 
 @testsnippet PooledFixtures begin
     using Turing: @model, to_submodel

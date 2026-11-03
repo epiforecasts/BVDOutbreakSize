@@ -90,18 +90,16 @@
 # almost always by a single case, so a between-vintage increment of one is
 # at the noise floor and anything larger is signal.
 #
-# The values are approximate and are not fitted by the model; they are captured
-# for later use (see data/README.md and #488).
+# The values are approximate. The model fits them as the symptom-onset
+# stream (see data/README.md and #488).
 #
 # Dependencies: poppler (`pdfimages`, `pdftotext`, `pdfinfo`) on PATH. No
 # Julia packages beyond stdlib.
 #
-# Incremental by default. Digitising a vintage means extracting the figure
-# and walking it pixel by pixel, and a data update adds one or two vintages
-# to a file that already holds every earlier one. So a run reuses the rows
-# `out_csv` already carries and opens the PDF only for the CONFIG vintages
-# missing from it. The rows are written back in CONFIG order either way, so
-# an incremental run and a full one produce the same file.
+# Incremental by default. A run reuses the rows `out_csv` already carries
+# and opens the PDF only for the CONFIG vintages missing from it. The rows
+# are written back in CONFIG order either way, so an incremental run and a
+# full one produce the same file.
 #
 # A change to the digitiser itself does not invalidate those reused rows, so
 # re-run with `--rebuild` after touching the digitising code, which re-reads
@@ -248,16 +246,13 @@ const CONFIG = [
     # tick (19 October), so they are the same extract and are left out.
 ]
 
-# Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
-# which `digitize` assumed as a hard-coded divisor. From SitRep 087 the
-# brief-format figure switched to a 0/25/50/75 grid (confirmed by reading
-# the printed tick labels directly - the pixel geometry is otherwise
-# indistinguishable, so this cannot be self-calibrated any more than
-# `last_tick` can). Applying the old /20 divisor to a 25-count grid
-# undercounts every bar by a scale-dependent amount and was caught only
-# because it made stable, weeks-old onset dates fall (SitRep 083's 15 May
-# read 26; the same date misread through the old divisor came out as 8).
-# Override per vintage here; anything absent keeps the historical 20.
+# Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid.
+# From SitRep 087 the brief-format figure switched to a 0/25/50/75 grid
+# (confirmed by reading the printed tick labels directly - the pixel
+# geometry is otherwise indistinguishable, so this cannot be self-calibrated
+# any more than `last_tick` can). A /20 divisor on a 25-count grid
+# undercounts every bar, and stable, weeks-old onset dates then fall.
+# Override per vintage here; anything absent keeps 20.
 const Y_AXIS_STEP = Dict(
     "087" => 25,
     "088" => 25,
@@ -373,10 +368,10 @@ end
 # age/sex pyramids use orange; the notification-week chart uses a darker
 # steel blue and prints value labels). The tests are pixel fractions, not
 # counts, because INSP re-renders the figure at whatever size the layout
-# needs and an absolute threshold silently flips as the size moves: the
-# blue floor already had to be lowered once when the figure shrank to
-# 1009x583, and SitRep 072's larger 1277x799 rendering then pushed the
-# crimson/pink-band anti-aliasing to 631 orange pixels, past a 500 cut.
+# needs (1009x583 and 1277x799 among them) and an absolute threshold flips
+# as the size moves: SitRep 072's 1277x799 rendering gives 631 orange
+# pixels of crimson/pink-band anti-aliasing, enough to fail an absolute
+# 500-pixel orange cut.
 #
 # Measured over SitReps 059-080, on the caption page and its immediate
 # neighbours (the page-fallback in onset_image widens the search there,
@@ -1148,8 +1143,6 @@ function main(
         println(io, OUT_HEADER)
         for (sr, report_date, last_tick) in CONFIG
             ## Already digitised, so its rows are carried through untouched.
-            ## They are written in CONFIG order like any other, so reusing
-            ## them cannot reorder the file.
             if haskey(cached, sr)
                 foreach(line -> println(io, line), cached[sr])
                 reused += 1
