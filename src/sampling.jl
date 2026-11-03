@@ -18,7 +18,7 @@ it without `Enzyme` loaded raises a `MethodError`. The
 normalising constants reach comes from CensoredDistributions' own Enzyme
 extension. Enzyme differentiates the single-stream composers and matches
 Mooncake. Differentiating the full joint is platform-dependent and can hit
-an upstream Enzyme/LLVM compile failure, so Mooncake remains the package
+an upstream Enzyme/LLVM compile failure, so Mooncake is the package
 default for fitting.
 """
 function enzyme_adtype end
@@ -28,8 +28,7 @@ TensorBoard streaming callback for `nuts_sample`, mirroring the
 optional Enzyme backend. `tensorboard_callback(logdir; every = 20,
 histograms = true)` opens a `TensorBoardLogger.TBLogger(logdir)` and, on
 every kept post-warmup draw, logs through the sampler-agnostic
-`AbstractMCMC.ParamsWithStats` interface to two grouped tag prefixes so
-the dashboard stays navigable:
+`AbstractMCMC.ParamsWithStats` interface to two grouped tag prefixes:
 
   * `params/<name>`: every sampled parameter
   * `diagnostics/<name>`: log-density (`logjoint`), divergence flag
@@ -70,7 +69,7 @@ function tensorboard_callback(logdir; kwargs...)
 end
 
 @doc raw"""
-A lightweight, dependency-free streaming progress callback for
+A dependency-free streaming progress callback for
 `nuts_sample`. Returns a closure matching the AbstractMCMC callback
 signature
 
@@ -89,10 +88,8 @@ guarded by a `ReentrantLock`. Tail the file live during a fit with
 
 Step-level statistics are read through the sampler-agnostic
 `AbstractMCMC.ParamsWithStats(model, sampler, transition, state;
-stats = true)` interface rather than by reaching into transition
-fields, so the callback tracks Turing's transition format instead of a
-fixed field layout. The log density is taken from the `logjoint`
-statistic and the divergence flag from `numerical_error`. The whole
+stats = true)` interface. The log density is taken from the `logjoint`
+statistic and the divergence flag from `numerical_error`. The
 body is wrapped in `try`/`catch`, so a transition that does not expose
 these statistics yields `missing` log-density / no divergence increment
 rather than crashing the fit. The running divergence count is a single
@@ -163,9 +160,8 @@ end
 
 """
 Build the logging callback for a named model fit, selected by the
-`BVD_FIT_LOG` environment variable (or an explicit `spec`). This is the
-wiring the report build uses so every fit streams its progress without
-each call site repeating the callback construction.
+`BVD_FIT_LOG` environment variable (or an explicit `spec`). The report
+build uses it for every fit.
 
 Recognised `spec` values (case-insensitive), defaulting to `"all"` when
 `BVD_FIT_LOG` is unset:
@@ -181,8 +177,7 @@ Recognised `spec` values (case-insensitive), defaulting to `"all"` when
 TensorBoard logging needs `TensorBoardLogger` loaded (it activates the
 `tensorboard_callback` method through the package extension). When it is
 requested but not loaded, the TensorBoard stream is skipped with a warning
-rather than erroring, so a build without `using TensorBoardLogger` still
-gets the file progress stream.
+rather than erroring.
 
 See also: [`combined_callback`](@ref), [`nuts_sample`](@ref).
 """
@@ -241,14 +236,12 @@ averaging shrinks the step size towards zero instead of moving and the
 chain crawls in place for the entire run. Nothing diverges, so the failure
 surfaces only as a split R-hat pinned near its ceiling.
 
-The median rather than the batch maximum, because an argmax is an order
-statistic of the joint density rather than a draw from the prior. It keeps
-roughly the top eighth of the prior by density, concentrating the starting
-points and reducing the between-chain contrast R-hat is built on for a
-reason unrelated to mixing. Both rules clear the tail, and the median rule
-keeps more than twice the dispersion of starting log joints. Only forward
-density evaluations are used, so the guard costs milliseconds against a
-fit measured in hours.
+The rule uses the median rather than the batch maximum. An argmax keeps
+roughly the top eighth of the prior by density, which concentrates the
+starting points and shrinks the between-chain contrast R-hat is built on
+for a reason unrelated to mixing. Both rules clear the tail, and the median
+rule keeps more than twice the dispersion of starting log joints. Only
+forward density evaluations are used.
 
 $(TYPEDFIELDS)
 """
@@ -270,7 +263,7 @@ first of `attempts` independent prior draws whose log joint density is at
 or above that batch's median, returned as an initialisation strategy.
 Falls back to `InitFromPrior()` when no attempt gives a finite log
 density, or when the chosen draw cannot be wrapped as an initial vector
-for `ldf`, so a model this guard cannot evaluate still samples as before.
+for `ldf`, so a model this guard cannot evaluate still samples.
 
 `ldf` defaults to a fresh `LogDensityFunction(model)`.
 [`nuts_sample`](@ref) instead builds one and passes it to every chain,
@@ -294,7 +287,7 @@ function viable_prior_init(
     end
     isempty(draws) && return InitFromPrior()
     ## The first draw at or above the batch median, not the batch argmax.
-    ## Rejecting only the worse half leaves the start a genuine prior draw
+    ## Rejecting only the worse half leaves the start a prior draw
     ## conditional on the floor.
     idx = findfirst(>=(median(logps)), logps)
     try
@@ -315,25 +308,22 @@ prior initialisation, or `init = Turing.DynamicPPL.InitFromUniform()` for
 unconstrained uniform initialisation. A vector of strategies, one per
 chain, starts each chain at its own point.
 
-`target_accept` defaults to 0.85. The renewal joint conditions the
-confirmed counts on the observed analysed denominator and samples the
-random-walk and ascertainment blocks in non-centred form, so its geometry
-is benign. A lower target acceptance shortens the average NUTS trajectory
-and so the gradient evaluations per iteration, while staying above the
-conventional 0.8 floor. Raise it towards 0.9-0.99 if a model variant
-reintroduces divergences. The default is two chains of 500 post-warmup
+`target_accept` defaults to 0.85. A lower target acceptance shortens the
+average NUTS trajectory and so the gradient evaluations per iteration, while
+staying above the conventional 0.8 floor. Raise it towards 0.9-0.99 if a
+model variant diverges. The default is two chains of 500 post-warmup
 draws, trading some effective sample size for a shorter wall-clock.
 
 `check_model = false` disables Turing's pre-sampling model check, which
 rejects any model with a sampled discrete variable even when its value
 feeds nothing downstream. Only [`exports_deaths_only_model`](@ref) needs
 the escape. It runs the exports submodel in predictive mode
-(`exported_cases ~ Poisson` with a `missing` count) purely for the export
+(`exported_cases ~ Poisson` with a `missing` count) for the export
 onsets, leaving a sampled discrete `Poisson` draw. The continuous
 parameters are unaffected.
 
 Pass `callback` to stream live fit progress (iteration, log-density,
-divergences) instead of waiting for the whole fit. Use
+divergences) during the fit. Use
 [`progress_callback`](@ref) for a dependency-free file/stdout stream,
 or [`tensorboard_callback`](@ref) for a TensorBoard backend (requires
 `using TensorBoardLogger`). The callback is forwarded to `sample` only
@@ -374,7 +364,7 @@ function nuts_sample(
     rng = MersenneTwister(seed)
     ## Each chain draws and screens its own starting point, so the chains
     ## stay independent and over-dispersed. Any other strategy is shared
-    ## across chains exactly as `sample` would use it. The
+    ## across chains as `sample` would use it. The
     ## `LogDensityFunction` is built once, since construction re-evaluates
     ## `model` and rebuilding it per chain would not be the forward-only
     ## cost the guard advertises.

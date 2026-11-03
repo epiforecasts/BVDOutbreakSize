@@ -317,8 +317,8 @@ deviation on every patch and day, an
 parent stores `infections_patch`. It interpolates each patch's kept
 midpoints ([`zone_week_midpoints`](@ref)) and holds flat outside them.
 Every patch's first kept midpoint falls on or after the grid start `t0`,
-so the deviation is constant over the days before `t0`, which is what lets
-the pre-`t0` terms of [`zone_fixed_terms`](@ref) be rescaled by one factor
+so the deviation is constant over the days before `t0`, and the pre-`t0`
+terms of [`zone_fixed_terms`](@ref) are rescaled by one factor
 per patch rather than rebuilt on every forward pass. A patch whose first
 kept midpoint fell before `t0` would break that, and is an error.
 
@@ -381,10 +381,8 @@ function zone_meld_block(
     ## The sample covariance is rank deficient whenever the parent carries
     ## fewer draws than there are cells, so the factorisation is pulled
     ## toward the diagonal by the least amount that succeeds. Shrinking
-    ## toward the diagonal of the sample covariance rather than toward the
-    ## identity keeps every week's own marginal variance and gives up only
-    ## the correlations, which is the direction the parent's own posterior
-    ## is least able to support.
+    ## toward the diagonal keeps each week's marginal variance and gives up
+    ## only the correlations.
     L = _zone_meld_factor(cov(S), d; ridge)
     weights = zeros(Float64, np * n, d)
     for p in 1:np
@@ -1614,7 +1612,7 @@ support keeps the composition mass finite.
 Every scale the two levels share takes its prior from the province
 posterior fitted to its draws (`zd.parent_priors`): the drift scale, the
 two composition overdispersions, the relative ascertainment and fatality
-scales, and the deviation correlation. A zone therefore starts at its
+scales, and the deviation correlation. A zone starts at its
 province's estimate and departs only as far as its own counts require.
 
 ### The shared quantity
@@ -1789,9 +1787,9 @@ quantity is computed on the fitted days as without a forecast.
     n_contrast = relative_multiplier_dims(zd.patch_ranges)
     z_ascertainment ~ product_distribution(fill(offset_prior, n_contrast))
     ## Deaths per infection are taken as near-uniform across the zones of a
-    ## patch, which is what lets the death composition pin the incidence
-    ## split and the case composition identify ascertainment as the
-    ## residual. The prior is tight and fixed rather than inherited. Its
+    ## patch, so the death composition pins the incidence split and the
+    ## case composition identifies ascertainment as the residual. The prior
+    ## is tight and fixed rather than inherited. Its
     ## scale is on the logit scale, where a shift `s` moves the log ratio by
     ## about `(1 - CFR) s`, so 0.15 is about 0.1 on the log scale at the prior
     ## mean ratio of 0.33, as for the provinces.
@@ -2229,8 +2227,8 @@ of `parent_kernel`, the province model's own
 [`province_importation_kernel`](@ref) weighted by its fitted per-flow
 deviation ([`destination_weighted_kernel`](@ref)). Summed over the zones of
 a patch, the zone stage's between-patch flow is the province model's for
-the same origin intensity, which is what keeps one movement from being
-counted at both levels. The parent kernel is the posterior mean of the
+the same origin intensity, so one movement is not counted at both
+levels. The parent kernel is the posterior mean of the
 province model's weighted kernel over its draws.
 """
 function zone_importation_blocks(

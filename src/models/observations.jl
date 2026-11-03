@@ -255,8 +255,7 @@ likelihood, built from data only (no sampled parameter), so the censored
 NegativeBinomial never sits against a moving wall. Each isolation day takes
 the nearest recorded implied-capacity value (`capacity_history`), floored
 at that day's observed occupancy so the bound is never below the count (a
-count above the cap has zero probability under the censored NB). With the
-cap fixed the censored likelihood is smooth in the sampled demand. A
+count above the cap has zero probability under the censored NB). A
 `capacity_history` with no counts (empty, or days-only as the predictive
 generator supplies) returns a large finite cap far above any bed count, so
 the censoring is a no-op (a literal `Inf` cannot be used because
@@ -331,10 +330,10 @@ centre for each one's fitted step. The centre is
 itself attributes to integrating a harmonised provincial base rather than
 to the day's own notifications, with `gross` the printed 24h new-confirmed
 count. On 22 July 2026 that is `369 − 97 = 272` cases and `236 − 62 = 174`
-deaths. Centring on the published discrepancy rather than zero is what
-makes the step identifiable from a single observation. The sampled
-deviation around the centre then carries only the residual uncertainty
-about how much of the discrepancy is truly retrospective.
+deaths. Centring on the published discrepancy rather than zero makes the
+step identifiable from a single observation. The sampled deviation around
+the centre then carries only the residual uncertainty about how much of
+the discrepancy is retrospective.
 
 Break days not matching a window are dropped so no inert step is sampled.
 A missing or short `gross` is treated as zero, so the centre becomes the
@@ -377,7 +376,7 @@ Per-late-window confirmed harmonisation offset from the fitted break steps
 [`cumulative_occupancy_offset`](@ref) this is not cumulative. The confirmed
 likelihood fits between-vintage increments, so a one-off retrospective base
 integration inflates exactly one increment and every later vintage
-differences against the new, higher base. Each entry is therefore the step
+differences against the new, higher base. Each entry is the step
 for that window alone, zero on every non-break window.
 
 Added to the modelled confirmed mean of the break window in
@@ -425,10 +424,10 @@ Non-BVD background suspected deaths are added on top. The joint passes the
 per-day non-BVD suspected-case background `case_bg_daily` and a background
 CFR submodel ([`background_cfr_model`](@ref)), so the background deaths are
 `cfr_bg` times that case background, lagged by the onset-to-death delay.
-The death background therefore inherits its level and time profile from the
+The death background inherits its level and time profile from the
 identified case background rather than carrying a second free,
 outbreak-size-degenerate rate. With no `case_bg_daily` the stream is pure
-BVD, which is what the deaths-only composer fits.
+BVD, as in the deaths-only composer.
 
 An optional `suspected_daily_deaths_history` adds the daily new suspected
 deaths ("cas suspects du jour N (M deces)"), per-day counts scored against
@@ -499,7 +498,7 @@ ascertainment and the background CFR for reuse by
     )
 
     ## The mean for day `d` is the single-day `deaths_daily[d]`, not a
-    ## between-vintage increment: this is a genuine daily count, so it never
+    ## between-vintage increment. It is a daily count, so it never
     ## differences a falling cumulative.
     sdd_days = suspected_daily_deaths_history.days
     sdd_modelled = [deaths_daily[clamp(Int(d), 1, n)] for d in sdd_days]
@@ -565,9 +564,8 @@ sitrep.
         ## line-list onset→admission delay (d_oa, ~4 d): a case enters
         ## surveillance when first formally seen, so one delay serves both the
         ## suspect-case and export streams. The line-list onset→notification
-        ## delay (~20 d) is not used: it is assumed to reflect a longer
-        ## pathway (likely confirmation and administrative processing),
-        ## though what it captures is uncertain.
+        ## delay (~20 d) is not used. It is assumed to include confirmation
+        ## and administrative processing.
         onset_to_report = gamma_delay_model(
             cdf_nmax(Gamma(1.178, 3.694));
             alpha_prior = LogNormal(log(1.178), 0.25),
@@ -618,8 +616,8 @@ sitrep.
     )
 
     ## The mean for day `d` is the single-day `reports_daily[d]`, not a
-    ## between-vintage increment: this is a genuine daily incidence, so it
-    ## never differences a falling cumulative.
+    ## between-vintage increment. It is a daily incidence, so it never
+    ## differences a falling cumulative.
     sd_days = suspected_daily_history.days
     sd_modelled = [reports_daily[clamp(Int(d), 1, n)] for d in sd_days]
     sd_obs = isempty(suspected_daily_history.counts) ? missing :
@@ -752,8 +750,8 @@ them into three non-overlapping groups so all the confirmed data is used:
   stays a modelled-volume window. On such a day INSP has retrospectively
   integrated a harmonised provincial base, so most of the confirmed
   increment is reattached backlog rather than positives out of that day's
-  specimens, and pairing the two would score a wildly inflated positivity
-  (22 July 2026: 369 of 414 analysed, 89% implied against the 23% actually
+  specimens, and pairing the two would score an inflated positivity
+  (22 July 2026: 369 of 414 analysed, 89% implied against the 23%
   reported). The increment is still scored, with the backlog absorbed by a
   fitted level step in [`confirmed_cases_model`](@ref) (see
   [`confirmed_break_offset`](@ref)).
@@ -1038,7 +1036,7 @@ quantities.
         ## from published data rather than a prior guess. Empty or all-zero
         ## centres on the whole increment (see `break_step_centres`).
         confirmed_break_gross::AbstractVector{<:Integer} = Int[],
-        ## Residual uncertainty about how much of that discrepancy is truly
+        ## Residual uncertainty about how much of that discrepancy is
         ## retrospective rather than coincident same-day incidence, not the
         ## harmonisation magnitude, which `confirmed_break_gross` supplies.
         ## Zero pins the step at the published discrepancy and samples no
@@ -1155,8 +1153,8 @@ quantities.
     s_test = sens_state.s_test
     spec = spec_state.spec
     ## Suspect-pool composition over each window, carried through the
-    ## report-to-analysed delay so it reflects the specimens actually
-    ## analysed in the window. The `τ_test` factor cancels in the ratio φ,
+    ## report-to-analysed delay so it reflects the specimens analysed in
+    ## the window. The `τ_test` factor cancels in the ratio φ,
     ## so it is omitted here. The pool total is the carried suspected
     ## series, BVD plus background.
     analysed_bvd_daily = convolve_delay(
@@ -1198,7 +1196,7 @@ quantities.
     ## modelled analysed volume), the volume binned over each window's own
     ## day range pinned at `early_start` (the first confirmed vintage, the
     ## testing-onset baseline), so the first early increment is scored from
-    ## the data start rather than rolling the (now-gated) pre-testing volume.
+    ## the data start rather than rolling the gated pre-testing volume.
     ## Mirrors the late-window pinning at `late_start`.
     early_p = p_pos[1:n_early]
     ## Bound unconditionally to one array allocation site rather than a
@@ -1353,7 +1351,7 @@ travel-gated, so the at-risk clock starts at infection: a traveller
 moves and is exported during incubation (pre-symptomatic) and stays at
 risk of being exported and detected abroad only until the
 infection→detection delay has elapsed. The expected detected exports by
-the cut-off therefore accumulate the per-capita travel rate `q =
+the cut-off accumulate the per-capita travel rate `q =
 daily_travellers / source_population` over the at-risk person-time, not
 over single-day onset events:
 
@@ -1498,15 +1496,14 @@ infection→death PMF,
     \\sum_{s\\le t} q\\,\\text{prevalence}(s)\\, f_\\text{d}(t-s),
 ```
 
-so the cumulative export-death intensity `Λ_d(t)` is its running sum, the
-discrete analogue of the integral model's `∫ C(s)·S_det·F_death ds`. The
+so the cumulative export-death intensity `Λ_d(t)` is its running sum. The
 onset-to-death PMF `od_pmf` shared from [`deaths_model`](@ref) is convolved
 with the incubation PMF to give the infection→death distribution `f_d`,
 keyed to infection like the prevalence.
 
 The observed Uganda export deaths are a dated series `export_death_days`
-(grid day-indices, ascending), fitted as an inhomogeneous Poisson exactly
-as [`exports_model`](@ref) fits the imports: one Poisson term per death day
+(grid day-indices, ascending), fitted as an inhomogeneous Poisson as
+[`exports_model`](@ref) fits the imports: one Poisson term per death day
 (the increment of `Λ_d` between consecutive death-day edges), a
 `pre_death_exports ~ Poisson(Λ_d(δ₁−1))` zero term bounding the first death
 day `δ₁`, and the `last_offset` truncation that stops the clock at the last
@@ -1563,7 +1560,7 @@ increments are `NegBinomial(k)` counts of the modelled death volume, the
 same modelled-volume route the early and post-lab confirmed-case windows
 use.
 
-Three pieces:
+Three terms:
 
   - Death analysed volume. Deaths are tested out of the same laboratory as
     cases, so the death volume tracks the modelled case analysed volume at
@@ -1866,8 +1863,8 @@ O_\\text{bg}(t) = O_\\text{bg}(t-1) + A_\\text{bg}(t)
 ```
 
 and the total demand is their sum `D(t) = O_bvd(t) + O_bg(t)` exactly. The
-abscond outflow `κ · O_susp(t-1)` drains the suspect (unconfirmed) pool only —
-confirmed patients do not abscond — and is split proportionally between its
+abscond outflow `κ · O_susp(t-1)` drains the suspect (unconfirmed) pool only
+(confirmed patients do not abscond) and is split proportionally between its
 unconfirmed-BVD portion `O_bvd(t-1) − O_conf(t-1)` and the non-case portion
 `O_bg(t-1)`, the two parts of the suspect pool `O_susp(t-1)`:
 
@@ -2988,8 +2985,7 @@ in-care fraction and the daily series for forecasting and replication.
         (one(CFR_iso) - CFR_iso) * recovery_los_state.mean
     ## Each cut-off quantity below is both `:=`-tracked onto the chain and
     ## returned, so it is bound once and used twice. Computing it twice puts
-    ## the work on the gradient path twice, and lets an edit to one copy
-    ## leave the chain and the returned value disagreeing.
+    ## the work on the gradient path twice.
     isolation_T = safe_rate(occ_T)
     bed_demand_T = safe_rate(dem_T)
     expected_isolation := isolation_T
@@ -3093,8 +3089,7 @@ confirmed population by a sampled log-odds offset (see
 before it is recorded as recovered, so the recovery follows confirmation by
 the confirmation-to-recovery delay. A positive result could in principle
 return after a patient has already recovered and been discharged, but
-"cumul guéris" is assumed to count confirmed cases carefully recorded as
-recovered.
+"cumul guéris" is assumed to count confirmed cases recorded as recovered.
 
 The cumulative recovered series ends at the cut-off, so its between-vintage
 increments are fitted with a NegativeBinomial whose dispersion is sampled
@@ -3182,7 +3177,7 @@ is Student-t about the modelled increment `means[i]` with scale `sds[i]` and
 fixed degrees of freedom `ν` (see [`safe_studentt`](@ref)).
 
 `increments` is a positional model argument rather than a field read out of
-a container inside the body, and that is load bearing. DynamicPPL decides
+a container inside the body. DynamicPPL decides
 observe-versus-assume from whether the tilde's symbol is in the enclosing
 model's argument names (`DynamicPPL.inargnames`), so a local variable on
 the left of `~` is treated as latent, silently dropping the likelihood.
@@ -3607,19 +3602,19 @@ end
 Per-cell observation scale for the reporting-triangle increment likelihood,
 the square root of a variance built from three sources.
 
-  - Counting variation of the cases the cell actually reports. The cell is a
-    count of newly reported cases, so it carries its own sampling variation
-    of about its mean, `means[i]`, on top of any reading error. This term is
-    what makes the scale correct for the very first snapshot's cells, which
-    are differenced against an empty predecessor and so score a level rather
-    than a correction (see [`load_onset_curve`](@ref)): a level of 40 cases
+  - Counting variation of the cases the cell reports. The cell is a count
+    of newly reported cases, so it carries its own sampling variation of
+    about its mean, `means[i]`, on top of any reading error. This term makes
+    the scale correct for the first snapshot's cells, which are differenced
+    against an empty predecessor and so score a level rather than a
+    correction (see [`load_onset_curve`](@ref)): a level of 40 cases
     has counting variation of about `sqrt(40) ≈ 6`, far larger than the
     reading error below, and scoring it on reading error alone would let 28
     level cells dominate the joint likelihood.
   - Rounding of each read. A digitised bar is an integer, so every read
     carries the `1/12` variance of rounding to the nearest count. The term
-    is structural rather than measured, and it is what keeps the read SD
-    below from collapsing to zero on the settled cells whose residual is
+    is structural rather than measured, and it keeps the read SD below
+    from collapsing to zero on the settled cells whose residual is
     exactly zero.
   - Read error on each digitised bar, the fitted read SD `τ` of
     [`onset_reporting_model`](@ref).
@@ -3633,7 +3628,7 @@ snapshots. The read variances add, so
 ```
 
 with `μ_i = means[i]` the modelled increment and `r_i = reads[i]`. The
-counting term cancels for a genuine correction between two snapshots only
+counting term cancels for a correction between two snapshots only
 to the extent that the two reads share the same realised cases: the newly
 reported cases in between are a fresh count, and `μ_i` is exactly their
 expected number, so the same formula covers both cell kinds without a
@@ -3862,8 +3857,8 @@ from there. It changes the reporting delay, and a delay is seen only
 between snapshots, so before the first snapshot a calendar shift cannot be
 told apart from the baseline hazard. [`onset_reporting_model`](@ref) sets
 `walk_start` to the first snapshot's report day. The grid, and so the
-indexing of `γ`, is unchanged, so every consumer reads it as before. The
-default `walk_start = grid_start` starts the walk on the grid's first day.
+indexing of `γ`, does not depend on `walk_start`. The default
+`walk_start = grid_start` starts the walk on the grid's first day.
 
 The default `baseline_prior = Normal(logit(0.13), 0.7)` targets a median
 onset-to-report delay of roughly 5 days under a constant-hazard
@@ -3882,8 +3877,7 @@ its prior median, and after the six weekly knots the scored window spans
 `γ` has SD `E[σ_γ]·√6` = `0.586`, putting that shift at 0.5-1σ. It stays
 concentrated at zero, so a flat reporting profile is the default the data
 has to argue away from. Widening it further risks the walk explaining
-recent onset-date structure that belongs to `R_t`, so any change here
-should report `R_t` over the final fortnight and `C_T` either side.
+recent onset-date structure that belongs to `R_t`.
 
 Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`, with `γ` length
 `max(grid_end - grid_start + 1, 1)`, indexed from `grid_start`.
@@ -3902,10 +3896,10 @@ Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`, with `γ` length
     η0 ~ baseline_prior
     σ_h0 ~ pooling_prior
     ## Sum-to-zero deviations, so `η0` is the mean logit hazard. With `D`
-    ## free deviations their mean duplicated `η0` and only the sum of the
-    ## two was identified. Each basis coordinate is drawn centred, on the
-    ## scale `σ_h0`. `eps` floors the SD so a `σ_h0 ≈ 0` draw stays a proper
-    ## distribution.
+    ## free deviations their mean would duplicate `η0` and only the sum of
+    ## the two would be identified. Each basis coordinate is drawn centred,
+    ## on the scale `σ_h0`. `eps` floors the SD so a `σ_h0 ≈ 0` draw stays a
+    ## proper distribution.
     y_h0 ~ product_distribution(
         fill(Normal(0, σ_h0 + eps(typeof(float(σ_h0)))), D - 1)
     )
@@ -3944,12 +3938,12 @@ with `alpha` given by [`onset_report_ascertainment`](@ref). `beta_prior =
 Normal(0, 0.75)` is a zero-centred logit-scale departure from the anchor,
 so the triangle's ascertainment defaults to the anchor series' own level
 and can depart by roughly a factor of two either way. `pooling_prior =
-truncated(Normal(0, 0.1); lower = 0)` is deliberately tight: `omega` shares
+truncated(Normal(0, 0.1); lower = 0)` is tight because `omega` shares
 the onset-date axis with [`rt_walk_model`](@ref), so a flat ascertainment
 level is the default the data has to argue away from. Weekly knots,
 linearly interpolated ([`knot_days`](@ref)/[`interpolate_knots`](@ref)),
 first knot pinned at zero, mirroring [`onset_report_hazard_model`](@ref)'s
-calendar walk exactly.
+calendar walk.
 
 The level is scaled by a one-sided step at the outbreak's detection
 ([`onset_detection_step`](@ref)), `alpha = α(u) · s(u)`. Onset dates before
@@ -4012,9 +4006,8 @@ calendar walk `γ` on the report axis, the delay shape's baseline
 `logit_h0`, and the ascertainment walk `ω` on the onset axis. A change in
 the onset series moves a column of scored cells, a change in `γ` moves a
 row, and a change in `logit_h0` moves a diagonal band. Column, row and band
-are distinguishable once there is more than one snapshot, which is the
-structural reason this stream is worth fitting, and the reason `γ` is
-indexed on the report day rather than the onset day.
+are distinguishable once there is more than one snapshot. This is why `γ`
+is indexed on the report day rather than the onset day.
 
 Ascertainment is anchored on the confirmed pipeline's own daily
 ascertainment (`p_drc · τ_test · p_pos_grid`, delay-weighted onto the onset
@@ -4028,7 +4021,7 @@ the grid day the outbreak was first detected, are ascertained at a sampled
 fraction `ρ` of the later rate ([`onset_detection_step`](@ref)). The
 default `-Inf` leaves every date at the full rate.
 
-Three things stay genuinely weak. First, `logit_h0` and `alpha` are pinned
+Three things stay weak. First, `logit_h0` and `alpha` are pinned
 by levels, not by corrections, since corrections constrain only differences
 of `F`. What breaks the tie is each onset date's level cell, its first
 print differenced against an empty predecessor (see
@@ -4040,7 +4033,7 @@ barely observed, since published figures stop short of the report date, so
 those hazards rest on partial pooling to `η0` rather than data. Third, a
 falling ascertainment and a slowing delay shape both suppress recent bars
 within one snapshot. Right truncation self-corrects for the delay
-explanation but not a genuine ascertainment fall, so the vintage structure
+explanation but not an ascertainment fall, so the vintage structure
 separates them only as well as the under-ten snapshots covering the
 affected dates allow.
 
@@ -4534,12 +4527,10 @@ the logit contrast, so the patch probability is
     ## identified: the per-province laboratory series pins `asc_p * lambda_p`
     ## and nothing finer.
     ##
-    ## Fixing `asc_p` equal across provinces would hide that, and is known to
-    ## be wrong here: over the fitted window Ituri ran 2112 tests for 671
-    ## positives (31.8% positivity) against Nord-Kivu's 1340 for 74 (5.5%),
-    ## so the provinces test very differently-selected pools. Equal
-    ## ascertainment would push that difference into the provincial `Rt`,
-    ## reporting a case-finding artefact as epidemiology.
+    ## The provinces test differently-selected pools. Over the fitted window
+    ## Ituri ran 2112 tests for 671 positives (31.8% positivity) against
+    ## Nord-Kivu's 1340 for 74 (5.5%).
+    ## Equal `asc_p` would push that difference into the provincial `Rt`.
     ##
     ## So `asc_p` is sampled, partially pooled toward equality on the log
     ## scale, and constrained to sum to zero, since only relative
@@ -4548,8 +4539,8 @@ the logit contrast, so the patch probability is
     ## on the sum-to-zero directions ([`sum_to_zero_basis`](@ref)), the
     ## distribution of `np` independent `N(0, τ_asc²)` draws centred, with
     ## no direction the composition cannot see. `tau_asc -> 0` recovers the
-    ## equal-ascertainment model. The pooling prior is what identifies
-    ## `asc_p`, so the per-patch results are correspondingly wider.
+    ## equal-ascertainment model. The pooling prior identifies `asc_p`, so
+    ## the per-patch results are wider.
     ##
     ## `ascertainment_sd_prior = nothing` turns the contrast off and the
     ## shares are the modelled split alone. The laboratory composition uses

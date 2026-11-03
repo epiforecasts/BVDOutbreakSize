@@ -18,7 +18,7 @@ On a listed break day (`[confirmed_break_dates]`) the reported cumulative
 jumps by more than that day's notifications because INSP reattached
 previously unlinked records. The excess is `net - gross`, the vintage's own
 step less the printed 24h count. Subtracting it turns a raw cumulative
-difference into the count actually notified across the window.
+difference into the count notified across the window.
 
 `deaths` selects the confirmed-death stream rather than confirmed cases. A
 break day with no matching vintage is left out. A break day on the stream's
@@ -207,8 +207,7 @@ function load_observations(
     ## failure below names the date the user wrote rather than a grid index.
     confirmed_break_date_labels = String.(_brk.ds[_brk.keep])[_brk.ord]
 
-    ## The printed 24h new-confirmed counts on each break day, which make the
-    ## step data-derived rather than a guessed prior width. The submodels
+    ## The printed 24h new-confirmed counts on each break day. The submodels
     ## centre each step on `observed increment − gross`, the part of the
     ## vintage step the report itself attributes to base integration rather
     ## than to the day's notifications. Filtered and permuted with the dates
@@ -357,7 +356,7 @@ function load_observations(
     ##    books the artefact as incidence. Pinning the step at a published
     ##    discrepancy gives 22 divergences and 477 ESS.
     ##
-    ## 2. A date matching no vintage in the history. It does nothing at all,
+    ## 2. A date matching no vintage in the history. It does nothing,
     ##    and the `gross` check cannot fire because there is no increment to
     ##    compare against, so a transposed digit presents as silence.
     ##
@@ -486,7 +485,7 @@ function load_observations(
     )
     ## Cut-off scalar from an explicit TOML block, else the final vintage of
     ## the matching history. Under a freeze the TOML scalars hold the
-    ## full-data total and no longer match the truncated history, so the
+    ## full-data total and do not match the truncated history, so the
     ## frozen final vintage is used instead.
     _hist_end(h) = isempty(h.counts) ? missing : h.counts[end]
     frozen = !isnothing(cutoff_date)
@@ -717,8 +716,8 @@ absent. [`zone_increment_matrix`](@ref) leaves those vintages out of the
 composition.
 
 A revision can also move counts the other way, out of named zones,
-leaving the unallocated row flat or rising. That vintage is a revision
-just as much, but the unallocated rule does not see it. With
+leaving the unallocated row flat or rising. That vintage is also a
+revision, but the unallocated rule does not see it. With
 `include_zone_falls` the vintages of [`zone_cumulative_falls`](@ref) are
 added, so any vintage on which a named zone's cumulative falls is left
 out too. It is off by default.
@@ -1341,7 +1340,7 @@ end
 """
 Forecast column names for `stream` as `(; cum, new)`, or `nothing` for a
 stream the forecast does not carry. Built from the registry's
-`forecast_prefix`, so the column names are derived rather than repeated.
+`forecast_prefix`.
 """
 function stream_forecast_columns(stream)
     e = _stream_entry(stream_id(stream))
@@ -1371,7 +1370,7 @@ Date a dated `history` was last reported, or `missing` when it has no
 vintages. A `history` is any `(; days)` series of day-indices, and
 `grid_date` maps one of those indices to its calendar date. Past the last
 vintage the series is only ever repeated at its last reported value
-rather than genuinely observed.
+rather than observed.
 """
 function history_last_date(grid_date, history)::Union{Date, Missing}
     isempty(history.days) && return missing
@@ -1434,7 +1433,7 @@ end
 Date `stream` was last reported in `obs`, or `missing` when `obs` does
 not carry the stream or the stream has no vintages. This is the date of
 the stream's last vintage, since past it the series is only ever repeated
-at its last reported value rather than genuinely observed.
+at its last reported value rather than observed.
 
 The Uganda exports are a dated list of detections rather than a series of
 vintages, so their last reported date is the later of the last detected
@@ -1495,7 +1494,7 @@ function stream_report_status(
             for e in entries
     ]
     ## Columns are built typed rather than from a row vector, so a stream
-    ## with no vintages (a `missing` date) cannot widen the whole table to
+    ## with no vintages (a `missing` date) cannot widen the table to
     ## `Any` and leave the reporting flag unusable as an index.
     return DataFrame(
         stream = Symbol[e.id for e in entries],

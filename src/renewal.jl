@@ -258,7 +258,7 @@ left, so an overflowing force takes the pool rather than giving `Inf`.
 `N` is a population size, not an estimate of who can be reached. The models
 pass census counts ([`PROVINCE_POPULATIONS`](@ref)), and at that scale it is
 a light bound.
-`Rt` is therefore the reproduction number in a fully susceptible population.
+`Rt` is the reproduction number in a fully susceptible population.
 
 A pre-computed `seed` of length `L < n` fills the first `L` days (see
 [`seed_infections`](@ref)) and is drawn from the pool before the recursion
@@ -281,8 +281,7 @@ The renewal trajectory with the state it was built from, as
 `(; infections, force, susceptible)`: the per-day force
 `Σ_{s ≥ 1} I_{t−s} g_s` and the pool left at the end of each day, which is
 the pool after the seed on the seeded days. [`renewal_infections`](@ref)
-returns the first; the derivative rule needs the others, which it would
-otherwise have to rebuild from a copy of this loop.
+returns the first; the derivative rule needs the others.
 
 Each day's force is one `dot` of the most recent infections with the
 generation interval reversed, a single BLAS call on float arrays.

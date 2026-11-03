@@ -623,9 +623,8 @@ Exposes the cut-off expected onset-reported count as
 and the modelled ascertainment as `onset_ascertainment`. With `forecast` it
 draws future vintages of the triangle ([`onset_forecast_model`](@ref)).
 Those future draws and the shared `cumulative_onsets` trajectory from
-`_latent` are what [`forecast_onsets`](@ref) reads, so this fit nowcasts and
-forecasts the onset stream, scored on the reported increment rather than on
-the digitised level.
+`_latent` are what [`forecast_onsets`](@ref) reads. The onset forecast is
+scored on the reported increment rather than on the digitised level.
 """
 @model function onsets_only_model(
         n::Integer;
@@ -794,9 +793,9 @@ Exports-joint composer. The Uganda export cases and deaths fit together as
 one geographic-spread stream. Runs the infection process and onset staging,
 samples ascertainment and the deaths submodel (for the CFR and
 onset-to-death delay), then conditions on both the export-case and
-export-death likelihoods over the one travel-gated at-risk prevalence, so
-the two inform the outbreak size jointly. Either count may be `missing` to
-drop it. See [`exports_model`](@ref) and [`exports_deaths_model`](@ref).
+export-death likelihoods over the one travel-gated at-risk prevalence.
+Either count may be `missing` to drop it. See [`exports_model`](@ref) and
+[`exports_deaths_model`](@ref).
 """
 @model function exports_joint_only_model(
         n::Integer, exported_cases::Union{Missing, Integer},
@@ -931,17 +930,12 @@ of the Tableau 1 spatial tables. Each patch's onsets are pushed through the
 onset-to-death delay and then the report-to-receipt delay, so `kernel` is
 the convolution of the two, giving the deaths confirmed by each vintage.
 
-This is the term that makes the provincial split identifiable. The
-case-fatality ratio and the death-confirmation probability are properties
-of the virus and of a national laboratory pipeline, not of a province, so
-they cancel out of the normalised shares. What remains weights each patch
-by its delay-convolved incidence alone, free of case ascertainment.
-
-The delay convolution also separates ascertainment from epidemic phase. A
-fast-growing province has proportionally fewer deaths to date than a flat
-one at the same true CFR, because its recent cases have not died yet.
-Predicting each province's deaths to date from its own incidence curve
-accounts for that censoring, so only the residual is ascertainment.
+This term makes the provincial split identifiable. The case-fatality ratio
+and the death-confirmation probability are national, so they cancel out of
+the normalised shares, which weight each patch by its delay-convolved
+incidence alone, free of case ascertainment.
+The delay convolution accounts for a fast-growing province's recent cases
+not having died yet.
 """
 function _patch_death_increments(
         onsets_matrix::AbstractMatrix,
@@ -982,11 +976,11 @@ vintages. Returns an `(n_patches × n_vintages)` matrix.
     It does not fix the case-finding probability across provinces. The
     composition weights each patch by `asc_p * lambda_p`, its relative
     ascertainment times its modelled incidence, and the data identify only
-    that product. The per-province laboratory series shows very
+    that product. The per-province laboratory series shows
     differently-selected testing pools (Ituri 31.8% positivity against
     Nord-Kivu's 5.5%), so `asc_p` is sampled and partially pooled toward
-    equality rather than fixed, which widens the per-patch `Rt` contrast
-    and `C_T` split to their honest width.
+    equality rather than fixed. This widens the intervals on the per-patch
+    `Rt` contrast and `C_T` split.
 
     Read `log_rt_contrast` and `province_ascertainment` together. Neither
     is interpretable alone. The national headline does not depend on the
@@ -1161,7 +1155,7 @@ and lagged by a confirmation-to-recovery delay (see
 walk (e.g. the first WHO situation report). `genetic` injects the genetic
 seeding submodel when `tmrca_days` is given. The analysed volume is scaled
 by specimens analysed per suspect ([`specimen_intensity_model`](@ref)),
-which `τ_test` alone, being a probability, cannot exceed one of.
+which can exceed one where `τ_test`, a probability, cannot.
 
 Tracked deterministics: `C_T` (cumulative infections by the cut-off), the
 established reproduction number `R0` (= the first `R_t`), `r` and
@@ -1437,10 +1431,7 @@ cut-off, and the density there, is the fitted model's.
     ## `nothing` holds the non-BVD background at the constant rate the
     ## testing submodel samples. An injected pooling submodel gives it a
     ## smooth daily random walk instead, whose scale is partially pooled.
-    ## Injected rather than switched on a flag so the unused arm is a
-    ## `Nothing` the compiler folds away, not a second branch: a `Bool`
-    ## reaches the model as a value, so both arms are inferred and the
-    ## resulting `Union`-typed argument specialises the whole
+    ## Injected rather than a `Bool` flag, which would specialise the
     ## suspected-case submodel twice.
     case_bg_re = if background_pooling === nothing
         nothing
@@ -1696,9 +1687,8 @@ cut-off, and the density there, is the fitted model's.
         province_death_ascertainment_sd := death_composition_state.ascertainment_sd
         ## Per-province case-fatality ratio, the national ratio shifted by
         ## that province's sum-to-zero contrast on the logit scale, so each
-        ## lies in (0, 1) and the provinces are reported on the same scale as
-        ## the national quantity they pool toward. The relative fatality is
-        ## that ratio over the national one.
+        ## lies in (0, 1). The relative fatality is that ratio over the
+        ## national one.
         province_cfr_relative := death_composition_state.province_severity
         CFR_patch := _logit_shift(
             deaths_state.CFR, death_composition_state.severity_log_odds

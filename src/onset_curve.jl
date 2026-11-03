@@ -77,9 +77,8 @@ towards implausibly fast reporting.
 
 Blocks are canonicalised as their sorted `(onset_date, total)` pairs, and
 blocks sharing a canonical form collapse to the one with the earliest
-report date. This is exact-value equality over the digitised content
-rather than a hardcoded vintage-id list, so a future reprint is caught
-automatically. Returns the surviving blocks sorted by ascending
+report date. The match is on exact values rather than a vintage-id list.
+Returns the surviving blocks sorted by ascending
 `report_date`.
 """
 function _dedup_onset_blocks(blocks)
@@ -122,9 +121,7 @@ first print, then its corrections while the reporting delay still moves it.
 Distinct SitRep vintages are recovered by exact-value dedup
 ([`_dedup_onset_blocks`](@ref)), so reprinted figures collapse to their
 earliest report date. Vintages reported after `cutoff` are dropped, the
-same convention `load_observations` uses for every other stream, so
-advancing the manifest `as_of_date` past a newly-digitised vintage's
-report date picks that vintage up with no code change.
+same convention `load_observations` uses for every other stream.
 
 Every onset date is scored once as a level and then only through
 increments, so no printed count enters the likelihood twice:
@@ -150,7 +147,7 @@ modelled.
 
 Each block has its own printed extent, its earliest to latest digitised
 onset date, and the published figures stop their x axis short of the
-report date by anything from zero to eight days. The axis simply ends, with
+report date by anything from zero to eight days. The axis ends, with
 substantial counts on the last printed bar, rather than running on with
 zero-height bars. A date outside a vintage's extent is unobserved in that
 vintage rather than zero, so it gets no cell there, and its next
@@ -179,7 +176,7 @@ vintage survives.
 The per-vintage totals are not monotone across vintages. Scan error on
 each figure means a later scan can read a smaller total than an
 earlier one even though late reporting only ever adds cases, and this
-happens more than once in the current data. Consumers that need a
+happens more than once in the data. Consumers that need a
 non-decreasing series must say what they do with a fall rather than assume
 it cannot happen, and anything scored against this series should be scored
 on its increments rather than its level.

@@ -189,8 +189,7 @@ Time scale in days of the logistic ramp over which the outbreak-response
 intervention takes effect on `R_t`, centred on the `breakpoint`
 ([`sigmoid_ramp`](@ref)). Ramped rather than an instantaneous step,
 because the response damps transmission over weeks. Both the model and
-every `reconstruct_rt` caller read this constant, so a reconstruction
-cannot drift from the value the model fitted.
+every `reconstruct_rt` caller read this constant.
 """
 const RT_INTERVENTION_RAMP = 21.0
 
@@ -545,7 +544,7 @@ Diseases), as `(date, median, lower_90, upper_90)` tuples from their
 Table 1 (mean accepted `R₀ = 1.71`). Their stochastic SEIRD ensemble is
 calibrated by simulation filtering to 598 cumulative confirmed cases on
 8 June 2026, with the reporting fraction fixed at 1.0. These are
-therefore projected confirmed cases, a floor on the true size, rather
+projected confirmed cases, a floor on the true size, rather
 than the ascertainment-corrected cumulative cases that this package's
 `C_T` and McCabe et al. estimate. The 8/10 June row is their calibration
 anchor and the dates from 24 June on are forward projections. The bounds

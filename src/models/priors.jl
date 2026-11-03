@@ -1,8 +1,8 @@
 # Prior and latent-state submodels: the building blocks shared across the
-# observation submodels and the joint composer. Each `@model` is one piece
-# of the generative process — a single prior, a delay, the reproduction
-# number, the generating infection process, or the onset staging — so it
-# can be reused across composers without duplication. Delays are sampled
+# observation submodels and the joint composer. Each `@model` is one part
+# of the generative process (a single prior, a delay, the reproduction
+# number, the generating infection process, or the onset staging), so it
+# can be reused across composers. Delays are sampled
 # from priors and discretised with CensoredDistributions. Nothing is fixed.
 
 ## `f(args...)` with no derivative passed back through it. Wraps work a
@@ -365,7 +365,7 @@ prior sits on `r`, the molecular-clock growth, in
 number `R0` (= the first `R_t`) forward from that `r` and the generation
 interval through Euler–Lotka (`R0 = r_to_R0(r, g)`), and passes `log R0` as
 the walk base to the reproduction-number submodel. The cryptic phase and
-the established renewal therefore share one growth source.
+the established renewal share one growth source.
 
 The renewal runs only over the observation window
 `[renewal_start, cut-off]`, where `renewal_start` is the genetic-TMRCA grid
@@ -611,11 +611,11 @@ end
 Test-positivity machinery shared by the suspected- and confirmed-case
 streams. Samples
 
-- `λ_bg` — the per-day non-BVD background suspected-case rate, on a
+- `λ_bg`: the per-day non-BVD background suspected-case rate, on a
   half-normal scale. Drives the suspected/confirmed contrast: suspected
   cases mix the BVD onset-to-report signal with this additive background,
   while the laboratory pipeline only confirms the BVD share.
-- `τ_test` — the fraction of suspected cases that are sampled and routed
+- `τ_test`: the fraction of suspected cases that are sampled and routed
   to the laboratory pipeline.
 
 The default `λ_bg` prior is a half-normal
@@ -628,7 +628,7 @@ background absorb arbitrarily many suspected cases and opens a second
 posterior mode in which it explains the majority of them. With SD 1.0 the
 median background is ≈ 0.67/day and the 95% prior bound ≈ 2.0/day, a modest
 minority of the ≈ 1077 suspected cases observed by the last stable
-suspected-case vintage while still admitting a genuine non-BVD signal. Pass
+suspected-case vintage while still admitting a non-BVD signal. Pass
 `lambda_prior` to override. `τ_test` defaults to `Beta(5, 2)`
 (mean ≈ 0.71).
 
@@ -716,13 +716,13 @@ implied-capacity series the isolation submodel fits pins `C(t)` on the
 days a rate is published.
 
 The capacity first moves over the first week, at `g_1 = g_0 + σ_growth z_1`,
-and `g_0` never acts on its own. The likelihood therefore sees `g_0` and
+and `g_0` never acts on its own. The likelihood sees `g_0` and
 `z_1` only through their sum, and sampling both leaves a direction no data
 inform, which the sampler meets as a ridge. The sampled `growth0` is that
 first week's growth `g_1`, drawn from its exact prior
 `N(μ, √(s² + σ_growth²))` given the `N(μ, s)` `growth_prior`, and `z`
 carries the steps after it. The model is the same and has one dimension
-fewer. `growth_prior` must therefore be a `Normal`. With a single knot
+fewer. `growth_prior` must be a `Normal`. With a single knot
 there is no first week and `growth0` keeps `growth_prior`.
 
 Knots run only from `start`, the first day with occupancy or capacity data,
@@ -1093,11 +1093,9 @@ posterior mode in which the background explains the majority of suspected
 cases, and regularising `σ_bg` toward zero keeps the time variation a
 perturbation of the informative scalar baselines.
 
-The scale was 0.1, which the data have outgrown. With the daily
-new-suspect series carried to the cut-off the posterior sits at 0.17 to
-0.22, about twice that scale, and the walk mixes badly against a prior
-pulling the other way. At 0.3 the same posterior sits below the scale, so
-the data set the time variation rather than the prior. Returns
+With the daily new-suspect series carried to the cut-off the posterior
+sits at 0.17 to 0.22. At 0.3 that posterior sits below the scale, so the
+data set the time variation rather than the prior. Returns
 `(; σ_bg)`.
 """
 @model function background_pooling_model(;
@@ -1136,20 +1134,10 @@ The default is the centred form, each knot step drawn directly at
 `Normal(0, σ_rw)`. The daily new-suspect series runs to the cut-off, so
 the walk is strongly informed, and the non-centred form
 `steps = σ_rw .* z` funnels, with `z` diverging as `σ_rw → 0` and
-stretching NUTS trajectories. That funnel is what broke the joint fit
-when the series resumed. The worst R-hat went to 1.6 with 5 bulk
-effective samples, against 1.05 and 65 on the vintage before.
-
-The funnel shows in the draws. Divergences concentrate at the small end
-of `σ_rw`, at a median of 0.147 against 0.185 over all draws, and the
-correlation between `σ_rw` and its own innovations doubles, mean absolute
-0.159 to 0.323. The walk fails along its whole length rather than at its
-newly informed tail. R-hat runs 1.11 to 1.60 across the knots, against
-1.00 to 1.01 before, and the weakest mixing sits in the middle knots as
-much as the last. Pass `centred = false` for the non-centred form, the
-better choice when the walk is weakly informed and prior-dominated. Both
-forms carry the same prior, a cumulative sum of `Normal(0, σ_rw)` steps,
-so only the sampled coordinates differ.
+stretching NUTS trajectories. Pass `centred = false` for the non-centred
+form, the better choice when the walk is weakly informed and
+prior-dominated. Both forms carry the same prior, a cumulative sum of
+`Normal(0, σ_rw)` steps, so only the sampled coordinates differ.
 [`pooled_dispersion_model`](@ref) carries the same switch for the same
 reason.
 
@@ -1609,10 +1597,8 @@ The per-patch innovation sds `σ_δ` and their `n × n` correlation `Ω` are
 derived from the loading matrix ([`sum_to_zero_moments`](@ref)). The
 correlations of a sum-to-zero vector are constrained: its entries cannot
 all be positively correlated, and with equal sds each patch's correlations
-with the others average `-1 / (n - 1)`. With three patches the three sds
-determine the three correlations exactly, so whether the correlation is
-needed is the same question as whether the sds differ. With more patches
-the correlation carries information the sds do not.
+with the others average `-1 / (n - 1)`. With more than three patches the
+correlation carries information the sds do not.
 
 ### What the data can and cannot identify here
 
@@ -1624,7 +1610,7 @@ is why `Σ` is given a proper shrinkage prior rather than a flat one.
 
 `σ_drift → 0`, and with it every `σ_δ`, recovers a common `Rt` shape shared by every
 province, a fixed ratio between them. It is a special case of this model rather than an
-assumption baked into it. `σ_δ` is therefore the headline spatial
+assumption baked into it. `σ_δ` is the headline spatial
 diagnostic, and a posterior pushed away from zero is evidence that
 provincial `Rt` trajectories are separating, which is what a response
 concentrated on the Ituri epicentre would produce.
@@ -1635,7 +1621,7 @@ The deviations mean-revert to zero rather than random-walk. A random walk
 has no mean, so a province that happens to sit above the national trend at
 the last vintage is projected to stay above it for ever with the gap as
 likely to widen as to close. That matters here because the per-province
-vintages stop well before the cut-off. The knots therefore follow
+vintages stop well before the cut-off. The knots follow
 
 ```math
 \\boldsymbol{\\delta}(t_k) = \\phi\\, \\boldsymbol{\\delta}(t_{k-1})
@@ -1698,7 +1684,7 @@ and `Rt_matrix` covers the horizon.
     ## with one patch delta is identically zero and the patch Rt is the
     ## national walk. Sampling the deviation machinery would then add
     ## prior-only dimensions the likelihood never touches, so it is skipped
-    ## entirely and `n_patches = 1` collapses this model exactly onto the
+    ## and `n_patches = 1` collapses this model exactly onto the
     ## single-population one.
     if n_patches == 1
         Tp1 = eltype(Rt_national)
@@ -1867,9 +1853,9 @@ the cryptic window to reach `seed_at_renewal_start(C_T)` at the renewal
 start. The
 secondary patches start empty and are seeded by importation from it, so a
 province's arrival is a consequence of the kernel and of `ε` rather than a
-parameter. The first-appearance dates carry real information about how fast
+parameter. The first-appearance dates carry information about how fast
 the outbreak spread between provinces, and a free seed fraction per
-province would absorb exactly that, since both a larger seed and a stronger
+province would absorb that, since both a larger seed and a stronger
 coupling raise a secondary province's early incidence.
 
 An all-zero kernel leaves a secondary patch no route to infections at all,
@@ -2095,7 +2081,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     ##    reproduction number and the national trajectory is their sum. There
     ##    is no separate national process and nothing rescales the patches to
     ##    match one. `mu(t)` is a central trend the provinces pool toward, and
-    ##    the reproduction number the country actually ran at is read back off
+    ##    the reproduction number the country ran at is read back off
     ##    the summed infections in step 9.
     renewal_state = patch_infections(
         Rt_matrix, g, seeds_matrix, coupled ? weighted : importation_kernel,
@@ -2300,7 +2286,7 @@ builds the national BVD suspected cases as the sum over the patches of
 `p_p` times the patch's onsets through the onset-to-report delay.
 
 A logit shift `s` moves the log probability by about `(1 - p) s`. At the
-prior centre of 0.75 the default spread of 0.5 is therefore about 0.125
+prior centre of 0.75 the default spread of 0.5 is about 0.125
 on the log scale, so a typical province detects within about 13% of the
 national rate. We use this prior.
 

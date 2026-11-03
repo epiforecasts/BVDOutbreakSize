@@ -2,9 +2,8 @@
 # report. Each fit is serialised to `<cache_dir>/<key>.jls`, where `key`
 # already encodes a content hash of the fit-relevant source and data, so a
 # cached fit is reused only when the code and data that produced it are
-# unchanged. This lets the docs build load precomputed chains — produced once,
-# e.g. by a per-fit CI matrix or on the HPC — instead of refitting every model
-# inline, and lets each fit be recomputed independently.
+# unchanged. This lets the docs build load precomputed chains instead of
+# refitting every model inline, and lets each fit be recomputed independently.
 
 using SHA: SHA256_CTX, update!, digest!, sha256
 using Serialization: serialize, deserialize
@@ -129,15 +128,12 @@ a stale cache is never silently reused. The result is written to a temporary
 file and moved into place, so an interrupted fit does not leave a half-written
 cache entry.
 
-Hits and misses are written straight to `stderr` (bypassing any output capture
-by `Literate`/`Documenter`), so during a render the cache behaviour is visible
-in the job log rather than silent.
+Hits and misses are written straight to `stderr`, bypassing any output capture
+by `Literate`/`Documenter`.
 
-`strict = true` turns a miss into an error instead of refitting. The render
-loads every fit that the per-fit CI matrix already produced, so a miss there
-means the render is looking in the wrong cache directory (or asking for a fit
-the matrix never made) — a bug that should fail in seconds naming the key and
-the directory, not silently refit the whole report for hours.
+`strict = true` turns a miss into an error naming the key and the directory
+instead of refitting. The render loads every fit from the per-fit CI matrix, so
+a miss there means a wrong cache directory or a fit the matrix never made.
 """
 function fit_or_load(
         key::AbstractString, thunk;

@@ -3,12 +3,12 @@
 # A `DynamicPPL.Model`'s type carries the types of its arguments, and that
 # type is the key Mooncake caches a reverse rule against. Two calls that
 # differ in the type of any keyword are different method instances and share
-# no compiled rule. The precompile workload therefore only saves a fit the
+# no compiled rule. The precompile workload only saves a fit the
 # cold compile when it passes the same keyword set, with the same types, as
 # the fit does.
 #
-# Keeping that list in one place is what makes the two impossible to drift
-# apart. `docs/fits/registry.jl` splats these into every joint fit, and
+# The list lives in one place so the two cannot drift apart.
+# `docs/fits/registry.jl` splats these into every joint fit, and
 # `src/precompile.jl` splats them into the workload. A keyword added here
 # reaches both; a keyword added to one call site alone reaches neither.
 
@@ -77,7 +77,7 @@ Spatial keyword arguments for the headline patch fit, built from a
 The per-province tables are reshaped here rather than in the model body: the
 lookup goes by province name through a `Dict{String}`, and a string compare
 on the AD tape is a `memcmp` foreigncall Mooncake has no rule for, which
-aborts the gradient of the whole joint.
+aborts the gradient.
 """
 function patch_fit_args(obs)
     prov = province_increment_matrix(

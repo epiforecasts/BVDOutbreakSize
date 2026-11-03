@@ -1,6 +1,6 @@
 # Registry of the expensive model fits in the analysis report. Each fit is
 # defined once here as an `(id, kind, thunk)` entry, so it can be run and
-# cached independently — one per CI matrix job, or an HPC task — and the
+# cached independently, one per CI matrix job or HPC task, and the
 # docs build then loads the chains through the content-addressed cache
 # instead of refitting them inline. `build_fit_specs` mirrors the model
 # calls in `docs/examples/analysis.jl`; keep the two in step.
@@ -21,7 +21,7 @@ const _PKG = pkgdir(BVDOutbreakSize)
 ## the renewal maths, the hand-written Mooncake rules, the sampler, the data
 ## pipeline and this registry. A change to any of them invalidates every
 ## cached fit; plotting and reporting code (plots.jl, summaries.jl, ...)
-## deliberately does not. The Mooncake rules are here because they change the
+## does not. The Mooncake rules are here because they change the
 ## floating-point gradients, and so the sampled chain. `cache.jl` is
 ## here because it defines what the key covers: a change to the hashing rule
 ## that left the key alone would give two different rules the same key.
@@ -65,7 +65,7 @@ const FIT_CACHE_SCHEMA = "v1"
 ## list is the only thing that keeps a file out of the key. `README.md`
 ## documents the directory and `sitrep_pdfs` holds the situation report PDFs
 ## the scans are taken from. Neither is read by the model, and hashing 230 MB
-## of PDFs would refit the whole report each time one is downloaded. An entry
+## of PDFs would refit the report each time one is downloaded. An entry
 ## naming a directory drops everything under it.
 const FIT_DATA_EXCLUDE = (
     "released_estimates.csv",
@@ -178,9 +178,7 @@ data in `obs`: the streams the situation reports are still updating.
 
 The validation panels take the still-reported streams, so a fit of a stream
 that has stopped feeds nothing drawn and is two NUTS fits a docs build does
-not need. Deriving the list from the reporting status rather than holding a
-second hand-maintained one means a stream that starts being reported again
-comes back into validation on its own.
+not need.
 """
 function validation_stream_ids(obs)
     return Tuple(
@@ -211,7 +209,7 @@ is_dependent_fit(spec) = !isempty(fit_needs(spec))
 
 A `:chain` fit spec whose thunk samples the model `model()` builds, with
 `sample` taking that model to a chain. The spec carries `model` too, so a
-forecast from the fit rebuilds exactly the model the fit sampled.
+forecast from the fit rebuilds the model the fit sampled.
 """
 fit_spec(id, model, sample) = (;
     id, kind = :chain, model, thunk = () -> sample(model()),
@@ -233,8 +231,8 @@ joint_samples(default::Integer) = parse(
     Int,
     get(ENV, "BVD_JOINT_SAMPLES", string(default))
 )
-## `nuts_sample` caps its own default at 200 adaptation steps, which is where
-## this fit is short.
+## `nuts_sample` caps its own default at 200 adaptation steps, which is too
+## short for this fit.
 joint_warmup(default::Integer) = parse(
     Int,
     get(ENV, "BVD_JOINT_WARMUP", string(default))
@@ -489,15 +487,13 @@ function build_fit_specs(
     ## The headline fit and its spatial control must differ only in the patch
     ## structure. They are the two halves of the spatial sensitivity: a gap
     ## between their C_T posteriors is read as evidence about the spatial
-    ## structure, which is only meaningful if nothing else differs. Splatting
-    ## one shared NamedTuple into both is what keeps them from drifting apart
-    ## a keyword at a time.
+    ## structure, which is only meaningful if nothing else differs. One shared
+    ## NamedTuple is splatted into both.
     ##
     ## The list lives in the package (`src/models/fit_args.jl`) rather than
     ## here because `src/precompile.jl` builds its workload from the same
-    ## call. Mooncake caches a reverse rule against a method signature, and a
-    ## model's type carries the types of its arguments, so a workload that
-    ## differs from this call in any argument type compiles a rule no fit
+    ## call. Mooncake caches a rule against the model's argument types, so a
+    ## workload that differs in any argument type compiles a rule no fit
     ## reaches.
     joint_common = joint_fit_args(obs; breakpoint = breakpoint)
 

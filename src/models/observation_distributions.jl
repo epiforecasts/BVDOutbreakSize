@@ -382,7 +382,7 @@ _studentt_scale(σ) = _positive_or(σ, eps(typeof(float(σ))))
 _studentt_dof(ν) = _positive_or(ν, oftype(float(ν), 4))
 
 ## One cell's term of a `StudentTVector`'s `logpdf`, given the normalising
-## constant `c`, `(ν + 1) / 2` and the guarded `ν`, with the pieces its
+## constant `c`, `(ν + 1) / 2` and the guarded `ν`, with the values its
 ## gradient reads: the standardised residual `z`, `log1p(z² / ν)` and the
 ## guarded scale with whether it was kept.
 @inline function _studentt_cell(c, νp12, νc, μ, σ, x)
