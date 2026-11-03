@@ -32,7 +32,12 @@ Deletes, in order:
    superseded, unless created or used within `--fit-grace-hours`, which
    covers a build still running and a re-run of its failed jobs;
 4. depot caches on other refs, least recently used first, until all caches
-   together fit in `--budget-gb`.
+   together fit in `--budget-gb`;
+5. fit caches on other refs, least recently used first, until all caches
+   together fit in `--budget-gb`, skipping any ref with a docs build queued
+   or running and any fit inside `--fit-grace-hours`. A re-run of that pull
+   request's build then refits them. The default branch's fits are kept,
+   since every pull request's build restores from them.
 
 Lists what it would delete unless `--delete` is passed.
 """
@@ -126,6 +131,31 @@ def superseded_fits(caches, now, grace_hours):
     return old
 
 
+def docs_build_refs(repo):
+    """Return the cache refs of docs builds queued or running, or `None`."""
+    refs = set()
+    for status in ("queued", "in_progress"):
+        try:
+            out = gh(
+                "api",
+                f"repos/{repo}/actions/workflows/docs.yml/runs"
+                f"?status={status}&per_page=100",
+                "--jq",
+                ".workflow_runs[] | [.event, .head_branch, "
+                '(.pull_requests | map(.number | tostring) | join(","))] | @tsv',
+            )
+        except subprocess.CalledProcessError:
+            # Unknown builds could be restoring any ref's fits.
+            return None
+        for line in out.splitlines():
+            event, branch, prs = (line.split("\t") + ["", "", ""])[:3]
+            if event == "pull_request":
+                refs |= {f"refs/pull/{n}/merge" for n in prs.split(",") if n}
+            elif branch:
+                refs.add(f"refs/heads/{branch}")
+    return refs
+
+
 def plan(
     caches,
     default_ref,
@@ -134,10 +164,13 @@ def plan(
     now,
     running=frozenset(),
     fit_grace_hours=8.0,
+    building_refs=None,
 ):
     """Return the caches to delete as (cache, reason) pairs.
 
     `running` holds the run ids whose `docs-env` caches are kept.
+    `building_refs` holds the refs with a docs build queued or running,
+    whose fits are kept; `None`, for unknown, keeps every fit over budget.
     """
     depot = [c for c in caches if DEPOT_KEY.match(c["key"])]
     doomed = {}
@@ -184,6 +217,28 @@ def plan(
         doom(c, "over budget")
         total -= c["size_in_bytes"]
 
+    if building_refs is None:
+        return list(doomed.values())
+    recent = now - timedelta(hours=fit_grace_hours)
+    fits = sorted(
+        (
+            c
+            for c in caches
+            if FIT_KEY.match(c["key"])
+            and c["id"] not in doomed
+            and c["ref"] != default_ref
+            and c["ref"] not in building_refs
+            and timestamp(c["created_at"]) < recent
+            and timestamp(c["last_accessed_at"]) < recent
+        ),
+        key=lambda c: timestamp(c["last_accessed_at"]),
+    )
+    for c in fits:
+        if total <= budget:
+            break
+        doom(c, "fit over budget")
+        total -= c["size_in_bytes"]
+
     return list(doomed.values())
 
 
@@ -209,6 +264,7 @@ def main():
         datetime.now(timezone.utc),
         running,
         args.fit_grace_hours,
+        docs_build_refs(args.repo),
     )
     spared = [c for c in caches if kept_for_run(c, running)]
 
