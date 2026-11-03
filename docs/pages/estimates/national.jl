@@ -316,8 +316,6 @@ cumulative_traj_fig #hide
 
 # The per-province sizes, the modelled infections behind them and the importation between provinces are on the [province estimates](@ref "Province estimates") page.
 
-# The cumulative infection count is set by the reproduction number trajectory and the outbreak age.
-
 #md # ```@raw html
 #md # <details><summary>Outbreak start date and seeding-time posterior</summary>
 #md # ```
