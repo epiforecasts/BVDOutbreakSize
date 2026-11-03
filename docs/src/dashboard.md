@@ -16,7 +16,7 @@ The colour classes are the cut-off's at every date, so colours compare across da
 The detail charts show the last 4 or 8 weeks before the cut-off or the whole series, and mark the map's date.
 The fit metric shades each area by where its latest week's count falls in the model's posterior predictive for that week.
 The weekly chart draws the same predictive over the observed bars, which its toggle turns off.
-At zone level the predictive splits each patch's observed count across its zones, so it checks the allocation rather than the total.
+At zone level the predictive splits each patch's observed count across its zones, so it checks the allocation within each patch.
 The compare menu sets an earlier data cut-off's estimates beside the current ones in the tooltips and the detail.
 The [methods](methods.md) and the [province](estimates/province.md) and [health-zone](estimates/zone.md) estimates explain each figure.
 

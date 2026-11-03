@@ -264,13 +264,6 @@ end
 ## "exports" is scored too, but its truth is built by `stream_history` from
 ## the dated detection series rather than named here.
 ##
-## The confirmed/suspect ward split ("treatment beds" and "isolation beds
-## (suspected)") is a level quantity like the total: each ward occupancy is
-## scored against its Tableau 6 occupancy sub-stock (`dont confirmes` /
-## `dont suspects`, which sum to the total `isolation_history`). These are
-## present only once a forecast carries the split, so before then no archive
-## row bears the label and it is never scored.
-##
 ## "onset reports" is the digitised symptom-onset triangle's own per-vintage
 ## cumulative confirmed total (`onset_report_history`, built by
 ## `load_onset_curve`), scored on the incident basis: the new reported count
@@ -293,10 +286,7 @@ const STREAM_HISTORY = Dict(
     "confirmed deaths" => (:confirmed_deaths_history, :incident),
     "recovered" => (:recovered_history, :incident),
     "onset reports" => (:onset_report_history, :incident),
-    "isolation beds" => (:isolation_history, :level),
-    "treatment beds" => (:treatment_confirmed_incare_history, :level),
-    "isolation beds (suspected)" =>
-        (:treatment_suspect_incare_history, :level)
+    "isolation beds" => (:isolation_history, :level)
 )
 
 ## Streams the archive can carry that have no `(; days, counts)` field, so
@@ -1402,8 +1392,8 @@ end
 ## The quantities a release's `stream_estimates.csv` carries, mapped to the
 ## per-release-by-stream table each is collected into. "R0" is the per-fit
 ## basic reproduction number, `exp(rt_state.log_R0)`, the by-dataset
-## analogue of `r0_row` below. Releases published before
-## `stream_estimates.csv` carried it have no R0 rows.
+## analogue of `r0_row` below. A release without the column gives no R0
+## rows.
 const STREAM_QUANTITY_DEST = Dict(
     "R_T" => "rt_by_release_by_stream.csv",
     "C_T" => "size_by_release_by_stream.csv",
@@ -1940,7 +1930,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         )
 
         ## Per-fit R_T, C_T and R0 estimates, split into their own tables.
-        ## Absent on releases published before the asset existed, a clean skip.
+        ## A release without the asset is skipped.
         est_path = fetch_asset(repo, tag, STREAM_ESTIMATES_ASSET, tagdir(tag))
         byqty = try
             stream_estimate_rows(tag, est_path, cutoffs[tag])

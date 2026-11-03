@@ -1088,7 +1088,7 @@ evolution_fig #hide
 #md # <figcaption>
 #md # The outbreak size published at each release (blue), from the current model frozen at earlier cut-offs (red) and from the current model on current data (green band), with dotted rules at the release dates.
 #md # Each release is its own fit, so it is drawn as a median with 30%, 60% and 90% interval bars.
-#md # The published series switches from a closed-form integral model to a renewal model on 7 June, so a step there can reflect the change of method rather than of data.
+#md # The published series switches from a closed-form integral model to a renewal model on 7 June, so a step there can reflect the change of method.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -1465,7 +1465,7 @@ r0_stream_fig #hide
 # ### Delay sensitivity
 #
 # The death stream dates the outbreak from how far deaths lag symptom onset, so the assumed onset-to-death delay sets the implied infection count.
-# The baseline uses the hospital-pathway delay from the Isiro 2012 line-list reanalysis (onset to admission then admission to death, implied mean about 13 d).
+# The baseline uses the hospital-pathway delay from the line-list reanalysis in the [onset-to-death delay](@ref "Onset-to-death delay") Methods section (implied mean about 13 d).
 # We refit the joint model under the community-pathway delay from the same reanalysis, for deaths in the community without a recorded admission (implied mean about 8 d).
 # The refit is the headline model with the headline's sampler settings and changes only the delay.
 
@@ -1759,7 +1759,7 @@ joint_worst_groups #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The same diagnostics grouped by parameter rather than by element.
+#md # The same diagnostics grouped by parameter.
 #md # </figcaption>
 #md # </figure>
 #md # <details><summary>Mixing over time-varying parameters</summary>

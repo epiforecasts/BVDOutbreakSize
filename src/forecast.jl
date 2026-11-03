@@ -454,14 +454,7 @@ are not archived. The reporting triangle's own total is revised by more than
 the rest, since the printed total falls between some consecutive vintages,
 which late reporting cannot produce.
 
-When the forecast carries the confirmed/suspect ward split
-(`confirmed_occupancy` / `suspect_occupancy`, the occupancy partitioned by
-the cut-off confirmed share), the two ward occupancy levels are archived too
-as `treatment beds` (confirmed) and `isolation beds (suspected)`, each scored
-against its own Tableau 6 occupancy sub-stock. The total `isolation beds`
-occupancy stays as its own stream. [`forecast_reported`](@ref) projects the
-total occupancy alone, so only a forecast a caller has partitioned itself
-carries them. Streams a forecast does not carry are skipped. `thin` keeps every
+Streams a forecast does not carry are skipped. `thin` keeps every
 `thin`-th draw so the archive stays compact when it is saved as a release
 asset.
 """
@@ -471,8 +464,6 @@ function forecast_archive(fcs; made_date::Date, thin::Integer = 1)
         (:confirmed_deaths_new, "confirmed deaths"),
         (:recovered_new, "recovered"),
         (:isolation_level, "isolation beds"),
-        (:confirmed_occupancy, "treatment beds"),
-        (:suspect_occupancy, "isolation beds (suspected)"),
         (:onset_reports_new, "onset reports"),
     )
     out = DataFrame(
@@ -768,16 +759,4 @@ function _has_key(chn, key)
     catch
         return false
     end
-end
-
-## Draws of the first key in `candidates` the chain carries, or `nothing`
-## when it carries none. Single-stream fits bind each stream's submodel under
-## a composer-level name (`cases_state.expected_reports`), and the joint
-## carries those nested names alongside its own un-prefixed aliases
-## (`expected_reports_T`), so one ordered list serves both fit kinds.
-function _resolve_draws(chn, candidates)
-    for key in candidates
-        _has_key(chn, key) && return _draws(chn, key)
-    end
-    return nothing
 end

@@ -309,14 +309,12 @@ cumulative_traj_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Cumulative infections, symptom onsets and deaths over time, with their densities at the cut-off.
-#md # The infection density is the headline outbreak size, counted in infections rather than reported cases.
+#md # The infection density is the headline outbreak size, a count of all infections, reported and unreported.
 #md # </figcaption>
 #md # </figure>
 #md # ```
 
 # The per-province sizes, the modelled infections behind them and the importation between provinces are on the [province estimates](@ref "Province estimates") page.
-
-# The cumulative infection count is set by the reproduction number trajectory and the outbreak age.
 
 #md # ```@raw html
 #md # <details><summary>Outbreak start date and seeding-time posterior</summary>
@@ -670,7 +668,7 @@ surveillance_pair_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Joint posterior of the main surveillance parameters, with the prior overlaid.
-#md # The DRC ascertainment here is the logit-scale centre of the province detection probabilities rather than the national reporting fraction.
+#md # The DRC ascertainment here is the logit-scale centre of the province detection probabilities.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -1294,36 +1292,6 @@ for f in stream_fits, (stream, label) in f.streams,
     end
 end
 
-## Confirmed/suspect ward-bed occupancy for the joint, read from the joint's
-## own `forecast_reported` runs so the ward beds are scored on the same
-## footing as the total occupancy in the preferred `stream_forecasts.csv`
-## asset. `forecast_stream` cannot project these. The split is not a growable
-## stream but a partition of the total.
-##
-## Dead as it stands. `forecast_reported` projects the total occupancy alone
-## and emits neither column, so the guard below always skips and nothing
-## reaches `stream_forecasts.csv` under these two labels. The joint does
-## carry the cut-off split (`expected_confirmed_incare_T`), so what is
-## missing is the partition of the projected level, not the quantity to
-## partition it by. Kept, with the guard, so the loop starts writing the
-## moment `forecast_reported` grows those columns.
-for (h, fc) in forecast_runs,
-        (col, label) in (
-            (:suspect_occupancy, "isolation beds (suspected)"),
-            (:confirmed_occupancy, "treatment beds"),
-        )
-
-    col in propertynames(fc) || continue
-    _wvals = fc[!, col]
-    for (d, i) in enumerate(1:stream_thin:length(_wvals))
-        push!(
-            stream_forecasts, (
-                obs.cutoff, h, obs.cutoff + Day(h), label,
-                d, Float64(_wvals[i]), "joint",
-            )
-        )
-    end
-end
 CSV.write(joinpath(output_dir, "stream_forecasts.csv"), stream_forecasts);
 
 ## Latent symptom-onset trajectory over time, the "symptomatic cases" curve,
@@ -1344,7 +1312,7 @@ CSV.write(
 
 # ### Summary-page assets
 #
-# The one-page [Summary dashboard](@ref) reuses the results above rather than refitting.
+# The one-page [Summary dashboard](@ref) reuses the results above.
 # This step saves its headline text, tables and figures for the dashboard page to embed.
 
 #md # ```@raw html
