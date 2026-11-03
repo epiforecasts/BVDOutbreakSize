@@ -10,7 +10,7 @@
 #
 # Run inside a worktree checked out at v1.0.0, against its `docs` project.
 # At v1.0.0 the joint model, the single-stream models and every submodel
-# they use are defined INLINE in `docs/examples/analysis.jl` (there is no
+# they use are defined inline in `docs/examples/analysis.jl` (there is no
 # `src/forecast.jl` and the package does not export `bvd_joint`). That model
 # block (analysis.jl:399-1193) is reproduced verbatim below, unchanged except
 # for dropping the interleaved figure/prose lines. `forecast_reported`,

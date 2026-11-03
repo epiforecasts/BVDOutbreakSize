@@ -70,7 +70,7 @@ forecast_summary #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Cumulative and new expected counts a week after the cut-off for confirmed cases and deaths, the recovered total, and the isolation-bed levels and daily flows.
+#md # Cumulative and new counts a week after the cut-off for confirmed cases, confirmed deaths and recoveries, and the isolation-bed levels and daily flows, as 30%, 60% and 90% predictive intervals.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -116,9 +116,8 @@ forecast_fig #hide
 #md # </figure>
 #md # ```
 
-# The reported count of patients in isolation is the occupied-bed count, so it measures bed use limited by supply, and bed demand is the unobserved number who need a bed.
-# The model carries one national bed capacity, so the national shortfall understates local unmet need (see [limitations](@ref "Limitations")).
-# On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at 21.9%.
+# Bed demand is defined in the [treatment-centre flow](@ref "Treatment-centre flow") Methods section.
+# The national occupancy is censored at the national beds, so the national shortfall understates local unmet need (see [limitations](@ref "Limitations")).
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead isolation-bed forecast plot</summary>
@@ -136,7 +135,7 @@ forecast_beds_fig #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # Projected isolation bed demand, the need under unconstrained supply, against the occupancy the beds can meet.
-#md # The gap between them is the projected bed shortfall (right).
+#md # The right panel is the projected bed shortfall, the demand above the beds available.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -156,7 +155,7 @@ forecast_flows_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # Daily isolation flows over the week after the cut-off: new admissions, in-care deaths and rule-outs.
+#md # Daily isolation flows on the last day of the week after the cut-off: new admissions, in-care deaths and rule-outs.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -186,7 +185,7 @@ onset_forecast_summary #hide
 #md # ```@raw html
 #md # <figcaption>
 #md # The symptom-onset nowcast and forecast.
-#md # The first three rows are the outbreak at the cut-off and the next three the coming week, so the two halves must not be added.
+#md # The first three rows are the outbreak at the cut-off and the last four the coming week, so the two halves must not be added.
 #md # </figcaption>
 #md # </figure>
 #md # ```

@@ -113,7 +113,7 @@ end
     @test csv.onsets["108"] == csv.onsets["109"]
     @test csv.onsets["104"] == csv.onsets["105"]
     @test csv.onsets["106"] == csv.onsets["107"]
-    ## The vintage before a reprint pair is genuinely fresh content.
+    ## The vintage before a reprint pair is fresh content.
     @test csv.onsets["107"] != csv.onsets["108"]
 end
 
@@ -578,9 +578,9 @@ end
     ## A short bar that is all dead segment, in a crimson dark enough to
     ## pass the outline test in each of its columns (SitRep 154's 5 June and
     ## SitRep 151's 17 July). No outline pair fits the day, so the window
-    ## clipped to the nearest outlines holds outline columns only, and the
-    ## reader used to drop the day. It is read as the level run of dark,
-    ## saturated columns through the window.
+    ## clipped to the nearest outlines holds outline columns only. The day is
+    ## read as the level run of dark, saturated columns through the window,
+    ## not dropped.
     R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
     function paint!(rows, cols, c)
         R[rows, cols] .= c[1]
@@ -611,8 +611,8 @@ end
     ## A bar between two outlines whose two saturated columns carry enough
     ## dark pixels in the dead segment to count as soft, beside a washed
     ## column that shows fill but no outline pixel (SitRep 153's 13 May).
-    ## Dropping the soft columns left only the washed one, which reads as
-    ## neither a bar nor empty, and the day was lost.
+    ## Dropping the soft columns leaves only the washed one, which reads as
+    ## neither a bar nor empty, and loses the day.
     R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
     function paint!(rows, cols, c)
         R[rows, cols] .= c[1]
@@ -803,8 +803,8 @@ end
     ## carries the top outline, beside two columns whose fill breaks well
     ## below the top and shows no dark pixel at all (SitRep 160's 25
     ## August, read as 31 against 88 to 89 in every other vintage). The
-    ## broken columns are the window's only non-soft ones, so the reader
-    ## read the bar from them.
+    ## broken columns are the window's only non-soft ones. The bar is read
+    ## from its outlined soft column, not from the broken ones.
     R, G, B = _synthetic_chart([(12, 5) for _ in 1:10])
     function paint!(rows, cols, c)
         R[rows, cols] .= c[1]
@@ -914,9 +914,9 @@ end
                 (Date(f[3]), parse(Int, f[4]), parse(Int, f[5]))
             )
         end
-        ## Three vintages, one per detection path the digitiser has had to
-        ## grow: 094 exercises the y-axis label strip, 106 the daily bar
-        ## windows, and 108 the near-grey fallback its larger render needs.
+        ## Three vintages, one per detection path: 094 exercises the y-axis
+        ## label strip, 106 the daily bar windows, and 108 the near-grey
+        ## fallback its larger render needs.
         wanted = (
             ("094", Date(2026, 8, 17)), ("106", Date(2026, 8, 24)),
             ("108", Date(2026, 8, 31)),

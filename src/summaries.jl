@@ -307,11 +307,10 @@ function _num_divergences(chn)
     return Int(sum(skipmissing(flags)))
 end
 
-# Post-warmup draws across every chain. A divergence count means little
-# without it: six divergences in 3200 draws and six in twelve are not the
-# same fit. Draws whose flag is missing are left out, as they are from the
-# count above, so the two are over the same set and their ratio is the
-# divergence rate among the draws whose outcome is known.
+# Post-warmup draws across every chain. Draws whose flag is missing are
+# left out, as they are from the count above, so the two are over the same
+# set and their ratio is the divergence rate among the draws whose outcome
+# is known.
 function _num_draws(chn)
     flags = _numerical_error_flags(chn)
     flags === nothing && return 0
@@ -348,7 +347,7 @@ of divergent transitions and the number of post-warmup draws they are out of.
 function fit_diagnostics(chn)
     ## Quantities undefined in some draw are excluded by name, and any
     ## remaining non-finite entry (a fixed or degenerate quantity) by value.
-    ## Neither masks the worst genuine value across the sampled parameters.
+    ## Neither masks the worst value across the sampled parameters.
     exclude = (_DIAGNOSTIC_EXCLUDE..., _nonfinite_keys(chn)...)
     rhats = filter(isfinite, _scalar_stats(FlexiChains.rhat(chn); exclude))
     bulk = filter(
@@ -1173,15 +1172,6 @@ function patch_summary_table(
     ## drop the column. The province belongs in the surrounding heading.
     return patch === nothing ? _prettify(rename(df, :patch => "Patch")) :
         _prettify(select(df, Not(:patch)))
-end
-
-## Per-patch draws of the final column of a `(n_patches × n_vintages)` matrix
-## deterministic (`province_shares`, `province_death_shares`): the modelled
-## split at the most recent vintage.
-function _per_patch_last_share(chn, sym::Symbol, np::Integer)
-    ms = [collect(v) for v in vec(collect(chn[sym]))]
-    nv = size(first(ms), 2)
-    return [[m[p, nv] for m in ms] for p in 1:np]
 end
 
 """
