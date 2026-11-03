@@ -25,7 +25,9 @@
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
-        zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights
+        zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
+        discretise_censored, lognormal_meansd, cdf_nmax
+    using Distributions: Gamma, LogNormal, Weibull
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -532,6 +534,30 @@
         for R in (0.6, 1.0, 1.6)
             add!("R = $R", euler_lotka_r, R, g40; perf = R == 1.6)
         end
+
+        ## The model's delays at their own truncations, a short truncation,
+        ## a large Gamma shape, a Weibull far into its tail, and a LogNormal
+        ## with no mass before `nmax`, which takes the uniform fallback.
+        delays = [
+            ("generation interval", Gamma(2.71, 5.65)),
+            ("onset to report", Gamma(1.178, 3.694)),
+            ("onset to death", Gamma(3.33, 3.83)),
+            ("incubation", lognormal_meansd(6.3, 3.5)),
+            ("receipt", lognormal_meansd(4.5, 4.0)),
+            ("Weibull", Weibull(1.5, 5.0)),
+        ]
+        for (note, d) in delays
+            add!(
+                note, discretise_censored, d, cdf_nmax(d);
+                perf = note == "generation interval"
+            )
+        end
+        add!("nmax = 5", discretise_censored, Gamma(2.71, 5.65), 5)
+        add!("Gamma shape 50", discretise_censored, Gamma(50.0, 0.5), 40)
+        add!("Weibull tail", discretise_censored, Weibull(2.0, 3.0), 40)
+        add!(
+            "uniform fallback", discretise_censored, LogNormal(50.0, 0.5), 20
+        )
         return cases
     end
 end
