@@ -924,8 +924,8 @@ end
     ##
     ## Driving this from the stream maps rather than a list means a stream
     ## added on the wrong basis fails here, and running each one through
-    ## `truth_at` means the declared basis has to be the one it is actually
-    ## scored on. An increment depends on where the window opens; a level
+    ## `truth_at` means the declared basis has to be the one it is scored
+    ## on. An increment depends on where the window opens; a level
     ## does not. That separates the two without pinning a value per stream.
     n = 40
     cutoff = Date(2026, 7, 15)

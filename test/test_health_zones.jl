@@ -151,6 +151,9 @@ end
     re = zone_reattribution_days(zh)
     @test collect(keys(re)) == ["ituri"]
     @test dates(re["ituri"]) == [Date("2026-06-18"), Date("2026-07-22")]
+    ## SitRep 169 (30 October) emptied the A ventiler deaths into the zones
+    ## and SitRep 170 restored them, so 30 October is in `[skip_dates]` and
+    ## the death row falls on 18 June only.
     @test dates(zone_reattribution_days(obs.zone_death_history)["ituri"]) ==
         [Date("2026-06-18")]
     ituri = res[findfirst(r -> r.patch == "ituri", res)]
@@ -335,6 +338,9 @@ end
     w = findfirst(==(day("2026-07-22")), res[nk].days)
     @test base[nk].increments[i, w] == 0
     @test res[nk].increments[i, w] == 4
+    ## SitRep 169's (30 October) restated Ituri zones are skipped, with their
+    ## printed figures, since SitRep 170 restored the SitRep 168 basis, so
+    ## Butembo is the only case cell the figures change.
     @test sum(count(r.increments .!= b.increments) for (r, b) in zip(res, base)) == 1
 end
 

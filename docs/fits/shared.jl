@@ -1,8 +1,8 @@
 # Pieces both fit reports use: the shape a fit result comes back in, and how
 # a diagnostic number is printed. `summary.jl` reports one fit to its job
 # summary and `convergence.jl` decides whether the fits are good enough to
-# publish, and the two had these in common. Neither file is in
-# `FIT_SOURCE_FILES`, so moving them here costs no refit.
+# publish. This file is not in `FIT_SOURCE_FILES`, so editing it costs no
+# refit.
 
 ## The frozen fits return `(; cutoff, o, chn)` rather than the chain itself.
 fit_chain(x) = x isa NamedTuple && haskey(x, :chn) ? x.chn : x

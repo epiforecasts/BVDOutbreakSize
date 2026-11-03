@@ -49,7 +49,7 @@
 # care entry and contributes no row. A bullet that does carry one of these
 # but from which no field at all can be extracted is reported to stderr as
 # UNPARSED and contributes no row; the script exits non-zero if any
-# occurred, exactly like scripts/scan_province_lab.jl. A field simply not
+# occurred, as scripts/scan_province_lab.jl does. A field not
 # printed within an otherwise-parsed bullet or row is left empty, never 0.
 #
 # Requires `pdftotext` (poppler-utils) on the PATH, and the sitrep PDFs
@@ -210,8 +210,8 @@ function province_entries(lines::Vector{String})
 end
 
 ## A number attached to a keyword this file cares about; used to decide
-## whether a bullet from which nothing was extracted is a genuine parse
-## failure or simply carries no care figures at all (e.g. an ambulance or
+## whether a bullet from which nothing was extracted is a parse
+## failure or carries no care figures at all (e.g. an ambulance or
 ## staffing note).
 const CARE_KEYWORD = Regex(
     "(isolement|hospitalis|admission|sorti|lits?\\b|" *
@@ -222,7 +222,7 @@ const CUMUL_CLAUSE = r"cumul|s.eleve a|s.etablit a"
 
 """
 `(field => value)` pairs read out of one province's prose entry, or
-`:unparsed` when the text plainly carries a care figure that none of the
+`:unparsed` when the text carries a care figure that none of the
 patterns below can read.
 """
 function parse_prose_entry(entry::AbstractString, name::AbstractString)
@@ -341,6 +341,8 @@ function parse_prose_entry(entry::AbstractString, name::AbstractString)
             [
                 "(\\d+)\\)? ?$P (?:sont )?" *
                     "(?:hospitalis[ei]s?|pris en charge en hospitalisation)",
+                ## SitRep 164: "497 patients sont pris en charge CTE/CT".
+                "(\\d+)\\)? ?$P (?:sont )?pris en charge cte/ct",
                 "(\\d+)\\)? ?malades? (?:sont |restent |demeurent )?" *
                     "(?:hospitalis[ei]s?|en isolement|en hospitalisation)",
                 "(\\d+)\\)? ?$P (?:sont |restent |demeurent )?en isolement",
@@ -608,7 +610,7 @@ function table_entries(lines::Vector{String})
         lines, anchor, min(anchor + 1, length(lines)), f -> true,
         header, positions
     )
-    ## SitRep 031 prints the values line ABOVE the label instead ("313 44 6
+    ## SitRep 031 prints the values line above the label instead ("313 44 6
     ## 363" / "Patients en isolement (Fin J)", no numbers on the label's own
     ## line), so only try the line before once neither the label's own line
     ## nor the one after it produced a value.
@@ -637,7 +639,7 @@ function table_entries(lines::Vector{String})
         )
     )
 
-    ## A genuine table row prints one percentage per column; a prose
+    ## A table row prints one percentage per column; a prose
     ## sentence that happens to mention "taux d'occupation" right after the
     ## table (SitRep 064 has no occupancy row at all, and its very next
     ## line is "Au total, 722 patients étaient en isolement, ... pour un
@@ -839,10 +841,8 @@ function main()
     ## Several sitreps have more than one archived PDF (a hyphen- and an
     ## underscore-named file, or an original plus a "_v2" reissue that
     ## shares the original's digits). Only one file per sitrep number is
-    ## scanned, the same last-one-sorted-wins rule
-    ## `scripts/scan_province_lab.jl` gets for free from overwriting a Dict
-    ## keyed by date; here the rows are accumulated in a plain vector, so
-    ## the choice of file is made explicitly before scanning.
+    ## scanned, the last in sort order, as `scripts/scan_province_lab.jl`
+    ## gets from overwriting a Dict keyed by date.
     by_sr = Dict{String, String}()
     for path in sort(
             filter(f -> endswith(f, ".pdf"), readdir(PDF_DIR; join = true))
@@ -861,13 +861,11 @@ function main()
         lines = String.(split(text, '\n'))
 
         ## The occupancy table, the PECH box and the prose section are
-        ## alternative eras reporting the same figures, not complementary
-        ## sources, and running every era unconditionally would double-count
-        ## a vintage that carries more than one. The table is tried first
-        ## and, when found, wins outright: its anchor row label ("Patients
-        ## en isolement (Fin J)") is specific enough to the old table that
-        ## it is never seen in the modern prose. This matters because a
-        ## clutch of table-era vintages (050-079-ish) number their
+        ## alternative eras reporting the same figures, so running every era
+        ## would double-count a vintage that carries more than one. The table
+        ## is tried first and, when found, wins: its anchor row label
+        ## ("Patients en isolement (Fin J)") is never seen in the prose.
+        ## A clutch of table-era vintages (050-079-ish) number their
         ## "Prise en charge holistique" section 4.x, the same title the
         ## post-084 prose section uses, and print the table directly under
         ## it with each province's name alone on its own line ("Ituri :")
@@ -875,9 +873,6 @@ function main()
         ## bullet splitter reads that bare heading as an entry start and
         ## swallows the whole table into it, misreading the table's
         ## national total row as if it were that one province's figure.
-        ## Trying the table anchor first, before that colon is ever read as
-        ## a bullet, avoids the misattribution rather than detecting it
-        ## after the fact.
         got_table = table_entries(lines) !== nothing &&
             process_table_era!(rows, unparsed, sr, date, lines)
         got_prose = false

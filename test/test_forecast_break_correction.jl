@@ -132,8 +132,8 @@ end
 
     cum_limits(fig) = [c for c in fig.content if c isa Axis][1].limits[]
     @test cum_limits(corrected) == cum_limits(presubtracted)
-    ## The cumulative panel does move, which is the change: it used to score
-    ## the reported total against a projection that could not contain the
+    ## The cumulative panel does move. Without the correction the reported
+    ## total is scored against a projection that cannot contain the
     ## harmonisation.
     @test cum_limits(plain) != cum_limits(corrected)
 end

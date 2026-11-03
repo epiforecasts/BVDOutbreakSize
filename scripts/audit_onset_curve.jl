@@ -40,7 +40,7 @@
 #       [audit_md] [--crops=DIR]
 # `--crops=DIR` keeps the upscaled title and source strips each n was read
 # from, as `<sitrep>_title.ppm` and `<sitrep>_source.ppm`, for a second
-# reader. A full run over 64 vintages takes about a minute.
+# reader.
 # Defaults: data/sitrep_pdfs, data/onset_curve_scanned.csv,
 #           data/onset_curve_figures.csv, output/onset_curve_audit.md
 

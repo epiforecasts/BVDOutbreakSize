@@ -68,7 +68,8 @@ end
 
     ## The daily inflow replicates as one per-day count vector under
     ## `cases_state.suspected_daily.increments`, one entry per report day, all
-    ## finite and non-negative — the vector the docs PPC daily panel plots.
+    ## finite and non-negative. This is the vector the docs PPC daily panel
+    ## plots.
     sd = vec(
         pp[
             FlexiChains.Parameter(
@@ -117,7 +118,7 @@ end
     using Turing: predict, sample, Prior, @varname
 
     ## A scenario with confirmed vintages after the last cumulative
-    ## laboratory date (28) — so there are late windows — one of which (35)
+    ## laboratory date (28), so there are late windows, one of which (35)
     ## publishes a 24h analysed count and is anchored. The late group is a
     ## single submodel over all late days, so its predict-key vector has one
     ## entry per late day and the docs PPC reconstruction (early ++ obs ++

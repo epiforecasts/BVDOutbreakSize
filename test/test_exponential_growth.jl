@@ -81,8 +81,7 @@ end
     ## `r` is LogNormal, so `log r` pins both the centre and the spread
     ## directly. The centre is log(log 2 / 11.7) ≈ -2.826 and the log-SD is
     ## 0.30. At 4000 draws the standard error on each is under 0.007, so
-    ## these bounds hold the prior to the documented values rather than
-    ## merely to the right order of magnitude.
+    ## these bounds hold the prior to the documented values.
     @test -2.86 < mean(log.(r)) < -2.79
     @test 0.28 < std(log.(r)) < 0.32
     ## The induced doubling time τ = log 2 / r is LogNormal(log 11.7, 0.30),
@@ -106,8 +105,8 @@ end
         cdf_nmax
 
     ## The renewal-start seed `C_T = exp(r·m·G)` under the joint's growth
-    ## and generation-interval priors. Its 99th percentile was about 2,000
-    ## infections a day at a growth-rate log-SD of 0.40 (#926).
+    ## and generation-interval priors. A growth-rate log-SD of 0.40 puts its
+    ## 99th percentile at about 2,000 infections a day (#926).
     @model function _wrap()
         gi ~ to_submodel(generation_interval_model(cdf_nmax(Gamma(2.71, 5.65))))
         st ~ to_submodel(exponential_growth_model(gi.g))
@@ -194,11 +193,10 @@ end
     ## The renewal/seeding starts at `rt_start` (the genetic-TMRCA renewal
     ## start), but the reproduction-number random walk can be held flat at the
     ## established `R0` until a later day `rt_walk_start` (the first situation
-    ## report), so no unsupported Rt drift happens over the pre-surveillance
-    ## window where the dynamics are unidentified. With `breakpoint = missing`
-    ## there is no intervention ramp, so `Rt` must be exactly constant on every
-    ## day from day 1 up to the first walk knot at `rt_walk_start`, while the
-    ## renewal still seeds and grows from the earlier `rt_start`.
+    ## report). With `breakpoint = missing` there is no intervention ramp, so
+    ## `Rt` must be exactly constant on every day from day 1 up to the first
+    ## walk knot at `rt_walk_start`, while the renewal still seeds and grows
+    ## from the earlier `rt_start`.
     n = 109
     rt_start = 45
     rt_walk_start = 81
@@ -218,8 +216,7 @@ end
     end
 
     ## Default `rt_walk_start = rt_start`: the walk starts at the renewal
-    ## start, so Rt is free to vary from `rt_start` onward whenever the walk
-    ## start is not decoupled from it.
+    ## start, so Rt is free to vary from `rt_start` onward.
     seed!(13)
     m0 = infection_model(n; rt_start)
     s0 = returned(m0, rand(rng, m0))
