@@ -2504,8 +2504,8 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # The increment is drawn with the Student-t the scored cells take.
 #
 # Its scale is that of a correction read off two bars, plus the calibration error of each figure's total, $\sigma_{\text{scan}}^2 \bigl(S(T + h)^2 + S(T)^2\bigr)$ added to the variance.
-# $\sigma_{\text{scan}}$ is not fitted, since the scored cells carry no per-figure level.
-# Its prior is centred on 0.41% (0.09% to 0.75%), the estimate from a fit with a per-figure level.
+# The scored cells carry no per-figure level, so the forecast draws $\sigma_{\text{scan}}$ from its prior.
+# The prior is centred on 0.41% (0.09% to 0.75%), the estimate from a fit with a per-figure level.
 #
 # We score the sum of the two terms, the increment the triangle should add over the horizon.
 # Every vintage rereads the whole figure, so its printed total moves with the read error on each bar and can fall between vintages.
