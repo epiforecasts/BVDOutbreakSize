@@ -200,9 +200,9 @@ observes them, one row per draw, read from the posterior-predictive draws
 `pp` of a fit carrying the triangle ([`forecast_draws`](@ref)). It
 separates cases that have had their onset but are not yet reported from
 cases whose onset has not happened. The model runs the fitted reporting
-hazard, ascertainment and scan noise forward to a future vintage
-`horizon` days past the cut-off, which must be a whole number of weeks
-(see [`onset_forecast_model`](@ref)). Columns, all per draw:
+hazard and ascertainment forward, with scan noise drawn from its prior, to
+a future vintage `horizon` days past the cut-off, which must be a whole
+number of weeks (see [`onset_forecast_model`](@ref)). Columns, all per draw:
 
   - `onsets_to_date`: symptom onsets that have happened by the cut-off.
   - `onset_reports_to_date`: of those, the number the triangle should
@@ -339,8 +339,8 @@ posterior-predictive draws `pp` of the patch joint
 the fitted national walk and the province's correlated, mean-reverting
 deviation, and each province renews with the fitted importation. Its
 confirmed cases and confirmed deaths are the national forecast counts split
-each week by the fitted province compositions, with the province's own
-delays, relative ascertainment and severity, so the provinces add up to the
+each week by the fitted province compositions, through the national delays
+and the province's relative ascertainment and severity, so the provinces add up to the
 national forecast in every draw (see [`bvd_joint`](@ref)).
 
 Returns one row per province and draw, with columns `patch`, `province`
@@ -451,18 +451,10 @@ Only the incident and level quantities are archived: `confirmed cases` and
 `onset reports` new over the horizon, and the supply-limited `isolation beds`
 occupancy. The cumulative totals are revised across data vintages, so they
 are not archived. The reporting triangle's own total is revised by more than
-the rest, since the printed total falls between consecutive vintages (2531 to 2523, and
-2018 to 1996), which late reporting cannot produce.
+the rest, since the printed total falls between some consecutive vintages,
+which late reporting cannot produce.
 
-When the forecast carries the confirmed/suspect ward split
-(`confirmed_occupancy` / `suspect_occupancy`, the occupancy partitioned by
-the cut-off confirmed share), the two ward occupancy levels are archived too
-as `treatment beds` (confirmed) and `isolation beds (suspected)`, each scored
-against its own Tableau 6 occupancy sub-stock. The total `isolation beds`
-occupancy stays as its own stream. Nothing produces those two columns yet:
-[`forecast_reported`](@ref) projects the total occupancy alone, so only a
-forecast a caller has partitioned itself carries them, which today is the
-tests. Streams a forecast does not carry are skipped. `thin` keeps every
+Streams a forecast does not carry are skipped. `thin` keeps every
 `thin`-th draw so the archive stays compact when it is saved as a release
 asset.
 """
@@ -472,8 +464,6 @@ function forecast_archive(fcs; made_date::Date, thin::Integer = 1)
         (:confirmed_deaths_new, "confirmed deaths"),
         (:recovered_new, "recovered"),
         (:isolation_level, "isolation beds"),
-        (:confirmed_occupancy, "treatment beds"),
-        (:suspect_occupancy, "isolation beds (suspected)"),
         (:onset_reports_new, "onset reports"),
     )
     out = DataFrame(
@@ -713,11 +703,6 @@ scored against it too as a single level row. Returns a `DataFrame` with the
 observed count, the equal-tailed 30/60/90% predictive intervals (the same
 endpoints as the other summary tables), and whether the observed count falls
 inside the 90% interval.
-
-At a one-week-back freeze the bed capacity is weakly informed (the
-reported occupancy rate starts only on 9 June), so the projected bed
-occupancy rides the capacity random walk back to the freeze date and its
-interval is wide.
 """
 function forecast_vs_truth(
         fc::DataFrame;
@@ -774,16 +759,4 @@ function _has_key(chn, key)
     catch
         return false
     end
-end
-
-## Draws of the first key in `candidates` the chain carries, or `nothing`
-## when it carries none. Single-stream fits bind each stream's submodel under
-## a composer-level name (`cases_state.expected_reports`), and the joint
-## carries those nested names alongside its own un-prefixed aliases
-## (`expected_reports_T`), so one ordered list serves both fit kinds.
-function _resolve_draws(chn, candidates)
-    for key in candidates
-        _has_key(chn, key) && return _draws(chn, key)
-    end
-    return nothing
 end

@@ -15,6 +15,8 @@ A minor version: every affected province is its own patch, the importation kerne
   The model does not change.
 - The treatment flow no longer re-splits each patch's BVD admissions by weights of one when the per-patch reports carry the suspected-case detection (#1212).
   The model does not change.
+- The sum-to-zero bases the patch submodels build on every evaluation pass no derivative, so Mooncake no longer tapes them (#1213).
+  The model does not change.
 - Hand-written Mooncake rules for the health-zone pre-grid convolution and vintage window weights keep the per-draw rebuild of the zone delays to about 5% of the full zone gradient, from 24% without them (local timings in #1085).
 - The health-zone relative ascertainment and fatality multipliers take their sum-to-zero basis from the model inputs, built once per fit rather than on every gradient (#1081, resolves #1048).
   This cuts the zone gradient by about 5%, with the timings in #1081.
@@ -292,6 +294,8 @@ A minor version: every affected province is its own patch, the importation kerne
 - The confirmed-cases and confirmed-deaths single-stream models are fitted at each of the three May frozen cut-offs and scored alongside the frozen joint (resolves #513).
   They are the only streams with truth to score from those cut-offs, so the frozen comparison of the joint against each stream's own model now covers every May cut-off rather than the one-week-back cut-off alone.
   Existing fitted values do not change.
+- The methods page states every production prior, the per-stream dispersions, the onset-to-sample constraint and the 139-genome genetic bound, and its captions and limitations match the code (#1205).
+- The write-up drops prose that repeats the methods page or another section, and development narrative (#1207).
 
 ### Infrastructure
 
@@ -329,6 +333,7 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Fixed
 
+- Report-side docstrings and the counterfactual axis label match the code (#1208).
 - The province and zone in-sample pages give their estimate-evolution sections their own anchors, so the links to the national section resolve again (follows #1174).
 - The embedded dashboard map grows its frame to fit its page in the narrow layout, so the layer switch no longer scrolls out of reach inside the frame (resolves #1052).
 - The onset forecast model no longer boxes its sampled scan scale inside the interval comprehension, so the boxed-captures check passes again.

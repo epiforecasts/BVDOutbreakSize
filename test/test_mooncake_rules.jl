@@ -573,6 +573,16 @@
             "no recorded capacity", censoring_cap, days, counts,
             (; days = Int[], counts = Int[])
         )
+        ## The sum-to-zero bases the patch submodels rebuild on every
+        ## draw, from the patch count and the printed patches alone.
+        add!("8 patches", sum_to_zero_basis, 8)
+        add!("1 patch", sum_to_zero_basis, 1)
+        printed = rand(rng, [1, 2, 3, 4, 6], 513)
+        add!(
+            "513 rows over 5 of 8 patches", _embedded_sum_to_zero_basis, 8,
+            printed; perf = true
+        )
+        add!("one printed patch", _embedded_sum_to_zero_basis, 8, [3, 3])
 
         ## The growth rate below, at and above `R = 1`, at the model's
         ## generation-interval truncation.

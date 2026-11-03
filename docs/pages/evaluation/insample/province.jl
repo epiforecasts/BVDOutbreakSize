@@ -432,7 +432,7 @@ province_pairs_fig #hide
 # ## [Estimate evolution across releases](@id province-estimate-evolution)
 #
 # How each province's estimates have moved as releases accrued, read from the estimates each release published at its own cut-off.
-# Releases began publishing per-province estimates recently, so each panel fills in as releases accumulate.
+# Each panel starts at the first release that published per-province estimates.
 
 #md # ```@raw html
 #md # <details><summary>Load the per-province estimates of each release</summary>
@@ -635,7 +635,7 @@ spatial_rt_fig #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The national reproduction number from the single-population fit (coloured) against the headline province model (grey), which is hidden where the two agree.
+#md # The national reproduction number from the single-population fit (coloured) against the central trend of the headline province model (grey), which is hidden where the two agree.
 #md # </figcaption>
 #md # </figure>
 #md # ```
@@ -717,7 +717,7 @@ spatial_quantities_table #hide
 
 #md # ```@raw html
 #md # <figcaption>
-#md # The same three quantities as credible intervals under both structures, with the outbreak start date each fit implies.
+#md # The cumulative infections, reproduction number at the cut-off, case-fatality ratio, outbreak age and latest growth rate under both structures, as credible intervals.
 #md # This is where the agreement is read rather than from the figures.
 #md # </figcaption>
 #md # </figure>
