@@ -41,6 +41,15 @@ Mooncake.@is_primitive(
 Mooncake.@zero_derivative(
     Mooncake.MinimalCtx, Tuple{typeof(censoring_cap), Vararg}
 )
+## The sum-to-zero bases, built from the patch count and the printed
+## patches alone each time a patch submodel is called.
+Mooncake.@zero_derivative(
+    Mooncake.MinimalCtx, Tuple{typeof(sum_to_zero_basis), Integer}
+)
+Mooncake.@zero_derivative(
+    Mooncake.MinimalCtx,
+    Tuple{typeof(_embedded_sum_to_zero_basis), Integer, AbstractVector{<:Integer}}
+)
 ## Work that reaches only reported quantities (see `_detached`).
 Mooncake.@zero_derivative(Mooncake.MinimalCtx, Tuple{typeof(_detached), Vararg})
 
@@ -257,6 +266,203 @@ function Mooncake.rrule!!(
             convert(typeof(κp), κ̄), NoRData()
     end
     return CoDual(y, ȳ), incare_census_pullback!!
+end
+
+# Per-patch treatment kernels: the patch rows through a delay, the national
+# demand shared on the patch stocks, and the two daily share matrices.
+
+const _FloatMat = Matrix{<:Mooncake.IEEEFloat}
+const _FloatVector = Vector{<:Mooncake.IEEEFloat}
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx, Tuple{typeof(convolve_rows), _FloatMat, _FloatVector}
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx, Tuple{typeof(_share_out), _FloatMat, _FloatVector}
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(_admission_centred_shares), _FloatMat, _FloatVector,
+        Mooncake.IEEEFloat,
+    }
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(_background_admission_shares), _FloatVector, _FloatMat,
+        _FloatVector, _FloatVector, Vector{<:Integer}, Integer,
+    }
+)
+
+## Each lag adds `w[d] · M[:, 1:n−d+1]` to `Y[:, d:n]`, so the pullback is
+##
+##     M̄[:, 1:n−d+1] += w[d] · Ȳ[:, d:n],    w̄[d] += Ȳ[:, d:n] · M[:, 1:n−d+1]
+##
+## with each block contiguous.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(convolve_rows)}, M::CoDual{<:_FloatMat},
+        delay::CoDual{<:_FloatVector}
+    )
+    Mp, dp = primal(M), primal(delay)
+    M̄, d̄ = tangent(M), tangent(delay)
+    Y = convolve_rows(Mp, dp)
+    Ȳ = zero(Y)
+    function convolve_rows_pullback!!(::NoRData)
+        n = size(Mp, 2)
+        for d in 1:min(length(dp), n)
+            Ȳd = view(Ȳ, :, d:n)
+            Md = view(Mp, :, 1:(n - d + 1))
+            axpy!(dp[d], Ȳd, view(M̄, :, 1:(n - d + 1)))
+            d̄[d] += dot(Ȳd, Md)
+        end
+        return NoRData(), NoRData(), NoRData()
+    end
+    return CoDual(Y, Ȳ), convolve_rows_pullback!!
+end
+
+## Per day, with `tot = Σ_p s_p > 0` and `m = Σ_p ȳ_p s_p / tot`,
+##
+##     d̄ += m,    s̄_p += (d / tot) (ȳ_p − m),
+##
+## and on a day with no stock the equal split passes `Σ_p ȳ_p / np` to `d`.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(_share_out)}, stock::CoDual{<:_FloatMat},
+        demand::CoDual{<:_FloatVector}
+    )
+    S, dm = primal(stock), primal(demand)
+    S̄, d̄ = tangent(stock), tangent(demand)
+    y = _share_out(S, dm)
+    ȳ = zero(y)
+    function share_out_pullback!!(::NoRData)
+        np, n = size(S)
+        T = eltype(y)
+        @inbounds for t in 1:n
+            tot = zero(T)
+            m = zero(T)
+            for p in 1:np
+                tot += S[p, t]
+                m += ȳ[p, t] * S[p, t]
+            end
+            if tot > zero(T)
+                m /= tot
+                d̄[t] += m
+                c = dm[t] / tot
+                for p in 1:np
+                    S̄[p, t] += c * (ȳ[p, t] - m)
+                end
+            else
+                for p in 1:np
+                    d̄[t] += ȳ[p, t] / np
+                end
+            end
+        end
+        return NoRData(), NoRData(), NoRData()
+    end
+    return CoDual(y, ȳ), share_out_pullback!!
+end
+
+## `s = softmax_p(log(C + a0) + δ)` per day, with `C` the running sum of the
+## admissions. With `l̄_p = s_p (s̄_p − Σ_q s̄_q s_q)`,
+##
+##     δ̄_p += Σ_t l̄_p(t),    C̄_p(t) = l̄_p(t) / (C_p(t) + a0),
+##     Ā_p(t) += Σ_{u ≥ t} C̄_p(u),    ā0 += Σ C̄.
+##
+## The scalar `a0` has no fdata, so its cotangent goes back as rdata.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(_admission_centred_shares)},
+        admissions::CoDual{<:_FloatMat}, dev::CoDual{<:_FloatVector},
+        a0::CoDual{<:Mooncake.IEEEFloat}
+    )
+    A, δ, a = primal(admissions), primal(dev), primal(a0)
+    Ā, δ̄ = tangent(admissions), tangent(dev)
+    s = _admission_centred_shares(A, δ, a)
+    s̄ = zero(s)
+    function admission_centred_shares_pullback!!(::NoRData)
+        np, n = size(A)
+        T = eltype(s)
+        cum = zeros(T, np)
+        C̄ = Matrix{T}(undef, np, n)
+        ā = zero(T)
+        @inbounds for t in 1:n
+            m = zero(T)
+            for p in 1:np
+                cum[p] += A[p, t]
+                m += s̄[p, t] * s[p, t]
+            end
+            for p in 1:np
+                l̄ = s[p, t] * (s̄[p, t] - m)
+                δ̄[p] += l̄
+                C̄[p, t] = l̄ / (cum[p] + a)
+                ā += C̄[p, t]
+            end
+        end
+        @inbounds for p in 1:np
+            r = zero(T)
+            for t in n:-1:1
+                r += C̄[p, t]
+                Ā[p, t] += r
+            end
+        end
+        return NoRData(), NoRData(), NoRData(), convert(typeof(a), ā)
+    end
+    return CoDual(s, s̄), admission_centred_shares_pullback!!
+end
+
+## `W = softmax_p(log w_p + η_p(t))` per day, with `η_p` the knots
+## `level_p + Σ_{i < j} moves_{p,i}` interpolated to the grid, `level = Q y`
+## and `moves = Q steps`. With `l̄_p = W_p (W̄_p − Σ_q W̄_q W_q)`,
+##
+##     w̄_p += Σ_t l̄_p(t) / w_p,
+##
+## each `l̄_p(t)` goes to the two knots bracketing day `t`, a knot's adjoint
+## to the level and to every move before it, and both through `Qᵀ` to `y`
+## and `steps` (and as outer products to `Q`).
+function Mooncake.rrule!!(
+        ::CoDual{typeof(_background_admission_shares)},
+        w::CoDual{<:_FloatVector}, basis::CoDual{<:_FloatMat},
+        y::CoDual{<:_FloatVector}, steps::CoDual{<:_FloatVector},
+        kd::CoDual{<:Vector{<:Integer}}, n::CoDual{<:Integer}
+    )
+    wp, Q, yp, sp = primal(w), primal(basis), primal(y), primal(steps)
+    kdp, nn = primal(kd), primal(n)
+    w̄, Q̄, ȳ, s̄ = tangent(w), tangent(basis), tangent(y), tangent(steps)
+    W = _background_admission_shares(wp, Q, yp, sp, kdp, nn)
+    W̄ = zero(W)
+    function background_admission_shares_pullback!!(::NoRData)
+        np = size(W, 1)
+        nk = length(kdp)
+        T = eltype(W)
+        k̄ = zeros(T, np, nk)
+        @inbounds for t in 1:nn
+            m = zero(T)
+            for p in 1:np
+                m += W̄[p, t] * W[p, t]
+            end
+            b, frac = nk == 1 ? (1, zero(T)) : _knot_bracket(kdp, t, T)
+            for p in 1:np
+                l̄ = W[p, t] * (W̄[p, t] - m)
+                w̄[p] += l̄ / wp[p]
+                k̄[p, b] += (one(T) - frac) * l̄
+                nk > 1 && (k̄[p, b + 1] += frac * l̄)
+            end
+        end
+        level̄ = vec(sum(k̄; dims = 2))
+        moves̄ = Matrix{T}(undef, np, nk - 1)
+        @inbounds for p in 1:np
+            r = zero(T)
+            for j in nk:-1:2
+                r += k̄[p, j]
+                moves̄[p, j - 1] = r
+            end
+        end
+        ȳ .+= transpose(Q) * level̄
+        s̄ .+= vec(transpose(Q) * moves̄)
+        Q̄ .+= level̄ * transpose(yp) .+
+            moves̄ * transpose(reshape(sp, size(Q, 2), nk - 1))
+        return ntuple(_ -> NoRData(), 7)
+    end
+    return CoDual(W, W̄), background_admission_shares_pullback!!
 end
 
 # Onset-reporting kernels from `models/observations.jl`. Each is a loop over

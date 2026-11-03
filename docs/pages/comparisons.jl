@@ -26,7 +26,7 @@ posterior_C_joint = vec(Array(chn_joint[:C_T]));
 # McCabe et al. published their estimates as scenarios at fixed situation-report cut-offs, each with a 95% confidence interval.
 # Their back-calculation-from-deaths scenarios differ between reports, since the 18 May report used 88 reported deaths and the 20 May update 131 with corrected case-fatality ratios.
 # Their scenarios estimate cumulative cases at the report dates, though the report does not say whether these are symptomatic cases or all infections.
-# We take the like-for-like quantity to be our cumulative symptom onsets on the same dates, rather than the latent infections or our total at the current cut-off.
+# We take the like-for-like quantity to be our cumulative symptom onsets on the same dates.
 
 #md # ```@raw html
 #md # <details><summary>McCabe scenarios with uncertainty against our estimates</summary>
@@ -118,7 +118,7 @@ frozen_streams_table = streams_table(
 #
 # Their published quantity is the cumulative confirmed-case count with the reporting fraction held at one, so it excludes the unconfirmed and unascertained cases that this analysis and McCabe et al. estimate.
 # The like-for-like comparison is against our own confirmed-case projection.
-# We take our fit frozen at 8 June, the date of their calibration anchor, and roll its confirmed cases forward to the dates Chamla report with the model's forecast, rather than refitting to their assumptions.
+# We take our fit frozen at 8 June, the date of their calibration anchor, and roll its confirmed cases forward to the dates Chamla report with the model's forecast.
 
 #md # ```@raw html
 #md # <details><summary>Project the 8 June fit forward and assemble the Chamla comparison</summary>

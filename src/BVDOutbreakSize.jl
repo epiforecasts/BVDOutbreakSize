@@ -1,8 +1,8 @@
 module BVDOutbreakSize
 
 using Statistics: quantile, mean, cor, median, cov, std, var
-using LinearAlgebra: cholesky, Symmetric, I, Diagonal, diag,
-    issuccess, LowerTriangular, dot
+using LinearAlgebra: axpy!, dot, cholesky, Symmetric, I, Diagonal, diag,
+    issuccess, LowerTriangular
 using ComposableRecurrences: ComposableRecurrences, Recurrence, Convolution,
     PerStratum, TimeVarying, Primary, Depletion, Redistribute, movement,
     Allocate, Flow, Share, Truncate, Recent, Derived

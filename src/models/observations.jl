@@ -2250,7 +2250,15 @@ through the admission delay `adm_pmf` at `p_iso_bvd · p_drc`, then the
 national BVD admissions (their sum) re-split by the relative ascertainment
 `asc`, so the BVD-to-background proportion stays national. Returns an
 `(n_patches × n)` matrix whose columns sum to the national BVD admissions.
+`asc = nothing` leaves each patch on its own reports, which equal
+ascertainment would re-split to the same matrix.
 """
+function _patch_bvd_admissions(
+        reports_matrix::AbstractMatrix, ::Nothing, p_iso_bvd::Real,
+        p_drc::Real, adm_pmf::AbstractVector
+    )
+    return (p_iso_bvd * p_drc) .* convolve_rows(reports_matrix, adm_pmf)
+end
 function _patch_bvd_admissions(
         reports_matrix::AbstractMatrix, asc::AbstractVector, p_iso_bvd::Real,
         p_drc::Real, adm_pmf::AbstractVector
@@ -2260,11 +2268,7 @@ function _patch_bvd_admissions(
         eltype(reports_matrix), eltype(asc), typeof(p_iso_bvd),
         typeof(p_drc), eltype(adm_pmf)
     )
-    scale = p_iso_bvd * p_drc
-    A_raw = Matrix{T}(undef, np, n)
-    @inbounds for p in 1:np
-        A_raw[p, :] = convolve_delay(scale .* reports_matrix[p, :], adm_pmf)
-    end
+    A_raw = (p_iso_bvd * p_drc) .* convolve_rows(reports_matrix, adm_pmf)
     A_bvd = Matrix{T}(undef, np, n)
     @inbounds for t in 1:n
         total = zero(T)
@@ -2303,11 +2307,29 @@ end
 function _patch_background_stock(
         A_bg::AbstractVector, w::AbstractMatrix, surv::AbstractVector
     )
-    np, n = size(w)
-    T = promote_type(eltype(A_bg), eltype(w), eltype(surv))
+    return convolve_rows(w .* reshape(A_bg, 1, :), surv)
+end
+
+"""
+    _share_out(stock, demand)
+
+The daily `demand` shared across the rows of `stock` in proportion to each
+day's column, equally on a day with no stock. Each column sums to that day's
+demand.
+"""
+function _share_out(stock::AbstractMatrix, demand::AbstractVector)
+    np, n = size(stock)
+    T = promote_type(eltype(stock), eltype(demand))
     out = Matrix{T}(undef, np, n)
-    @inbounds for p in 1:np
-        out[p, :] = convolve_delay(w[p, :] .* A_bg, surv)
+    z = zero(T)
+    @inbounds for t in 1:n
+        tot = z
+        for p in 1:np
+            tot += stock[p, t]
+        end
+        for p in 1:np
+            out[p, t] = tot > z ? demand[t] * stock[p, t] / tot : demand[t] / np
+        end
     end
     return out
 end
@@ -2331,33 +2353,10 @@ function _patch_demand(
         w::AbstractVecOrMat, S_clin::AbstractVector,
         ruleout_pmf::AbstractVector, κ::Real, demand::AbstractVector
     )
-    np, n = size(A_bvd)
-    T = promote_type(
-        eltype(A_bvd), eltype(A_bg), eltype(w), eltype(S_clin),
-        eltype(ruleout_pmf), typeof(κ), eltype(demand)
-    )
-    stock = Matrix{T}(undef, np, n)
-    bg_stock = _patch_background_stock(
+    stock = convolve_rows(A_bvd, S_clin) .+ _patch_background_stock(
         A_bg, w, _background_stay_survival(ruleout_pmf, κ)
     )
-    @inbounds for p in 1:np
-        O_bvd_p = convolve_delay(A_bvd[p, :], S_clin)
-        for t in 1:n
-            stock[p, t] = O_bvd_p[t] + bg_stock[p, t]
-        end
-    end
-    out = Matrix{T}(undef, np, n)
-    z = zero(T)
-    @inbounds for t in 1:n
-        tot = z
-        for p in 1:np
-            tot += stock[p, t]
-        end
-        for p in 1:np
-            out[p, t] = tot > z ? demand[t] * stock[p, t] / tot : demand[t] / np
-        end
-    end
-    return out
+    return _share_out(stock, demand)
 end
 
 """
@@ -2530,12 +2529,10 @@ in-care fraction and the daily series for forecasting and replication.
         ## ([`background_split_model`](@ref)).
         background_split::AbstractVector{<:Real} = [1.0],
         ## Relative ascertainment by patch, which re-splits the national BVD
-        ## admissions. Ones leaves the split on the reports alone, as
+        ## admissions. `nothing` leaves the split on the reports alone, as
         ## [`bvd_joint`](@ref) passes when each patch's reports already
         ## carry its suspected-case detection.
-        patch_ascertainment::AbstractVector{<:Real} = ones(
-            length(background_split)
-        ),
+        patch_ascertainment::Union{Nothing, AbstractVector{<:Real}} = nothing,
         ## Province occupancy, bed and 24h admission rows,
         ## `(; days, patches, counts)` from `province_care_observations`, or
         ## `nothing`. Scored as splits of the printed sum of the provinces
