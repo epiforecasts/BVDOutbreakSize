@@ -2629,7 +2629,7 @@ Markdown.parse(_sampler_same * _sampler_each) #hide
 # The forecast is worth more as a check that the fitted delay and ascertainment reproduce the next vintage than as a case-count prediction.
 #
 # Each release saves its forecast as an asset so it can later be scored against what is observed.
-# Earlier releases showed a forecast but did not store it, so those forecasts are reconstructed by re-running each past release's own model code on its own data through its own fit, writing the forecast in the same archive schema.
+# Forecasts of releases that did not store one are reconstructed by re-running each release's own model code on its own data through its own fit, writing the forecast in the same archive schema.
 # Dependencies are re-resolved at current versions, since the release manifests were not pinned, so a reconstructed forecast is not an exact rebuild.
 # Reconstruction covers the whole release history, back to the first release that carried any forecast.
 # The streams available differ by release: v1.4.0 reconstructs the incident case and death streams, extending to all four streams from v1.6.0 once the recovered and isolation series entered the data.
