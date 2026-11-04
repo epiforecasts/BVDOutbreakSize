@@ -398,9 +398,8 @@ function nuts_sample(
     end
     cb_kwargs = callback === nothing ? (;) : (; callback = callback)
     warmup_kwargs = warmup ? (; discard_adapt = false) : (;)
-    ## The chains run on Julia threads, so BLAS runs single-threaded on each
-    ## chain's own thread rather than sharing one OpenBLAS thread pool. The
-    ## caller's thread count is restored afterwards.
+    ## The chains run on Julia threads, and each calls BLAS on its own thread.
+    ## The caller's BLAS thread count is restored afterwards.
     blas_threads = BLAS.get_num_threads()
     BLAS.set_num_threads(1)
     try
