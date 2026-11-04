@@ -28,8 +28,9 @@
         zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
         convolve_rows, _share_out, _admission_centred_shares,
         _background_admission_shares, sum_to_zero_basis,
-        _embedded_sum_to_zero_basis, knot_days,
-        discretise_censored, lognormal_meansd, cdf_nmax
+        _embedded_sum_to_zero_basis, knot_days, bin_row_increments,
+        patch_rt_matrix, future_knot_days, importation_epsilon_matrix,
+        sigmoid_ramp, discretise_censored, lognormal_meansd, cdf_nmax
     using Distributions: Gamma, LogNormal, Weibull
 
     ## A positive PMF of length `L` with total mass `mass`.
@@ -203,6 +204,21 @@
         add!("1 ⊕ 1", convolve_pmf, [0.4], [0.7])
         add!("empty ⊕ 5", convolve_pmf, Float64[], pmf(rng, 5))
         add!("45 ⊕ 45", convolve_pmf, pmf(rng, 45), pmf(rng, 45); perf = true)
+
+        ## Per-patch rows binned to vintage days: a first bin reaching back
+        ## to day one, single-day bins, a repeated day (an empty bin) and a
+        ## day past the grid end, which clamps. They draw from their own
+        ## stream so the cases after them keep their inputs.
+        brng = Xoshiro(260)
+        add!(
+            "vintage bins", bin_row_increments, rand(brng, 3, 40),
+            [10, 11, 12, 12, 20, 33, 45]
+        )
+        add!("no vintages", bin_row_increments, rand(brng, 3, 40), Int[])
+        add!(
+            "8 patches, n = 260, daily vintages", bin_row_increments,
+            rand(brng, 8, 260), collect(130:260); perf = true
+        )
 
         ## The per-patch treatment kernels on the province grid: rows through
         ## a delay longer and shorter than the grid, the national demand
@@ -593,6 +609,47 @@
             add!("R = $R", euler_lotka_r, R, g40; perf = R == 1.6)
         end
 
+        ## Each patch's Rt from the national series and its knot deviations:
+        ## the model's eight patches on the fitted grid, a grid extended over
+        ## a forecast horizon, a walk starting late, and a single knot.
+        prng = Xoshiro(4117)
+        kd = knot_days(260)
+        add!(
+            "8 patches, n = 260", patch_rt_matrix, 1 .+ rand(prng, 260),
+            0.2 .* randn(prng, 8, length(kd)), kd; perf = true
+        )
+        fd = vcat(knot_days(60), future_knot_days(60, 28))
+        add!(
+            "forecast horizon", patch_rt_matrix, 1 .+ rand(prng, 88),
+            0.2 .* randn(prng, 3, length(fd)), fd
+        )
+        sd = knot_days(40; start = 15)
+        add!(
+            "late walk start", patch_rt_matrix, 1 .+ rand(prng, 40),
+            0.2 .* randn(prng, 4, length(sd)), sd
+        )
+        add!(
+            "one knot", patch_rt_matrix, 1 .+ rand(prng, 20),
+            0.2 .* randn(prng, 2, 1), [1]
+        )
+
+        ## The importation fraction by origin and day: the model's eight
+        ## patches over the fitted grid, origins either side of the cap of
+        ## one (each well clear of it), and no breakpoint, a flat ramp.
+        erng = Xoshiro(5113)
+        add!(
+            "8 patches, n = 260", importation_epsilon_matrix, 0.01,
+            0.5 .* randn(erng, 8), 0.4, sigmoid_ramp(260, 120); perf = true
+        )
+        add!(
+            "two origins capped", importation_epsilon_matrix, 0.5,
+            [-2.0, -1.0, 1.5, 2.0], 0.5, sigmoid_ramp(30, 15)
+        )
+        add!(
+            "no breakpoint", importation_epsilon_matrix, 0.02,
+            0.5 .* randn(erng, 3), -0.3, sigmoid_ramp(20, missing)
+        )
+
         ## The model's delays at their own truncations, a short truncation,
         ## a large Gamma shape, a Weibull far into its tail, and a LogNormal
         ## with no mass before `nmax`, which takes the uniform fallback.
@@ -959,7 +1016,7 @@ end
     using Distributions: _logpdf
     using BVDOutbreakSize: load_observations, joint_fit_args,
         default_breakpoint, incare_census, NegBinomialVector,
-        StudentTVector, BetaBinomialVector
+        StudentTVector, BetaBinomialVector, bin_row_increments
 
     ## The argument types the streams pass on the production data.
     obs = load_observations()
@@ -982,6 +1039,9 @@ end
     ## means, and the composition's rows are the vectors
     ## `stick_breaking_loglik` builds.
     @test fires(Tuple{typeof(incare_census), F, F, F, Float64, F})
+    ## The per-patch confirmed and death rows are binned as a float matrix
+    ## on integer vintage days.
+    @test fires(Tuple{typeof(bin_row_increments), Matrix{Float64}, Vector{Int}})
     @test fires(
         Tuple{
             typeof(_logpdf), NegBinomialVector{Float64, F}, Vector{Int},
