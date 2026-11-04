@@ -4,12 +4,12 @@ description: >-
   job to the later jobs of the same run.
 
 # Compiling BVDOutbreakSize with the docs precompile workload takes ~13 min.
-# Every later job restores a `docs-env` depot cache, but by the time the
-# render jobs start, hours later, their own run's cache has usually been
-# evicted or superseded and they restore another run's. That depot holds
-# BVDOutbreakSize built from other sources, so each job would compile it
-# again.
-# The dependencies in it usually still match, so only this one image travels.
+# Every later job restores a `docs-env` depot cache. The image loads only
+# against the dependency builds it was compiled with, which are those in the
+# depot `list` saves, so the cache prune keeps that depot while the run is
+# going (.github/scripts/prune_depot_caches.py). A job that restores another
+# depot whose dependencies came from the same builds still loads this image
+# rather than the BVDOutbreakSize in that depot, built from other sources.
 #
 # `save` must run after the environment is precompiled. `restore` must run
 # after the depot cache and the pinned manifest are restored and before the
@@ -63,8 +63,10 @@ runs:
       name: Report whether the image is usable
       continue-on-error: true
       shell: bash
-      # The loading debug log names the check that rejects the image. A stale
-      # dependency is named on its own line, so keep every rejection.
+      # The loading debug log names the check that rejects the image. A
+      # dependency built apart from the one the image was compiled against is
+      # reported as "Ignoring cache file", not "Rejecting", so keep every
+      # line about a cache file.
       env:
         JULIA_DEBUG: loading
       run: |
@@ -75,5 +77,5 @@ runs:
           println("BVDOutbreakSize pkgimage usable: ", Base.isprecompiled(pkg))' \
           > "$log" 2>&1
         echo "julia exited with status $?"
-        grep -A8 -e 'pkgimage usable' -e 'Rejecting' "$log" | head -n 200
+        grep -A8 -e 'pkgimage usable' -e 'cache file' "$log" | head -n 200
         exit 0
