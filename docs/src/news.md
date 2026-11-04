@@ -11,12 +11,17 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Performance
 
+- The per-patch Rt matrix and importation fractions are each built in one Mooncake rule.
+  The model does not change.
+- The per-patch onsets and the onsets carried to confirmation go through the per-patch row convolution rule.
+  The model does not change.
 - The per-patch treatment kernels (the patch rows through a delay, the demand share-out and the capacity and background admission shares) have hand-written Mooncake rules (#1217).
   The model does not change.
 - The treatment flow no longer re-splits each patch's BVD admissions by weights of one when the per-patch reports carry the suspected-case detection (#1212).
   The model does not change.
 - The sum-to-zero bases the patch submodels build on every evaluation pass no derivative, so Mooncake no longer tapes them (#1213).
   The model does not change.
+- A hand-written Mooncake rule bins the per-patch confirmed and death rows to the province vintages in one call, about 8x faster on that step with bit-identical results (#1200).
 - Hand-written Mooncake rules for the health-zone pre-grid convolution and vintage window weights keep the per-draw rebuild of the zone delays to about 5% of the full zone gradient, from 24% without them (local timings in #1085).
 - The health-zone relative ascertainment and fatality multipliers take their sum-to-zero basis from the model inputs, built once per fit rather than on every gradient (#1081, resolves #1048).
   This cuts the zone gradient by about 5%, with the timings in #1081.
