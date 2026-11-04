@@ -388,7 +388,8 @@ function zone_meld_block(
     ## toward the diagonal of the sample covariance rather than toward the
     ## identity keeps every week's own marginal variance and gives up only
     ## the correlations, which is the direction the parent's own posterior
-    ## is least able to support.
+    ## is least able to support. The patch-week cells and the extra cells
+    ## are each shrunk and factorised as their own block.
     Σ = cov(S)
     L = zeros(Float64, d, d)
     for c in (1:d_inf, extra_cells)

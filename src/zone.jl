@@ -303,14 +303,16 @@ windows of `week` days to the cut-off. Errors when the zone inputs cover
 fewer than `weeks * week` days.
 
 Returns a table with one row per patch and window, and one for all patches
-together: the window's last date, the posterior mean infections in the
-window from each stage and the ratio of the zone stage's to the province
-model's.
+together.
 """
 function zone_patch_level_check(
         chn, inputs, parent_chain; weeks::Integer = 4, week::Integer = 7
     )
     np, n = length(inputs.patch_names), inputs.n
+    weeks * week <= n || error(
+        "zone_patch_level_check: $weeks windows of $week days need at " *
+            "least $(weeks * week) days; the zone inputs cover $n."
+    )
     zone = zone_patch_infections(chn, inputs)
     parent = [
         reshape(Float64.(v), np, :)
@@ -319,10 +321,6 @@ function zone_patch_level_check(
     all(M -> size(M, 2) >= n, parent) || error(
         "zone_patch_level_check: the parent draws cover fewer than the " *
             "$n days of the zone inputs."
-    )
-    weeks * week <= n || error(
-        "zone_patch_level_check: $weeks windows of $week days need at " *
-            "least $(weeks * week) days; the zone inputs cover $n."
     )
     out = DataFrame(
         "Province" => String[], "Week ending" => Date[],

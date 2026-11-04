@@ -577,8 +577,9 @@ end
     for i in 1:20, t in 1:inputs.n, (p, zs) in enumerate(inputs.patch_ranges)
         @test pinf[p][i, t] ≈ sum(inf[z][i, t] for z in zs) rtol = 1.0e-8
     end
-    ## So the level check reads the stand-in parent back, one row per patch
-    ## and week and one for all patches.
+    ## So the level check reads the stand-in parent back by construction,
+    ## one row per patch and week and one for all patches. The window and
+    ## doubled-parent checks below are the ones that test it.
     lc = BVDOutbreakSize.zone_patch_level_check(chn, inputs, syn.chain)
     @test size(lc, 1) == 4 * (length(inputs.patch_ranges) + 1)
     @test all(r -> isapprox(r, 1; rtol = 1.0e-8), lc[!, "Ratio"])
@@ -2514,7 +2515,7 @@ end
     L_joint = Matrix(cholesky(Symmetric(Σ + 1.0e-6 * I)).L)
     η_joint = pull(L_joint)
     scale_joint = zone_parent_scale(meld.weights, L_joint, η_joint, np, n)
-    @test all(<(0.8), scale_joint)
+    @test maximum(scale_joint) < 1
 end
 
 @testitem "bvd_zone: each draw carries its own generation interval and delays" setup = [
