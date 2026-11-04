@@ -10,7 +10,7 @@
     using Distributions: Normal
     using Turing: @model
     using Turing.DynamicPPL: InitFromPrior, InitFromUniform
-    using BVDOutbreakSize: nuts_sample
+    using BVDOutbreakSize: BVDOutbreakSize, nuts_sample
 
     ## kept: a trivial one-parameter Gaussian is the cheapest target
     ## that exercises every NUTS wiring path.
@@ -20,6 +20,8 @@
 
     chn = nuts_sample(_nuts_model(); samples = 50, chains = 2)
     @test chn !== nothing
+    ## The chains share no BLAS thread pool.
+    @test BVDOutbreakSize.BLAS.get_num_threads() == 1
 
     # Extract the draws of `x` from the FlexiChains.VNChain.
     xs = vec(Array(chn[:x]))

@@ -338,7 +338,7 @@ divergences) instead of waiting for the whole fit. Use
 or [`tensorboard_callback`](@ref) for a TensorBoard backend (requires
 `using TensorBoardLogger`). The callback is forwarded to `sample` only
 when non-`nothing`. Any additional `kwargs` are passed through to
-`sample`.
+`sample`. It sets BLAS to one thread for the process before sampling.
 
 `n_adapts` sets the NUTS warmup length (step-size and mass-matrix
 adaptation), run in addition to `samples` and discarded by default. It
@@ -397,6 +397,9 @@ function nuts_sample(
     end
     cb_kwargs = callback === nothing ? (;) : (; callback = callback)
     warmup_kwargs = warmup ? (; discard_adapt = false) : (;)
+    ## The chains run on Julia threads, so BLAS runs single-threaded on each
+    ## chain's own thread rather than sharing one OpenBLAS thread pool.
+    BLAS.set_num_threads(1)
     return sample(
         rng,
         model,

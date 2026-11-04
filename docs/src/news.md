@@ -11,6 +11,7 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Performance
 
+- Fits run BLAS on one thread, so the parallel chains do not share one OpenBLAS thread pool.
 - The per-patch Rt matrix and importation fractions are each built in one Mooncake rule.
   The model does not change.
 - The per-patch onsets and the onsets carried to confirmation go through the per-patch row convolution rule.
