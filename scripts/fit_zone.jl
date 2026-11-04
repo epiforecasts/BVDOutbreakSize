@@ -1,7 +1,7 @@
 # Fit the health-zone model from a parent joint fit, outside the docs build.
 #
 #   julia --project=docs scripts/fit_zone.jl \
-#       --parent logs/fit_cache/joint__<hash>.parent.jls \
+#       --parent logs/fit_extras/joint__<hash>.parent.jls \
 #       --out logs/zone_local [--samples N] [--warmup N] [--chains 2] \
 #       [--depth N] [--target-accept X]
 #
