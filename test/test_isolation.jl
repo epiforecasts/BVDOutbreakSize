@@ -778,8 +778,10 @@ end
     :slow,
 ] begin
     using Turing: sample, Prior
+    using Random: Xoshiro
+    using Statistics: std
     import FlexiChains
-    using BVDOutbreakSize: treatment_only_model
+    using BVDOutbreakSize: treatment_only_model, treatment_flow_model
 
     isolation_history = (;
         days = [28, 29, 30, 31, 32, 33],
@@ -802,11 +804,21 @@ end
     @test length(brk) == 100
     @test all(isfinite, brk)
     @test any(!=(0), brk)
-    ## The single step is the standard-normal draw scaled by the default
-    ## break prior sd of 75 beds.
-    stp = only(filter(k -> occursin("occupancy_step", string(k)), ks))
-    z = only.(vec(Array(chn[stp])))
-    @test brk ≈ 75 .* z
+    ## The break step's prior SD is the default 75 beds, and an explicit
+    ## `occupancy_break_sd` sets it.
+    function prior_sd(; kw...)
+        treatment(args...; tkw...) = treatment_flow_model(args...; tkw..., kw...)
+        m = treatment_only_model(
+            33; isolation_history, occupancy_break_days = [31], treatment
+        )
+        c = sample(
+            Xoshiro(1), m, Prior(), 2000;
+            chain_type = FlexiChains.VNChain, progress = false
+        )
+        return std(vec(Array(c[occ])))
+    end
+    @test prior_sd() ≈ 75 rtol = 0.1
+    @test prior_sd(; occupancy_break_sd = 10.0) ≈ 10 rtol = 0.1
 end
 
 @testitem "isolation occupancy: joint prior runs with the live data" tags = [

@@ -1312,6 +1312,8 @@ cfr_prior_fig #hide
 # An overnight reclassification of the total is modelled on break days.
 # The break days are listed by hand where the published start-of-day in-bed count differs from the previous report day's occupancy by more than a threshold.
 # One step is fitted per listed day, with a prior centred on zero with SD 75 beds.
+# A reclassification moves a share of one province's isolation register, and the SD puts a quarter of the largest province's stock (Ituri, about 300 to 600 beds) at two SDs.
+# The prior is Normal because a step cannot remove more patients than the register holds, and the Normal's light tails keep it within that stock.
 # The steps accumulate into a persistent additive offset $\Delta_t$ on the modelled total occupancy, carried forward to every later day.
 #
 # The reports also print the patients in isolation and the beds by province, for whichever provinces report that day.
