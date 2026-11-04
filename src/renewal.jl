@@ -402,10 +402,10 @@ function patch_infections(
         Depletion(PerStratum(N); pools = (S = PerStratum(pool0),)),
     )
     renewal = Recurrence(g; modifiers)
-    run, trace = renewal(
-        Rt_matrix; history = seeds_matrix, start = L + 1, trace = true
+    (; y, trace) = renewal(
+        Rt_matrix; history = seeds_matrix, start = L + 1, record = (:trace,)
     )
-    infections = hcat(seeds_matrix, run)
+    infections = hcat(seeds_matrix, y)
     arrivals = first(trace.modifiers)
     importation = hcat(zeros(eltype(arrivals), np, L), arrivals)
     return (; infections, importation)

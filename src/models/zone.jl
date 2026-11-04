@@ -1024,11 +1024,11 @@ function zone_share_renewal_kernel(
         ) :
         Allocate(patch_ranges[held], totals)
     renewal = Recurrence(g; modifiers = (split,))
-    run = renewal(
-        gain; history = zeros(eltype(gain), nz, 1), add = gain .* pre,
-        trace = on
-    )
-    Iz = on ? first(run) : run
+    h0 = zeros(eltype(gain), nz, 1)
+    run = on ?
+        renewal(gain; history = h0, add = gain .* pre, record = (:trace,)) :
+        (; y = renewal(gain; history = h0, add = gain .* pre))
+    Iz = run.y
     forces = Convolution(vcat(false, g))(Iz) .+ pre
     floor_ = eps(eltype(Iz))
     shares = if on
@@ -1041,7 +1041,7 @@ function zone_share_renewal_kernel(
         ## The trace holds the spilled force and then the import pattern. A
         ## patch whose pattern sums to zero, with no infected zones elsewhere
         ## to send to it, takes its arrivals by its own spilled force.
-        tr = first(last(run).modifiers)
+        tr = first(run.trace.modifiers)
         v, h = tr[1:nz, :], tr[(nz + 1):(2nz), :]
         arrivals = zone_rows(mix.import_fraction[:, days] .* I_bar[:, days])
         sh = patch_sums(h)

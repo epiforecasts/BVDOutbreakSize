@@ -1947,7 +1947,7 @@ function accumulate_occupancy(
     ## The stocks start empty and every inflow is a flow, so the call takes
     ## no gain and `stop` sets the number of days. The clamp floors the
     ## unconfirmed pool when its shares pass one.
-    floor_ = ComposableRecurrences.Clamp(zero(T), T(Inf))
+    floor_ = ComposableRecurrences.Transform(clamp, zero(T), T(Inf))
     Y = Recurrence([true]; modifiers = (flows, floor_))(;
         history = zeros(T, 3, 1), stop = n
     )
