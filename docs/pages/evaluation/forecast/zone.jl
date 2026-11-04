@@ -38,9 +38,7 @@ frozen_local = load_fit("local_frozen_validation");
 # The one-week-ahead zone forecast comes from the [health-zone model](@ref "Health-zone model") melded from the frozen fit, run a week past the frozen cut-off.
 # The observed count is the change in each zone's cumulative confirmed cases between the frozen cut-off and the vintage a week later, clamped at zero.
 # The week is scored only when the zone tables carry a vintage on its last day.
-# The split of each patch's weekly total is scored by its multinomial log score at the forecast shares.
-# It is set against share persistence, the cumulative zone shares at the cut-off, and naive persistence, the zone split of the last seven days, each with a pseudo-count of 0.5 per zone.
-# The patch total is scored against a naive persistence total, the last seven days' count with negative-binomial noise at dispersion 5.
+# The split and the patch total are scored against the persistence rules of [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline").
 
 #md # ```@raw html
 #md # <details><summary>Zone forecast against observed</summary>
