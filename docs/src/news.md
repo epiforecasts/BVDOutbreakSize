@@ -11,6 +11,8 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Performance
 
+- The per-patch onsets and the onsets carried to confirmation go through the per-patch row convolution rule.
+  The model does not change.
 - The per-patch treatment kernels (the patch rows through a delay, the demand share-out and the capacity and background admission shares) have hand-written Mooncake rules (#1217).
   The model does not change.
 - The treatment flow no longer re-splits each patch's BVD admissions by weights of one when the per-patch reports carry the suspected-case detection (#1212).
