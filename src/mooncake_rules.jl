@@ -42,6 +42,13 @@ Mooncake.@is_primitive(
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
+        typeof(bin_row_increments), Matrix{<:Mooncake.IEEEFloat},
+        Vector{<:Integer},
+    },
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
         typeof(interpolate_knots), _FloatVec, Array{<:Integer}, Integer,
     },
 )
@@ -111,6 +118,34 @@ function Mooncake.rrule!!(
         return NoRData(), NoRData(), NoRData()
     end
     return CoDual(y, ȳ), convolve_delay_pullback!!
+end
+
+function Mooncake.rrule!!(
+        ::CoDual{typeof(bin_row_increments)},
+        M::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
+        days::CoDual{<:Vector{<:Integer}}
+    )
+    Mp = primal(M)
+    dp = primal(days)
+    M̄ = tangent(M)
+    y = bin_row_increments(Mp, dp)
+    ȳ = zero(y)
+    function bin_row_increments_pullback!!(::NoRData)
+        ## Each bin is a sum over its days, so every day in bin `i` takes
+        ## that bin's cotangent.
+        n = size(Mp, 2)
+        prev = 0
+        @inbounds for (i, d) in enumerate(dp)
+            hi = clamp(Int(d), 0, n)
+            lo = clamp(prev, 0, n)
+            for t in (lo + 1):hi, p in axes(Mp, 1)
+                M̄[p, t] += ȳ[p, i]
+            end
+            prev = hi
+        end
+        return NoRData(), NoRData(), NoRData()
+    end
+    return CoDual(y, ȳ), bin_row_increments_pullback!!
 end
 
 function Mooncake.rrule!!(

@@ -267,6 +267,19 @@ end
     @test size(onset_report_cdf_table(lh, γ, 5, 9, 8)) == (12, 0)
 end
 
+@testitem "bin_row_increments: rows binned as bin_increments" begin
+    using BVDOutbreakSize: bin_row_increments, bin_increments
+    M = [1.0 2.0 3.0 4.0 5.0; 0.5 0.25 0.125 1.0 2.0]
+    days = [2, 3, 3, 9]
+    out = bin_row_increments(M, days)
+    @test size(out) == (2, 4)
+    for p in 1:2
+        @test out[p, :] == bin_increments(M[p, :], days)
+    end
+    @test out[1, :] == [3.0, 3.0, 0.0, 9.0]
+    @test size(bin_row_increments(M, Int[])) == (2, 0)
+end
+
 @testitem "stick_breaking_loglik: one conditional BetaBinomial per row" begin
     using BVDOutbreakSize: stick_breaking_loglik, safe_betabinomial
     using Distributions: logpdf
