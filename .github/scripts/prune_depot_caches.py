@@ -12,6 +12,13 @@ Only keys ending in `;run_id=<n>;run_attempt=<n>` are candidates, which is
 the suffix `julia-actions/cache` appends. The `fit-*` caches, the
 pre-commit cache and anything else never match, so they are never deleted.
 
+A `docs-env` cache whose run has not finished is never deleted either. The
+docs build's later jobs restore it hours after `list` saves it, and load the
+compiled package `list` built against it. If it is gone, the first job to
+miss it compiles every dependency and saves a new depot under the same key.
+Every later job then rejects that compiled package, whose dependencies have
+different build ids, and compiles it again.
+
 Deletes, in order:
 
 1. every depot cache that a newer one with the same ref and key prefix has
@@ -32,7 +39,8 @@ import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 
-DEPOT_KEY = re.compile(r"^(?P<prefix>.*;)run_id=\d+;run_attempt=\d+$")
+DEPOT_KEY = re.compile(r"^(?P<prefix>.*;)run_id=(?P<run_id>\d+);run_attempt=\d+$")
+HANDOFF_PREFIX = "docs-env;"
 GB = 1024**3
 
 
@@ -57,10 +65,47 @@ def timestamp(value):
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def plan(caches, default_ref, budget, stale_days, now):
-    """Return the caches to delete as (cache, reason) pairs."""
+def in_flight(repo, caches):
+    """Return the run ids of `docs-env` caches whose run has not finished."""
+    running = set()
+    for c in caches:
+        m = DEPOT_KEY.match(c["key"])
+        if not (m and c["key"].startswith(HANDOFF_PREFIX)):
+            continue
+        try:
+            status = gh(
+                "api",
+                f"repos/{repo}/actions/runs/{m['run_id']}",
+                "--jq",
+                ".status",
+            ).strip()
+        except subprocess.CalledProcessError:
+            # A deleted run cannot restore anything.
+            continue
+        if status != "completed":
+            running.add(m["run_id"])
+    return running
+
+
+def kept_for_run(cache, running):
+    """Whether `cache` is a `docs-env` cache a running build may restore."""
+    m = DEPOT_KEY.match(cache["key"])
+    return bool(
+        m and cache["key"].startswith(HANDOFF_PREFIX) and m["run_id"] in running
+    )
+
+
+def plan(caches, default_ref, budget, stale_days, now, running=frozenset()):
+    """Return the caches to delete as (cache, reason) pairs.
+
+    `running` holds the run ids whose `docs-env` caches are kept.
+    """
     depot = [c for c in caches if DEPOT_KEY.match(c["key"])]
     doomed = {}
+
+    def doom(c, reason):
+        if not kept_for_run(c, running):
+            doomed[c["id"]] = (c, reason)
 
     groups = {}
     for c in depot:
@@ -69,7 +114,7 @@ def plan(caches, default_ref, budget, stale_days, now):
     for group in groups.values():
         group.sort(key=lambda c: timestamp(c["created_at"]), reverse=True)
         for c in group[1:]:
-            doomed[c["id"]] = (c, "superseded")
+            doom(c, "superseded")
 
     cutoff = now - timedelta(days=stale_days)
     for c in depot:
@@ -78,17 +123,23 @@ def plan(caches, default_ref, budget, stale_days, now):
             and c["ref"] == default_ref
             and timestamp(c["last_accessed_at"]) < cutoff
         ):
-            doomed[c["id"]] = (c, f"unused for {stale_days} days")
+            doom(c, f"unused for {stale_days} days")
 
     total = sum(c["size_in_bytes"] for c in caches if c["id"] not in doomed)
     others = sorted(
-        (c for c in depot if c["id"] not in doomed and c["ref"] != default_ref),
+        (
+            c
+            for c in depot
+            if c["id"] not in doomed
+            and c["ref"] != default_ref
+            and not kept_for_run(c, running)
+        ),
         key=lambda c: timestamp(c["last_accessed_at"]),
     )
     for c in others:
         if total <= budget:
             break
-        doomed[c["id"]] = (c, "over budget")
+        doom(c, "over budget")
         total -= c["size_in_bytes"]
 
     return list(doomed.values())
@@ -106,13 +157,16 @@ def main():
         parser.error("--repo is required outside GitHub Actions")
 
     caches = list_caches(args.repo)
+    running = in_flight(args.repo, caches)
     doomed = plan(
         caches,
         f"refs/heads/{args.default_branch}",
         args.budget_gb * GB,
         args.stale_days,
         datetime.now(timezone.utc),
+        running,
     )
+    spared = [c for c in caches if kept_for_run(c, running)]
 
     freed = sum(c["size_in_bytes"] for c, _ in doomed)
     total = sum(c["size_in_bytes"] for c in caches)
@@ -121,11 +175,15 @@ def main():
         f"{len(caches)} caches, {total / GB:.2f} GB; "
         f"{len(kept)} are not depot caches and are never deleted "
         f"({sum(c['size_in_bytes'] for c in kept) / GB:.2f} GB).",
+        f"Keeping {len(spared)} `docs-env` caches of running builds "
+        f"({sum(c['size_in_bytes'] for c in spared) / GB:.2f} GB).",
         f"{'Deleting' if args.delete else 'Would delete'} {len(doomed)}, "
         f"{freed / GB:.2f} GB, leaving {(total - freed) / GB:.2f} GB.",
         "",
     ]
-    for c, reason in sorted(doomed, key=lambda d: (d[1], d[0]["ref"])):
+    for c, reason in [(c, "running build") for c in spared] + sorted(
+        doomed, key=lambda d: (d[1], d[0]["ref"])
+    ):
         lines.append(
             f"- {c['size_in_bytes'] / 2**20:7.0f} MB  {reason:<18} "
             f"{c['ref']}  `{c['key']}`"

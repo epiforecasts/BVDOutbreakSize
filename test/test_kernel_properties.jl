@@ -68,6 +68,37 @@ end
     @test out[:, 7] ≈ fill(demand[7] / 4, 4)
 end
 
+@testitem "patch_rt_matrix: the national Rt scaled by each patch's deviation" setup = [
+    KernelProperties,
+] begin
+    using BVDOutbreakSize: patch_rt_matrix, interpolate_knots, knot_days
+    rng = Xoshiro(3)
+    days = knot_days(50)
+    R = 1 .+ rand(rng, 50)
+    K = 0.3 .* randn(rng, 4, length(days))
+    Rt = patch_rt_matrix(R, K, days)
+    @test size(Rt) == (4, 50)
+    @test all(p -> Rt[p, :] ≈ R .* exp.(interpolate_knots(K[p, :], days, 50)), 1:4)
+    ## Zero deviations give the national series in every patch.
+    @test all(==(R), eachrow(patch_rt_matrix(R, zero(K), days)))
+end
+
+@testitem "importation_epsilon_matrix: the fraction by origin and day, capped at one" setup = [
+    KernelProperties,
+] begin
+    using BVDOutbreakSize: importation_epsilon_matrix, sigmoid_ramp
+    ramp = sigmoid_ramp(40, 20)
+    dev = [-1.0, 0.0, 3.0]
+    E = importation_epsilon_matrix(0.1, dev, 0.5, ramp)
+    @test size(E) == (3, 40)
+    @test E[1, :] ≈ 0.1 .* exp(-1.0) .* exp.(0.5 .* ramp)
+    ## An origin whose fraction would pass one sends everything it generates.
+    @test all(==(1.0), E[3, :])
+    ## With no ramp effect the fraction is flat over the days.
+    E0 = importation_epsilon_matrix(0.1, dev, 0.0, ramp)
+    @test all(allequal, eachrow(E0))
+end
+
 @testitem "convolve_pmf: mass, identity and symmetry" setup = [
     KernelProperties,
 ] begin
@@ -234,6 +265,19 @@ end
     @test all(iszero, onset_report_cdf_table(fill(-800.0, 12), γ, 5, 5, 40))
     @test all(isone, onset_report_cdf_table(fill(800.0, 12), γ, 5, 5, 40))
     @test size(onset_report_cdf_table(lh, γ, 5, 9, 8)) == (12, 0)
+end
+
+@testitem "bin_row_increments: rows binned as bin_increments" begin
+    using BVDOutbreakSize: bin_row_increments, bin_increments
+    M = [1.0 2.0 3.0 4.0 5.0; 0.5 0.25 0.125 1.0 2.0]
+    days = [2, 3, 3, 9]
+    out = bin_row_increments(M, days)
+    @test size(out) == (2, 4)
+    for p in 1:2
+        @test out[p, :] == bin_increments(M[p, :], days)
+    end
+    @test out[1, :] == [3.0, 3.0, 0.0, 9.0]
+    @test size(bin_row_increments(M, Int[])) == (2, 0)
 end
 
 @testitem "stick_breaking_loglik: one conditional BetaBinomial per row" begin
