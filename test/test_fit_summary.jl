@@ -67,8 +67,10 @@ end
     @test length(readlines(joinpath(dir, "sampler_by_chain.csv"))) == 3
     ## The extras writer adds the bundle and, for a chain without the patch
     ## structure, no extract.
-    cache = mktempdir()
+    cache = joinpath(mktempdir(), "fit_cache")
     write_fit_extras("demo", "demo__abc", chn, cache)
     @test isfile(joinpath(cache, "demo__abc_diagnostics", "summary.csv"))
     @test !isfile(joinpath(cache, "demo__abc.parent.jls"))
+    @test fit_extras_dir(cache) == joinpath(dirname(cache), "fit_extras")
+    @test !isdir(fit_extras_dir(cache))
 end

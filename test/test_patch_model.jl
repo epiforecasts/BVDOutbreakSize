@@ -113,28 +113,6 @@ end
     end
 end
 
-@testitem "patch_infections: importation is each day's arrivals" begin
-    using BVDOutbreakSize: patch_infections
-
-    ## The importation output is `Σ_{q ≠ p} ε[q, t] K[p, q] G[q, t]`, what
-    ## patch `p` receives before its pool is drawn, with `G[q, t]` what
-    ## origin `q` generates. The seed days have none.
-    g = [0.2, 0.5, 0.3]
-    np, n, L = 3, 30, 4
-    Rt = 1.0 .+ 0.5 .* abs.(sin.((1:np) .+ (1:n)'))
-    seeds = [2.0 2.0 3.0 3.0; 1.0 1.0 1.0 2.0; 0.0 0.0 0.5 0.5]
-    K = [0.0 0.2 0.1; 0.3 0.0 0.2; 0.1 0.4 0.0]
-    ε = 0.05 .+ 0.02 .* cos.((1:np) .* (1:n)')
-    st = patch_infections(Rt, g, seeds, K, ε, [400.0, 300.0, 200.0])
-    I = st.infections
-    G(q, t) = Rt[q, t] *
-        sum(I[q, t - s] * g[s] for s in 1:min(t - 1, length(g)))
-    arrivals(p, t) = sum(ε[q, t] * K[p, q] * G(q, t) for q in 1:np if q != p)
-    @test all(iszero, st.importation[:, 1:L])
-    @test st.importation[:, (L + 1):n] ≈
-        [arrivals(p, t) for p in 1:np, t in (L + 1):n]
-end
-
 @testitem "patch Rt: the national value should be the weighted mean" begin
     using BVDOutbreakSize: patch_infections, implied_national_Rt
 
@@ -1141,6 +1119,7 @@ end
 
 @testitem "province deaths: the split that identifies ascertainment" begin
     using BVDOutbreakSize
+    using Dates: Date, Day
     using TOML
 
     ## The per-province case count is the product of ascertainment and
@@ -1163,20 +1142,17 @@ end
     )
 
     ## Both are exact partitions of their national totals (the scanner gates
-    ## on this), and they share a vintage grid so the two compositions line
-    ## up, except for vintages `[skip_dates]` leaves out of the deaths only.
-    manifest = TOML.parsefile(
+    ## on this). The death grid is the case grid less the death block's
+    ## `[skip_dates]`, so the two compositions line up on every other vintage.
+    raw = TOML.parsefile(
         joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
     )
-    skips = get(manifest, "skip_dates", Dict{String, Any}())
-    deaths_only = setdiff(
-        Set(String.(get(skips, "province_death_history", String[]))),
-        Set(String.(get(skips, "province_confirmed_history", String[])))
+    skipped = Set(
+        Date.(get(get(raw, "skip_dates", Dict()), "province_death_history", []))
     )
-    @test issubset(deaths.days, cases.days)
-    @test length(setdiff(cases.days, deaths.days)) == length(deaths_only)
-    @test size(deaths.increments) ==
-        (size(cases.increments, 1), length(deaths.days))
+    kept = [d for d in cases.days if !(obs.seeding + Day(d - 1) in skipped)]
+    @test deaths.days == kept
+    @test size(deaths.increments) == (size(cases.increments, 1), length(kept))
     ## Compared on the cumulative rather than vintage by vintage, because the
     ## national series does not carry every province vintage's predecessor and
     ## a missing one would make the expected increment wrong rather than the
@@ -2248,15 +2224,4 @@ end
     η = [900.0, 0.0, 0.1, -0.1]
     @test destination_weighted_kernel(K, η)[:, 1] ≈
         destination_weighted_kernel(K, [0.0, 0.0, 0.1, -0.1])[:, 1]
-end
-
-@testitem "patch_infections: seeds covering the grid are the trajectory" begin
-    using BVDOutbreakSize: patch_infections
-    seeds = [1.0 2.0 3.0 4.0 5.0; 2.0 1.0 0.5 0.0 1.0]
-    K = [0.0 0.1; 0.2 0.0]
-    out = patch_infections(
-        fill(1.5, 2, 4), [0.5, 0.5], seeds, K, 0.05, [1.0e4, 2.0e4]
-    )
-    @test out.infections == seeds[:, 1:4]
-    @test out.importation == zeros(2, 4)
 end

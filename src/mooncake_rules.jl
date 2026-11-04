@@ -32,6 +32,13 @@ end
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
+        typeof(bin_row_increments), Matrix{<:Mooncake.IEEEFloat},
+        Vector{<:Integer},
+    },
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
         typeof(interpolate_knots), _FloatVec, Array{<:Integer}, Integer,
     },
 )
@@ -54,6 +61,34 @@ Mooncake.@zero_derivative(
 Mooncake.@zero_derivative(Mooncake.MinimalCtx, Tuple{typeof(_detached), Vararg})
 
 function Mooncake.rrule!!(
+        ::CoDual{typeof(bin_row_increments)},
+        M::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
+        days::CoDual{<:Vector{<:Integer}}
+    )
+    Mp = primal(M)
+    dp = primal(days)
+    M̄ = tangent(M)
+    y = bin_row_increments(Mp, dp)
+    ȳ = zero(y)
+    function bin_row_increments_pullback!!(::NoRData)
+        ## Each bin is a sum over its days, so every day in bin `i` takes
+        ## that bin's cotangent.
+        n = size(Mp, 2)
+        prev = 0
+        @inbounds for (i, d) in enumerate(dp)
+            hi = clamp(Int(d), 0, n)
+            lo = clamp(prev, 0, n)
+            for t in (lo + 1):hi, p in axes(Mp, 1)
+                M̄[p, t] += ȳ[p, i]
+            end
+            prev = hi
+        end
+        return NoRData(), NoRData(), NoRData()
+    end
+    return CoDual(y, ȳ), bin_row_increments_pullback!!
+end
+
+function Mooncake.rrule!!(
         ::CoDual{typeof(interpolate_knots)},
         knot_vals::CoDual{<:_FloatVec},
         days::CoDual{<:Array{<:Integer}}, n::CoDual{<:Integer}
@@ -65,23 +100,125 @@ function Mooncake.rrule!!(
     out = interpolate_knots(kp, dayp, np)
     ō = zero(out)
     function interpolate_knots_pullback!!(::NoRData)
-        nb = length(dayp)
-        if nb == 1
-            @inbounds for t in 1:np
-                k̄[1] += ō[t]
-            end
-            return NoRData(), NoRData(), NoRData(), NoRData()
-        end
-        Tf = eltype(ō)
-        @inbounds for t in 1:np
-            b, frac = _knot_bracket(dayp, t, Tf)
-            g = ō[t]
-            k̄[b] += (one(Tf) - frac) * g
-            k̄[b + 1] += frac * g
-        end
+        _interpolate_knots_adjoint!(k̄, ō, dayp)
         return NoRData(), NoRData(), NoRData(), NoRData()
     end
     return CoDual(out, ō), interpolate_knots_pullback!!
+end
+
+## Adjoint of `interpolate_knots(k, days, length(ō))` into `k̄`: each day hands
+## its cotangent to the two knots bracketing it, by the interpolation weights.
+function _interpolate_knots_adjoint!(k̄, ō, days)
+    if length(days) == 1
+        k̄[1] += sum(ō)
+        return k̄
+    end
+    Tf = eltype(ō)
+    @inbounds for t in eachindex(ō)
+        b, frac = _knot_bracket(days, t, Tf)
+        k̄[b] += (one(Tf) - frac) * ō[t]
+        k̄[b + 1] += frac * ō[t]
+    end
+    return k̄
+end
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(patch_rt_matrix), Vector{<:Mooncake.IEEEFloat},
+        Matrix{<:Mooncake.IEEEFloat}, Vector{<:Integer},
+    },
+)
+
+## With `y[p, t] = R[t] exp(δ[p, t])`, `δ̄[p, t] = ȳ[p, t] y[p, t]` goes back
+## through the interpolation to the knots, and
+## `R̄[t] = Σ_p ȳ[p, t] y[p, t] / R[t]`, with `exp(δ)` recomputed on a day
+## where `R` is not positive.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(patch_rt_matrix)},
+        R::CoDual{<:Vector{<:Mooncake.IEEEFloat}},
+        knots::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
+        days::CoDual{<:Vector{<:Integer}}
+    )
+    Rp, Kp, dp = primal(R), primal(knots), primal(days)
+    R̄, K̄ = tangent(R), tangent(knots)
+    y = patch_rt_matrix(Rp, Kp, dp)
+    ȳ = zero(y)
+    function patch_rt_matrix_pullback!!(::NoRData)
+        T = eltype(ȳ)
+        ng = length(Rp)
+        δ̄ = zeros(T, ng)
+        k̄ = zeros(T, size(Kp, 2))
+        @inbounds for p in axes(Kp, 1)
+            for t in 1:ng
+                δ̄[t] = ȳ[p, t] * y[p, t]
+            end
+            fill!(k̄, zero(T))
+            _interpolate_knots_adjoint!(k̄, δ̄, dp)
+            for b in eachindex(k̄)
+                K̄[p, b] += k̄[b]
+            end
+        end
+        @inbounds for t in 1:ng
+            s = zero(T)
+            if Rp[t] > zero(T)
+                for p in axes(Kp, 1)
+                    s += ȳ[p, t] * y[p, t]
+                end
+                R̄[t] += s / Rp[t]
+            else
+                for p in axes(Kp, 1)
+                    δ = interpolate_knots(view(Kp, p, :), dp, ng)[t]
+                    s += ȳ[p, t] * exp(δ)
+                end
+                R̄[t] += s
+            end
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData()
+    end
+    return CoDual(y, ȳ), patch_rt_matrix_pullback!!
+end
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(importation_epsilon_matrix), Mooncake.IEEEFloat,
+        Vector{<:Mooncake.IEEEFloat}, Mooncake.IEEEFloat,
+        Vector{<:Mooncake.IEEEFloat},
+    },
+)
+
+## Each uncapped cell `v = ε_bar e^{dev[q]} e^{β ramp[t]}` passes `g = ȳ v` to
+## `dev[q]`, `g ramp[t]` to `β`, `g β` to `ramp[t]` and `g / ε_bar` to
+## `ε_bar`. A capped cell passes nothing. At `ε_bar = 0` the `ε_bar`
+## cotangent is summed from the exponentials directly.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(importation_epsilon_matrix)},
+        ε_bar::CoDual{<:Mooncake.IEEEFloat},
+        dev::CoDual{<:Vector{<:Mooncake.IEEEFloat}},
+        β::CoDual{<:Mooncake.IEEEFloat},
+        ramp::CoDual{<:Vector{<:Mooncake.IEEEFloat}}
+    )
+    εp, dp, βp, rp = primal(ε_bar), primal(dev), primal(β), primal(ramp)
+    d̄, r̄ = tangent(dev), tangent(ramp)
+    E = importation_epsilon_matrix(εp, dp, βp, rp)
+    Ē = zero(E)
+    function importation_epsilon_matrix_pullback!!(::NoRData)
+        T = eltype(E)
+        gε = gβ = zero(T)
+        @inbounds for t in eachindex(rp), q in eachindex(dp)
+            v = E[q, t]
+            v < one(T) || continue
+            g = Ē[q, t] * v
+            d̄[q] += g
+            gβ += g * rp[t]
+            r̄[t] += g * βp
+            gε += iszero(εp) ? Ē[q, t] * exp(dp[q] + βp * rp[t]) : g / εp
+        end
+        return NoRData(), oftype(εp, gε), NoRData(), oftype(βp, gβ),
+            NoRData()
+    end
+    return CoDual(E, Ē), importation_epsilon_matrix_pullback!!
 end
 
 Mooncake.@is_primitive(
