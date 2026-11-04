@@ -754,6 +754,7 @@ MarkdownTable(vintage_table) #hide
 #
 # The onset-to-report delay runs from symptom onset to a suspected case being detected and reported into surveillance.
 # It is the onset-to-admission delay of a Bayesian reanalysis [bdbv_linelist_analysis_2026](@cite) of the 2012 Isiro Bundibugyo virus outbreak line list [rosello2015](@cite), with an implied mean of about 4 d.
+# The onset-to-admission delay is used as a proxy for onset-to-report on the assumption that a case enters surveillance when first formally seen at a health facility.
 # Its shape and scale take LogNormal priors centred on the reanalysis posterior, with the reported uncertainty carried to the log scale:
 #
 # ```math
