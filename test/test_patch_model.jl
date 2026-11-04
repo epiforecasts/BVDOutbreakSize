@@ -1141,6 +1141,7 @@ end
 
 @testitem "province deaths: the split that identifies ascertainment" begin
     using BVDOutbreakSize
+    using TOML
 
     ## The per-province case count is the product of ascertainment and
     ## incidence, and only the product is observed, so the case split alone
@@ -1162,9 +1163,20 @@ end
     )
 
     ## Both are exact partitions of their national totals (the scanner gates
-    ## on this), and they share a vintage grid so the two compositions line up.
-    @test deaths.days == cases.days
-    @test size(deaths.increments) == size(cases.increments)
+    ## on this), and they share a vintage grid so the two compositions line
+    ## up, except for vintages `[skip_dates]` leaves out of the deaths only.
+    manifest = TOML.parsefile(
+        joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    )
+    skips = get(manifest, "skip_dates", Dict{String, Any}())
+    deaths_only = setdiff(
+        Set(String.(get(skips, "province_death_history", String[]))),
+        Set(String.(get(skips, "province_confirmed_history", String[])))
+    )
+    @test issubset(deaths.days, cases.days)
+    @test length(setdiff(cases.days, deaths.days)) == length(deaths_only)
+    @test size(deaths.increments) ==
+        (size(cases.increments, 1), length(deaths.days))
     ## Compared on the cumulative rather than vintage by vintage, because the
     ## national series does not carry every province vintage's predecessor and
     ## a missing one would make the expected increment wrong rather than the
