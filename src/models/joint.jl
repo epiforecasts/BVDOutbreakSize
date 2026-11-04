@@ -948,16 +948,9 @@ function _patch_death_increments(
         kernel::AbstractVector,
         province_days::AbstractVector{<:Integer}
     )
-    np = size(onsets_matrix, 1)
-    nv = length(province_days)
-    first_daily = convolve_delay(onsets_matrix[1, :], kernel)
-    out = Matrix{eltype(first_daily)}(undef, np, nv)
-    @inbounds out[1, :] = bin_increments(first_daily, province_days)
-    @inbounds for p in 2:np
-        daily = convolve_delay(onsets_matrix[p, :], kernel)
-        out[p, :] = bin_increments(daily, province_days)
-    end
-    return out
+    return bin_row_increments(
+        _patch_carried(onsets_matrix, kernel), province_days
+    )
 end
 
 """
@@ -1007,16 +1000,7 @@ function _patch_confirmed_increments(
         carried::AbstractMatrix, s_test::Real,
         province_days::AbstractVector{<:Integer}
     )
-    np = size(carried, 1)
-    nv = length(province_days)
-    T = promote_type(eltype(carried), typeof(float(s_test)))
-    out = Matrix{T}(undef, np, nv)
-    @inbounds for p in 1:np
-        out[p, :] = bin_increments(
-            s_test .* carried[p, :], province_days
-        )
-    end
-    return out
+    return bin_row_increments(s_test .* carried, province_days)
 end
 
 """
@@ -1026,13 +1010,7 @@ the onsets through the onset-to-confirmation kernel, so [`bvd_joint`](@ref)
 carries them once and hands the matrix to both.
 """
 function _patch_carried(onsets_matrix::AbstractMatrix, kernel::AbstractVector)
-    np, n = size(onsets_matrix)
-    T = promote_type(eltype(onsets_matrix), eltype(kernel))
-    out = Matrix{T}(undef, np, n)
-    @inbounds for p in 1:np
-        out[p, :] = convolve_delay(onsets_matrix[p, :], kernel)
-    end
-    return out
+    return convolve_rows(onsets_matrix, kernel)
 end
 
 ## A positive vector over its geometric mean, so its logs sum to zero.

@@ -36,6 +36,20 @@ function bin_increments(
 end
 
 """
+Each row of `M` binned to the vintage days `days` by
+[`bin_increments`](@ref), as a `(size(M, 1) × length(days))` matrix.
+"""
+function bin_row_increments(
+        M::AbstractMatrix, days::AbstractVector{<:Integer}
+    )
+    out = Matrix{eltype(M)}(undef, size(M, 1), length(days))
+    @inbounds for p in axes(M, 1)
+        out[p, :] = bin_increments(M[p, :], days)
+    end
+    return out
+end
+
+"""
 Zero a daily series `v` before grid day `start` (1-based), modelling a
 process that did not exist before `start`. Gates the laboratory
 analysed-specimen volume before testing began, so it does not accrue over
