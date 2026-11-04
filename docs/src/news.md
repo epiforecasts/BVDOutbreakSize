@@ -30,6 +30,7 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Model
 
+- The prior density is zero once the cryptic phase infects more than 1% of the population.
 - The onset-to-admission Gamma scale prior is `LogNormal(log(3.694), 0.32)` at the onset-to-report, onset-to-detection and onset-to-death delays, and fitted values change (#1087).
 - Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
   SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.

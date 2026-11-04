@@ -465,6 +465,7 @@ MarkdownTable(vintage_table) #hide
 #
 # with $L$ the renewal start.
 # The other patches first carry infections through importation.
+# The cryptic phase has no depletion, so the prior density is zero once its infections $C_T / (1 - e^{-r})$ exceed 1% of the population.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: exponential_growth_model</summary>

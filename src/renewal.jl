@@ -241,6 +241,20 @@ seeding call site.
 end
 
 """
+    cryptic_infections(C_T, r)
+
+Infections over the cryptic phase that reaches the daily incidence `C_T` at
+the renewal start after growing at rate `r`. Summed back from the seed,
+
+```math
+\\sum_{k \\ge 0} C_T e^{-r k} = \\frac{C_T}{1 - e^{-r}},
+```
+
+an upper bound on the finite sum from the single infection at the origin.
+"""
+cryptic_infections(C_T, r) = C_T / (1 - exp(-r))
+
+"""
 Daily latent infections from the renewal equation with weak susceptible
 depletion. Each day's renewal force `R_t Σ_{s ≥ 1} I_{t−s} g_s`, with
 generation-interval PMF `g` (indexed from lag 1) and per-day reproduction

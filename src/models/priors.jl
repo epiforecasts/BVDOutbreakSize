@@ -387,6 +387,9 @@ full generation interval of differentiable history. The renewal recursion
 `renewal_start+1 … n` under the time-varying `R_t`, depleting a pool of
 `population`. The default is the summed 2019 INS resident population of the
 eight affected provinces ([`PROVINCE_SOURCE_POPULATIONS`](@ref)).
+The cryptic phase has no depletion, so the density is zero once its
+infections ([`cryptic_infections`](@ref)) pass `max_cryptic_share` of
+`population`, by default 1%.
 
 The total outbreak age is `T = m·G + τ_obs` (cryptic duration plus the
 observation span `τ_obs = n − renewal_start`). The genetic seeding bound is
@@ -421,6 +424,7 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
         growth = exponential_growth_model,
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
         population::Real = float(sum(PROVINCE_POPULATIONS)),
+        max_cryptic_share::Real = 0.01,
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     gi_state ~ to_submodel(gi(gi_nmax))
@@ -450,6 +454,12 @@ horizon. Every quantity named for the cut-off is still read at day `n`.
     renewal_start = clamp(rt_start, 1, n)
     τ_obs = n - renewal_start
     seed0 = seed_at_renewal_start(growth_state.C_T)
+    ## The cryptic phase grows without depletion, so a seed whose cryptic
+    ## infections pass `max_cryptic_share` of the population has zero
+    ## density.
+    if cryptic_infections(seed0, r_clock) > max_cryptic_share * population
+        @addlogprob! (; logprior = -Inf)
+    end
     seed_vec = seed_infections(seed0, r_clock, renewal_start)
     infections = renewal_infections(Rt, g, seed_vec, population)
     cumulative = cumsum(infections)
@@ -1855,7 +1865,9 @@ its own `R_t`.
 The outbreak is assumed to have begun in Ituri, so the primary patch carries
 the whole cryptic seed, growing at the sampled molecular-clock rate `r` over
 the cryptic window to reach `seed_at_renewal_start(C_T)` at the renewal
-start. The
+start. The density is zero once the cryptic infections pass
+`max_cryptic_share` of the summed `populations`, as in
+[`infection_model`](@ref). The
 secondary patches start empty and are seeded by importation from it, so a
 province's arrival is a consequence of the kernel and of `ε` rather than a
 parameter. The first-appearance dates carry real information about how fast
@@ -1917,6 +1929,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         populations::AbstractVector{<:Real} = n_patches == 1 ?
             [float(sum(PROVINCE_POPULATIONS))] :
             float.(PROVINCE_POPULATIONS[1:n_patches]),
+        max_cryptic_share::Real = 0.01,
         forecast::Union{Nothing, ForecastHorizon} = nothing
     )
     ## Grid length, past the cut-off `n` when forecasting.
@@ -1951,6 +1964,11 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     renewal_start = clamp(rt_start, 1, n)
     τ_obs = n - renewal_start
     seed0_total = seed_at_renewal_start(growth_state.C_T)
+    ## Zero density past `max_cryptic_share`, as in [`infection_model`](@ref).
+    if cryptic_infections(seed0_total, r_clock) >
+            max_cryptic_share * sum(populations)
+        @addlogprob! (; logprior = -Inf)
+    end
     ## The outbreak is assumed to have begun in Ituri, so the primary patch
     ## takes the whole cryptic seed and the others are seeded by importation
     ## from it. An
