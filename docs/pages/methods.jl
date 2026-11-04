@@ -404,10 +404,10 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \mu_g \sim \mathrm{Normal}(15.3,\ 0.97), \qquad
-# \sigma_g \sim \mathrm{Normal}^{+}(9.3,\ 1.0), \tag{8}
+# \sigma_g \sim \mathrm{Normal}(9.3,\ 1.0), \tag{8}
 # ```
 #
-# with the mean truncated below at one day.
+# both truncated below at one day.
 # That puts 95% of the prior mean between 13.4 and 17.2 d and of the prior SD between 7.3 and 11.3 d.
 # The Gamma shape is $(\mu_g/\sigma_g)^2$ and its scale $\sigma_g^2/\mu_g$.
 # The Gamma is discretised like every delay ([incubation period](@ref "Incubation period")) to a daily probability mass function (PMF) $g_s$.

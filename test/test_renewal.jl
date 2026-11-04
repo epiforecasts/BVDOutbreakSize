@@ -77,7 +77,7 @@ end
     dists = (
         lognormal_meansd(4.5, 1.0e-10), lognormal_meansd(1.0e-10, 4.0),
         lognormal_meansd(6.3, 1.0e-6), Gamma(1.0e-6, 3.9),
-        Gamma(2.15, 1.0e-6), Gamma((15.3 / 1.0e-3)^2, 1.0e-3^2 / 15.3),
+        Gamma(2.15, 1.0e-6),
     )
     for dist in dists
         pmf = discretise_censored(dist, 30)

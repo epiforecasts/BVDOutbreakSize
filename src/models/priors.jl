@@ -64,7 +64,7 @@ so an infectee is infected strictly after its infector. Returns
 @model function generation_interval_model(
         nmax::Integer;
         mean_prior = truncated(Normal(15.3, 0.97); lower = 1),
-        sd_prior = truncated(Normal(9.3, 1.0); lower = 0)
+        sd_prior = truncated(Normal(9.3, 1.0); lower = 1)
     )
     gi_mean ~ mean_prior
     gi_sd ~ sd_prior
