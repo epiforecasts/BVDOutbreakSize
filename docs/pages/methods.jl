@@ -808,7 +808,7 @@ MarkdownTable(vintage_table) #hide
 # #### Case-fatality ratio
 #
 # The US Centers for Disease Control and Prevention (CDC) summary for the two previous BVD outbreaks is $55$ deaths in $169$ cases ($\approx 33\%$; [CDC outbreak history](https://www.cdc.gov/ebola/outbreaks/index.html)), with confidence bands spanning roughly $26$-$40\%$.
-# The companion BDBV reanalysis reports a baseline of $0.47$ ($95\%$ CrI $0.31$-$0.65$) for confirmed cases who are not healthcare workers.
+# The companion BDBV reanalysis reports a baseline of $0.47$ ($95\%$ CrI $0.31$-$0.65$) for confirmed cases who are not healthcare workers; this higher estimate widens the prior spread beyond the historical confidence bands.
 # We use a prior of
 #
 # ```math
