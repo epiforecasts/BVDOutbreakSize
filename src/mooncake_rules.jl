@@ -1719,8 +1719,11 @@ function Mooncake.rrule!!(
             ō̄[p, t] += x̄
             s = st.acc[p, t]
             s > 0 || continue
-            ā[p, t] -= x̄ / ap[p, t]
-            s̄ = x̄ / s
+            ## Through `y = s / a_p`, as the derived loop takes it, so a
+            ## deformation that has underflowed to zero gives the same NaN.
+            ȳ = x̄ / (s / ap[p, t])
+            ā[p, t] -= ȳ * s / ap[p, t]^2
+            s̄ = ȳ / ap[p, t]
             for q in 1:np
                 q == p && continue
                 sq = Sp[p, q, t]

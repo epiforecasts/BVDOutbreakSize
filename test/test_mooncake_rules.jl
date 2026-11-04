@@ -938,6 +938,60 @@ end
     @test all(map((k, v) -> getproperty(ȳ, k) == v, ks, given))
 end
 
+@testitem "Mooncake rules: the import fraction matches its formula with no arrivals" tags = [
+    :ad,
+] begin
+    using Random: Xoshiro
+    using Mooncake: Mooncake
+    using StatsFuns: logistic
+    using BVDOutbreakSize: zone_import_fraction
+
+    ## The fraction written from its formula, which Mooncake derives.
+    function reference(S, ō, e, a)
+        np, n = size(ō)
+        return [
+            begin
+                s = sum(S[p, q, t] * e[q] * a[q, t] for q in 1:np if q != p)
+                logistic(ō[p, t] + (s > 0 ? log(s / a[p, t]) : 0.0))
+            end for p in 1:np, t in 1:n
+        ]
+    end
+    function value_and_gradient(f, S, ō, e, a, W)
+        loss(S, ō, e, a) = sum(W .* f(S, ō, e, a))
+        rule = Mooncake.build_rrule(loss, S, ō, e, a)
+        v, g = Mooncake.value_and_gradient!!(rule, loss, S, ō, e, a)
+        return v, g[2:end]
+    end
+    same(x, y) = isequal(isnan.(x), isnan.(y)) &&
+        isequal(isinf.(x), isinf.(y)) &&
+        isapprox(
+        ifelse.(isfinite.(x), x, 0.0), ifelse.(isfinite.(y), y, 0.0);
+        rtol = 1.0e-12, atol = 1.0e-14
+    )
+
+    rng = Xoshiro(20261104)
+    np, n = 3, 8
+    S = rand(rng, np, np, n)
+    for t in 1:n, p in 1:np
+        S[p, p, t] = 0.0
+    end
+    ## A patch with no arrivals on one day, and on another a deformation
+    ## that has underflowed to zero for every sender into patch 1.
+    S[2, :, 3] .= 0.0
+    a = 0.5 .+ rand(rng, np, n)
+    a[2:3, 5] .= 0.0
+    ō = randn(rng, np, n)
+    e = 0.5 .+ rand(rng, np)
+    W = randn(rng, np, n)
+    @test zone_import_fraction(S, ō, e, a) ≈ reference(S, ō, e, a)
+    vr, gr = value_and_gradient(zone_import_fraction, S, ō, e, a, W)
+    vd, gd = value_and_gradient(reference, S, ō, e, a, W)
+    @test vr ≈ vd
+    for (x, y) in zip(gr, gd)
+        @test same(x, y)
+    end
+end
+
 @testitem "Mooncake rules: guarded inputs pass no derivative" tags = [:ad] begin
     using Random: Xoshiro
     using Mooncake: Mooncake
