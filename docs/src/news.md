@@ -11,6 +11,8 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Performance
 
+- The health-zone kernel blocks and import fractions are each built in one Mooncake rule.
+  The model does not change.
 - The per-patch Rt matrix and importation fractions are each built in one Mooncake rule.
   The model does not change.
 - The per-patch onsets and the onsets carried to confirmation go through the per-patch row convolution rule.

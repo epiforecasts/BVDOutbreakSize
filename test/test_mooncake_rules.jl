@@ -26,6 +26,7 @@
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
         zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
+        zone_gravity_kernel, zone_import_fraction,
         convolve_rows, _share_out, _admission_centred_shares,
         _background_admission_shares, sum_to_zero_basis,
         _embedded_sum_to_zero_basis, knot_days, bin_row_increments,
@@ -574,6 +575,44 @@
         add!(
             "101 vintages", zone_window_weights, pmf(zrng, 45),
             [1; vstops[1:(end - 1)] .+ 1], vstops, 161; perf = true
+        )
+
+        ## The zone kernel blocks: origins with a destination patch of one
+        ## zone, a patch of one zone and a log distance of zero where two
+        ## centroids coincide. The import fraction: an arrival share of
+        ## zero beside nonzero ones.
+        poz = [1, 1, 1, 2, 2, 3]
+        ld = abs.(randn(zrng, 6, 6))
+        ld[1, 2] = ld[2, 1] = 0.0
+        pb = [poz[z] == poz[q] ? 0.0 : 0.1 + rand(zrng) for z in 1:6, q in 1:6]
+        add!(
+            "3 patches", zone_gravity_kernel, randn(zrng, 6), ld, pb, poz, 3,
+            0.7, randn(zrng, 6)
+        )
+        pz = repeat(1:8; inner = 8)
+        add!(
+            "64 zones, 8 patches", zone_gravity_kernel, randn(zrng, 64),
+            abs.(randn(zrng, 64, 64)),
+            [pz[z] == pz[q] ? 0.0 : rand(zrng) for z in 1:64, q in 1:64], pz,
+            8, 1.3, randn(zrng, 64); perf = true
+        )
+        S = rand(zrng, 3, 3, 10)
+        for t in 1:10, p in 1:3
+            S[p, p, t] = 0.0
+        end
+        S[1, 2, 3] = 0.0
+        add!(
+            "3 patches", zone_import_fraction, S, randn(zrng, 3, 10),
+            0.5 .+ rand(zrng, 3), 0.5 .+ rand(zrng, 3, 10)
+        )
+        S8 = rand(zrng, 8, 8, 261)
+        for t in 1:261, p in 1:8
+            S8[p, p, t] = 0.0
+        end
+        add!(
+            "8 patches, n = 261", zone_import_fraction, S8,
+            randn(zrng, 8, 261), 0.5 .+ rand(zrng, 8),
+            0.5 .+ rand(zrng, 8, 261); perf = true
         )
 
         ## The data-only helpers pass no derivative. Their inputs are the
