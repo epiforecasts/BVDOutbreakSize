@@ -15,9 +15,9 @@
 #
 # The fit's convergence diagnostics and headline posteriors are printed, and
 # appended to the GitHub Actions job summary when `GITHUB_STEP_SUMMARY` is set.
-# A diagnostics bundle (`<key>_diagnostics/*.csv`) and, for a joint chain, the
-# parent extract the zone stage reads (`<key>.parent.jls`) are written next to
-# the cached fit.
+# A diagnostics bundle (`<key>_diagnostics/*.csv`) is written next to the
+# cached fit and, for a joint chain, the parent extract `scripts/fit_zone.jl`
+# reads to `logs/fit_extras/<key>.parent.jls`.
 using Pkg: Pkg
 Pkg.instantiate()
 

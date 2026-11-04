@@ -165,24 +165,36 @@ function write_fit_bundle(id, chn, dir; max_depth::Integer = 10)
     return dir
 end
 
+## Where the parent extracts go: beside the fit cache, not in it. The docs
+## build's zone fits meld from the full cached chain, so an extract in the
+## cache would be saved with every joint-type fit and never read there.
+fit_extras_dir(cache_dir) = joinpath(dirname(abspath(cache_dir)), "fit_extras")
+
 """
-    write_fit_extras(id, key, result, cache_dir; max_depth = 10) -> Nothing
+    write_fit_extras(id, key, result, cache_dir;
+                     extras_dir = fit_extras_dir(cache_dir),
+                     max_depth = 10) -> Nothing
 
 Write, next to the cached fit `<cache_dir>/<key>.jls`, the diagnostics
 bundle under `<key>_diagnostics/` and, for a chain the zone stage can meld
 from (one carrying `infections_patch`), the parent extract
-`<key>.parent.jls` ([`zone_parent_extract`](@ref)). A failure is warned
-about rather than thrown: the fit is already cached.
+`<extras_dir>/<key>.parent.jls` ([`zone_parent_extract`](@ref)), which
+`scripts/fit_zone.jl` reads. A failure is warned about rather than thrown:
+the fit is already cached.
 """
-function write_fit_extras(id, key, result, cache_dir; max_depth::Integer = 10)
+function write_fit_extras(
+        id, key, result, cache_dir;
+        extras_dir = fit_extras_dir(cache_dir), max_depth::Integer = 10
+    )
     chn = fit_chain(result)
     try
         write_fit_bundle(
             id, chn, joinpath(cache_dir, key * "_diagnostics"); max_depth
         )
         if BVDOutbreakSize._has_key(chn, :infections_patch)
+            mkpath(extras_dir)
             serialize(
-                joinpath(cache_dir, key * ".parent.jls"),
+                joinpath(extras_dir, key * ".parent.jls"),
                 zone_parent_extract(chn; source = key)
             )
         end
