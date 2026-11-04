@@ -11,6 +11,10 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Performance
 
+- The per-patch Rt matrix and importation fractions are each built in one Mooncake rule.
+  The model does not change.
+- The per-patch onsets and the onsets carried to confirmation go through the per-patch row convolution rule.
+  The model does not change.
 - The per-patch treatment kernels (the patch rows through a delay, the demand share-out and the capacity and background admission shares) have hand-written Mooncake rules (#1217).
   The model does not change.
 - The treatment flow no longer re-splits each patch's BVD admissions by weights of one when the per-patch reports carry the suspected-case detection (#1212).
@@ -300,6 +304,8 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Infrastructure
 
+- The depot cache prune keeps a running docs build's `docs-env` cache, so the later jobs load the compiled package from `list` rather than compiling it again (#1229).
+- The docs deploy waits on the health-zone pages, so a failed zone render skips the deploy (#1175).
 - The docs fits save their chain to the cache as soon as sampling ends, so a fit that finishes near the job's time limit is kept if the job is then cancelled, and the re-run loads it rather than refitting.
 - The docs build keeps its resolved manifest for ten days rather than three, so a re-run of failed jobs after a long fit can still pin it.
 - The benchmark driver turns off Pkg's automatic precompilation, which under Julia 1.13.2 fails with "Unknown package" on indirect dependencies after AirspeedVelocity adds its own packages.
