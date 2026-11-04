@@ -1783,16 +1783,7 @@ and `Rt_matrix` covers the horizon.
         knots_all = δ_knots
         days_all = days
     end
-    Rt_matrix = zeros(
-        promote_type(eltype(knots_all), eltype(Rt_national)), n_patches, ng
-    )
-    @inbounds for p in 1:n_patches
-        ## A view, not a copy: `interpolate_knots` only reads its knots.
-        δ_daily = interpolate_knots(view(knots_all, p, :), days_all, ng)
-        for t in 1:ng
-            Rt_matrix[p, t] = Rt_national[t] * exp(δ_daily[t])
-        end
-    end
+    Rt_matrix = patch_rt_matrix(Rt_national, knots_all, days_all)
     δ_patch = _detached(_daily_deviations, δ_knots, days, n)
     drift_moments = _detached(sum_to_zero_moments, F_drift)
     σ_δ = drift_moments.sd
@@ -2032,19 +2023,13 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
         β_ε ~ importation_effect_prior
         log_ε_dev = sum_to_zero(sum_to_zero_factor(basis, σ_ε), z_ε)
         ramp = sigmoid_ramp(ng, breakpoint)
-        @inbounds for q in 1:n_patches
-            lvl = ε_bar * exp(log_ε_dev[q])
-            for t in 1:ng
-                ## Capped at one: the origin cannot send away more than it
-                ## generates. The prior sits four orders of magnitude below
-                ## the cap, so this binds only in the far tail.
-                ε_matrix[q, t] = min(lvl * exp(β_ε * ramp[t]), one(Tp))
-            end
-        end
+        ## The prior sits four orders of magnitude below the cap at one, so
+        ## the cap binds only in the far tail.
+        ε_matrix = importation_epsilon_matrix(ε_bar, log_ε_dev, β_ε, ramp)
         importation_epsilon := ε_bar
         importation_epsilon_sd := σ_ε
         importation_epsilon_effect := β_ε
-        importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
+        importation_epsilon_patch := ε_matrix[:, n]
         ## The log flows `log K + W` have a multivariate normal prior whose
         ## mean is the log gravity kernel, so gravity is the prior and `W` is
         ## the data's departure from it. `W = L ζ` is non-centred on the
@@ -2108,12 +2093,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     headlines = _detached(_patch_headlines, infections_matrix, g, n)
     ## 8. Per-patch onsets through the shared incubation PMF.
     inc_state ~ to_submodel(incubation(incubation_nmax))
-    onsets_matrix = zeros(Tp, n_patches, ng)
-    @inbounds for p in 1:n_patches
-        @views onsets_matrix[p, :] = convolve_delay(
-            infections_matrix[p, :], inc_state.pmf
-        )
-    end
+    onsets_matrix = convolve_rows(infections_matrix, inc_state.pmf)
     ## 9. Headline quantities, mirroring [`infection_model`](@ref) so a
     ##    patch chain summarises exactly like a single-patch one.
     T_total = growth_state.T + τ_obs

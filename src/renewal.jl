@@ -667,6 +667,26 @@ function sigmoid_ramp(n::Integer, day::Real; ramp::Real = RT_INTERVENTION_RAMP)
 end
 
 """
+Importation fraction by origin and day: `ε_bar · exp(dev[q]) · exp(β ramp[t])`
+for origin `q` on day `t`, capped at one so an origin cannot send away more
+than it generates. Returns a `(length(dev) × length(ramp))` matrix.
+"""
+function importation_epsilon_matrix(
+        ε_bar::Real, dev::AbstractVector, β::Real, ramp::AbstractVector
+    )
+    T = promote_type(typeof(ε_bar), eltype(dev), typeof(β), eltype(ramp))
+    w = exp.(β .* ramp)
+    E = Matrix{T}(undef, length(dev), length(ramp))
+    @inbounds for (i, q) in enumerate(eachindex(dev))
+        lvl = ε_bar * exp(dev[q])
+        for j in eachindex(w)
+            E[i, j] = min(lvl * w[j], one(T))
+        end
+    end
+    return E
+end
+
+"""
 Gaussian random walk in centred form, shifted by a known offset: entry `i`
 is the walk's level `i` plus `offset[i]`. The walk starts at `start`, and
 each level is `Normal` about the one before it with SD `σ`. The shifted
@@ -788,6 +808,27 @@ function interpolate_knots(
     @inbounds for t in 1:n
         b, frac = _knot_bracket(days, t, Tp)
         out[t] = knot_vals[b] + frac * (knot_vals[b + 1] - knot_vals[b])
+    end
+    return out
+end
+
+"""
+Each patch's reproduction number on the grid of the national series `R`:
+`R[t] · exp(δ[p, t])`, with `δ[p, :]` the patch's knot deviations
+`knots[p, :]` on the days `days` interpolated onto `1:length(R)`
+([`interpolate_knots`](@ref)). Returns an `(n_patches × length(R))` matrix.
+"""
+function patch_rt_matrix(
+        R::AbstractVector, knots::AbstractMatrix,
+        days::AbstractVector{<:Integer}
+    )
+    ng = length(R)
+    out = zeros(promote_type(eltype(R), eltype(knots)), size(knots, 1), ng)
+    @inbounds for p in axes(knots, 1)
+        δ = interpolate_knots(view(knots, p, :), days, ng)
+        for t in 1:ng
+            out[p, t] = R[t] * exp(δ[t])
+        end
     end
     return out
 end
