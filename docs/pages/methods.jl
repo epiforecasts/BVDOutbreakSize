@@ -545,6 +545,7 @@ MarkdownTable(vintage_table) #hide
 # with $Q$ the fixed sum-to-zero basis of Equation (6), so the origin levels are centred on $\bar\varepsilon$ on the log scale.
 # The origin deviation $\mathbf{z}^{\varepsilon}$ is drawn independently of the reproduction number deviations and is constant in time.
 # Exports scale with $R_{q,t}$ through the origin's generated infections $G_{q,t}$ in Equation (18), and $\beta_\varepsilon$ changes the share of them exported.
+# Awareness of a local outbreak may reduce movement through travel restrictions or may increase it through care-seeking or flight, so $\beta_\varepsilon$ is two-sided.
 #
 # The log flows $\ell_{p,q} = \log K_{p,q} + W_{p,q}$, for $p \ne q$, depart from gravity by a deviation $W$ and take a multivariate normal prior centred on the log gravity kernel:
 #
