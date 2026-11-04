@@ -442,7 +442,6 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # The traced 25 January death sits near the 87th percentile of this prior.
-# It is the earliest chain the field work reached, so the origin lies at or before it.
 #
 # ```math
 # T_{\text{cryptic}} = m\,G, \qquad
