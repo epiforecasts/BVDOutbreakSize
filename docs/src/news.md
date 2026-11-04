@@ -303,6 +303,7 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Infrastructure
 
+- The depot cache prune keeps a running docs build's `docs-env` cache, so the later jobs load the compiled package from `list` rather than compiling it again (#1229).
 - The docs deploy waits on the health-zone pages, so a failed zone render skips the deploy (#1175).
 - The docs fits save their chain to the cache as soon as sampling ends, so a fit that finishes near the job's time limit is kept if the job is then cancelled, and the re-run loads it rather than refitting.
 - The docs build keeps its resolved manifest for ten days rather than three, so a re-run of failed jobs after a long fit can still pin it.

@@ -1119,6 +1119,8 @@ end
 
 @testitem "province deaths: the split that identifies ascertainment" begin
     using BVDOutbreakSize
+    using Dates: Date, Day
+    using TOML
 
     ## The per-province case count is the product of ascertainment and
     ## incidence, and only the product is observed, so the case split alone
@@ -1140,9 +1142,17 @@ end
     )
 
     ## Both are exact partitions of their national totals (the scanner gates
-    ## on this), and they share a vintage grid so the two compositions line up.
-    @test deaths.days == cases.days
-    @test size(deaths.increments) == size(cases.increments)
+    ## on this). The death grid is the case grid less the death block's
+    ## `[skip_dates]`, so the two compositions line up on every other vintage.
+    raw = TOML.parsefile(
+        joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    )
+    skipped = Set(
+        Date.(get(get(raw, "skip_dates", Dict()), "province_death_history", []))
+    )
+    kept = [d for d in cases.days if !(obs.seeding + Day(d - 1) in skipped)]
+    @test deaths.days == kept
+    @test size(deaths.increments) == (size(cases.increments, 1), length(kept))
     ## Compared on the cumulative rather than vintage by vintage, because the
     ## national series does not carry every province vintage's predecessor and
     ## a missing one would make the expected increment wrong rather than the
