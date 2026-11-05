@@ -187,6 +187,7 @@ end
     @test all(chains.draws .== 200)
     @test all(chains.divergences .>= 0)
     @test all(0 .<= chains.percent_at_max_depth .<= 100)
+    @test all(chains.mean_leapfrogs .>= 1)
     @test all(0 .< chains.mean_acceptance .<= 1)
     @test all(chains.ebfmi .> 0)
     ## A cap of one is reached by every tree NUTS builds.

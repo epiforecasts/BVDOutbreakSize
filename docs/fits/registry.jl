@@ -17,6 +17,8 @@ using Distributions: truncated, Normal
 
 const _PKG = pkgdir(BVDOutbreakSize)
 
+include(joinpath(@__DIR__, "warmstart.jl"))
+
 ## Source files whose contents define the fits: the model and its submodels,
 ## the renewal maths, the hand-written Mooncake rules, the sampler, the data
 ## pipeline and this registry. A change to any of them invalidates every
@@ -40,6 +42,7 @@ const FIT_SOURCE_FILES = [
     joinpath(_PKG, "src", "data.jl"),
     joinpath(_PKG, "src", "onset_curve.jl"),
     joinpath(@__DIR__, "cache.jl"),
+    joinpath(@__DIR__, "warmstart.jl"),
     @__FILE__
 ]
 
@@ -82,7 +85,9 @@ Content hash of the fit-relevant source, data and sampler settings.
 `sampler` is appended to the settings string when it is not empty.
 """
 function fit_content_hash(; chains::Integer = 2, sampler::NamedTuple = (;))
-    extra = string(FIT_CACHE_SCHEMA, ":", chains, " chains")
+    extra = string(
+        FIT_CACHE_SCHEMA, ":", chains, " chains:", warm_start_key()
+    )
     if !isempty(sampler)
         extra *= string(":", sampler)
     end
@@ -383,7 +388,7 @@ function build_fit_specs(
         f = frozen_joint(cutoff_date; patches)
         chn = nuts_sample(
             f.model;
-            joint_sampler_args()..., chains = chains,
+            fit_sampler_args()..., chains = chains,
             callback = fit_callback("frozen_$(cutoff_date)")
         )
         return (; cutoff = f.o.cutoff, f.o, chn)
@@ -463,7 +468,7 @@ function build_fit_specs(
         f = frozen_stream(model_id, cutoff_date)
         chn = nuts_sample(
             f.model;
-            joint_sampler_args()..., chains = chains,
+            fit_sampler_args()..., chains = chains,
             callback = fit_callback("frozen_$(cutoff_date)_$(model_id)")
         )
         return (; cutoff = f.o.cutoff, f.o, chn)
@@ -481,7 +486,7 @@ function build_fit_specs(
                     obs; breakpoint, sensitivity_overrides(obs)[Symbol(id)]...
                 )...
             );
-            joint_sampler_args()..., chains = chains,
+            fit_sampler_args()..., chains = chains,
             callback = fit_callback(id)
         )
     end
@@ -517,7 +522,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                joint_sampler_args()..., chains = chains,
+                fit_sampler_args()..., chains = chains,
                 callback = fit_callback("joint")
             )
         ),
@@ -542,7 +547,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                joint_sampler_args()..., chains = chains,
+                fit_sampler_args()..., chains = chains,
                 callback = fit_callback("sens_no_patches")
             )
         ),
@@ -557,7 +562,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                joint_sampler_args()..., chains = chains,
+                fit_sampler_args()..., chains = chains,
                 check_model = false, callback = fit_callback("exports")
             )
         ),
@@ -572,7 +577,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                joint_sampler_args()..., chains = chains,
+                fit_sampler_args()..., chains = chains,
                 callback = fit_callback("deaths")
             )
         ),
@@ -586,7 +591,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                joint_sampler_args()..., chains = chains,
+                fit_sampler_args()..., chains = chains,
                 callback = fit_callback("cases")
             )
         ),
@@ -604,7 +609,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                joint_sampler_args()..., chains = chains,
+                fit_sampler_args()..., chains = chains,
                 callback = fit_callback("confirmed")
             )
         ),
@@ -624,7 +629,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                joint_sampler_args()..., chains = chains,
+                fit_sampler_args()..., chains = chains,
                 callback = fit_callback("confirmed_deaths")
             )
         ),
@@ -648,7 +653,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                joint_sampler_args()..., chains = chains,
+                fit_sampler_args()..., chains = chains,
                 callback = fit_callback("treatment")
             )
         ),
@@ -662,7 +667,7 @@ function build_fit_specs(
             ),
             m -> nuts_sample(
                 m;
-                joint_sampler_args()..., chains = chains,
+                fit_sampler_args()..., chains = chains,
                 callback = fit_callback("onsets")
             )
         ),
