@@ -11,6 +11,8 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Performance
 
+- The health-zone kernel blocks and import fractions are each built in one Mooncake rule.
+  The model does not change.
 - Fits run BLAS on one thread while the chains sample, each chain calling it on its own thread.
 - The per-patch Rt matrix and importation fractions are each built in one Mooncake rule.
   The model does not change.

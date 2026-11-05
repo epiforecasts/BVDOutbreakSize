@@ -1750,6 +1750,117 @@ function Mooncake.rrule!!(
     return CoDual(y, ȳ), zone_window_weights_pullback!!
 end
 
+## The health-zone kernel blocks and the per-patch import fraction, both
+## rebuilt on every draw of the gravity decay, destination weights and
+## shared quantity.
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(zone_gravity_kernel), Vector{<:Mooncake.IEEEFloat},
+        Matrix{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
+        Vector{<:Integer}, Integer, Mooncake.IEEEFloat,
+        Vector{<:Mooncake.IEEEFloat},
+    }
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(zone_import_fraction), Array{<:Mooncake.IEEEFloat, 3},
+        Matrix{<:Mooncake.IEEEFloat}, Vector{<:Mooncake.IEEEFloat},
+        Matrix{<:Mooncake.IEEEFloat},
+    }
+)
+
+## With `s` the shares, the share adjoint `s̄` is the within adjoint on a
+## pair in one patch and the between adjoint times the parent kernel entry
+## across patches. Each column is normalised over a destination patch, so
+## with `r_{pq} = Σ_{z ∈ p} s̄_{zq} s_{zq}` the log pull takes
+## `L̄_{zq} = s_{zq} (s̄_{zq} − r_{p(z) q})`, which reaches `log N_z` and
+## `ω_z` as a row sum, `log d_{zq}` as `−γ L̄_{zq}` and `γ` as
+## `−Σ L̄_{zq} log d_{zq}`.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(zone_gravity_kernel)}, log_pop::CoDual,
+        log_distance::CoDual, parent_between::CoDual, patch_of_zone::CoDual,
+        np::CoDual, γ::CoDual, ω::CoDual
+    )
+    lp, ld, pb = primal(log_pop), primal(log_distance), primal(parent_between)
+    poz, n_p, g, w = primal(patch_of_zone), primal(np), primal(γ), primal(ω)
+    st = zone_gravity_with_state(lp, ld, pb, poz, n_p, g, w)
+    out = zero_fcodual((; st.within, st.between))
+    ȳ = tangent(out)
+    function zone_gravity_kernel_pullback!!(::NoRData)
+        l̄p, l̄d, p̄b, ω̄ = tangent(log_pop), tangent(log_distance),
+            tangent(parent_between), tangent(ω)
+        nz = length(lp)
+        T = eltype(st.share)
+        s̄ = zeros(T, nz, nz)
+        r = zeros(T, n_p, nz)
+        @inbounds for q in 1:nz, z in 1:nz
+            z == q && continue
+            st.col[poz[z], q] > 0 || continue
+            if poz[z] == poz[q]
+                s̄[z, q] = ȳ.within[z, q]
+            else
+                s̄[z, q] = ȳ.between[z, q] * pb[z, q]
+                p̄b[z, q] += ȳ.between[z, q] * st.share[z, q]
+            end
+            r[poz[z], q] += s̄[z, q] * st.share[z, q]
+        end
+        γ̄ = zero(T)
+        @inbounds for q in 1:nz, z in 1:nz
+            z == q && continue
+            st.col[poz[z], q] > 0 || continue
+            L̄ = st.share[z, q] * (s̄[z, q] - r[poz[z], q])
+            l̄p[z] += L̄
+            ω̄[z] += L̄
+            l̄d[z, q] -= g * L̄
+            γ̄ -= L̄ * ld[z, q]
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData(),
+            NoRData(), γ̄, NoRData()
+    end
+    return out, zone_gravity_kernel_pullback!!
+end
+
+## With `f = logistic(ō + log(s / a_p))` and `s = Σ_{q ≠ p} S_{pq} e_q a_q`,
+## the logit adjoint `x̄ = f̄ f (1 − f)` goes to `ō`, `−x̄ / a_p` to `a_p` and
+## `x̄ / s` through the sum to `S`, `e` and `a`. A patch with no arrivals
+## keeps its mean odds, so only `ō` takes its adjoint.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(zone_import_fraction)}, S::CoDual, ō::CoDual,
+        e::CoDual, a::CoDual
+    )
+    Sp, op, ep, ap = primal(S), primal(ō), primal(e), primal(a)
+    st = zone_import_fraction_with_state(Sp, op, ep, ap)
+    out = zero_fcodual(st.frac)
+    f̄ = tangent(out)
+    function zone_import_fraction_pullback!!(::NoRData)
+        S̄, ō̄, ē, ā = tangent(S), tangent(ō), tangent(e), tangent(a)
+        np, n = size(op)
+        @inbounds for t in 1:n, p in 1:np
+            f = st.frac[p, t]
+            x̄ = f̄[p, t] * f * (1 - f)
+            ō̄[p, t] += x̄
+            s = st.acc[p, t]
+            s > 0 || continue
+            ## Through `y = s / a_p`, as the derived loop takes it, so a
+            ## deformation that has underflowed to zero gives the same NaN.
+            ȳ = x̄ / (s / ap[p, t])
+            ā[p, t] -= ȳ * s / ap[p, t]^2
+            s̄ = ȳ / ap[p, t]
+            for q in 1:np
+                q == p && continue
+                sq = Sp[p, q, t]
+                S̄[p, q, t] += s̄ * ep[q] * ap[q, t]
+                ē[q] += s̄ * sq * ap[q, t]
+                ā[q, t] += s̄ * sq * ep[q]
+            end
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData()
+    end
+    return out, zone_import_fraction_pullback!!
+end
+
 ## The health-zone renewal is a coupled loop: every zone's own force first,
 ## then a mixing step that reads the zones of the other patches on the same
 ## day. It cannot call `renewal_infections`, so it carries its own rule.
