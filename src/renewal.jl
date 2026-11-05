@@ -38,12 +38,12 @@ Daily probability mass function for the continuous delay `dist` over lags
 event over a one-day window, then unit-interval censoring of the secondary
 event, truncated at `nmax`), as `CensoredDistributions.double_interval_censored`
 defines it. The truncation holds the CDF at one from `nmax` on, so the lag
-`nmax` entry is zero. For a LogNormal or Gamma delay the CDF differentiates
-cleanly under Mooncake, so this is AD-safe. Extreme warmup proposals that
-drive the total to a non-finite or zero value fall back to a uniform PMF, so
-the downstream convolution stays finite (the proposal is still rejected
-through its low log-likelihood). Returns a vector whose element type follows
-the delay parameters.
+`nmax` entry is zero. For a Gamma, LogNormal or Weibull delay its Mooncake
+rule gives the delay-parameter adjoint in closed form. Extreme warmup
+proposals that drive the total to a non-finite or zero value fall back to a
+uniform PMF, so the downstream convolution stays finite (the proposal is
+still rejected through its low log-likelihood). Returns a vector whose
+element type follows the delay parameters.
 """
 function discretise_censored(dist, nmax::Integer)
     return _pmf_from_cdfs(_primary_censored_cdfs(dist, nmax), dist, nmax)
@@ -82,6 +82,12 @@ end
 ## has `F₊(d + 1) − F₊(d)` (with `F₊(0) = 0`) and lag `nmax` has zero, then
 ## the masses are normalised by their sum, which is the truncation at `nmax`.
 function _pmf_from_cdfs(pc, dist, nmax::Integer)
+    raw = _lag_masses(pc, nmax)
+    return _normalise_masses(raw, sum(raw), dist, nmax)
+end
+
+## Unnormalised lag masses from the boundary CDFs, floored at zero.
+function _lag_masses(pc, nmax::Integer)
     z0 = zero(eltype(pc))
     raw = Vector{eltype(pc)}(undef, nmax + 1)
     pc_prev = z0
@@ -90,8 +96,16 @@ function _pmf_from_cdfs(pc, dist, nmax::Integer)
         pc_prev = pc[i]
     end
     raw[nmax + 1] = z0
-    s = sum(raw)
-    if !isfinite(s) || s <= zero(s)
+    return raw
+end
+
+## Whether a mass total `s` takes the uniform fallback.
+_degenerate_total(s) = !isfinite(s) || s <= zero(s)
+
+## The masses `raw` over their total `s`, or a uniform PMF when `s` is
+## degenerate.
+function _normalise_masses(raw, s, dist, nmax::Integer)
+    if _degenerate_total(s)
         z = zero(pdf(dist, oneunit(float(nmax))))
         return fill(one(z) / (nmax + 1), nmax + 1)
     end

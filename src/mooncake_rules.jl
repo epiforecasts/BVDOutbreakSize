@@ -14,7 +14,8 @@
 # backend upgrade, delete this file rather than maintain it.
 
 using Mooncake: CoDual, NoFData, NoRData, primal, tangent, zero_fcodual
-using SpecialFunctions: digamma
+using SpecialFunctions: digamma, gamma, gamma_inc, loggamma
+using StatsFuns: normcdf, normpdf
 
 ## An array argument a rule accepts: a float array, or a view into one (a
 ## row of a per-patch matrix). A view's tangent is its parent's tangent, so
@@ -405,6 +406,129 @@ function Mooncake.rrule!!(
         return NoRData(), oftype(Rp, a * G / Rp), NoRData()
     end
     return CoDual(r, NoFData()), euler_lotka_r_pullback!!
+end
+
+# Censored delay PMFs from `renewal.jl`. With `H(t) = t·F(t) − M(t)`, which
+# is `E[(t − T)⁺]`, a delay parameter `θ` enters as
+# `∂H/∂θ = −E[∂T/∂θ · 1{T < t}]`, closed form for each family:
+#
+#     LogNormal (μ, σ), z = (log t − μ) / σ:
+#         ∂H/∂μ = −M,    ∂H/∂σ = −σ M + t φ(z)
+#     Gamma (k, θ), y = t / θ, h = y^k e^{−y} / Γ(k + 1):
+#         ∂H/∂θ = −k P(k + 1, y)
+#         ∂H/∂k = t Pₐ(k, y) − θ P(k + 1, y) − k θ Pₐ(k + 1, y)
+#         P(k + 1, y) = P − h,    Pₐ(k + 1, y) = Pₐ − h (log y − ψ(k + 1))
+#     Weibull (k, λ), x = (t / λ)^k, a = 1 + 1 / k:
+#         ∂H/∂λ = −Γ(a) P(a, x),
+#         ∂H/∂k = λ Γ(a) (Pₐ(a, x) + ψ(a) P(a, x)) / k²
+#
+# `P` is the regularised lower incomplete gamma and `Pₐ = ∂P/∂a` has no
+# closed form, so it comes from the backend's forward rule for `gamma_inc`.
+# The rule evaluates `H` from the same identity as the package function,
+# since it needs `P` and `Pₐ` from one call. `test_rule` checks its value.
+
+const _AnalyticalFloatDelay = Union{
+    Gamma{<:Mooncake.IEEEFloat}, LogNormal{<:Mooncake.IEEEFloat},
+    Distributions.Weibull{<:Mooncake.IEEEFloat},
+}
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{typeof(discretise_censored), _AnalyticalFloatDelay, Integer},
+)
+
+## `P(a, x)` and `∂P/∂a`. A non-finite shape passes no derivative, and a
+## shape too large for the derivative to converge passes `NaN`, as the
+## derived rule does, rather than throwing mid-sample.
+function _gamma_inc_da(a, x)
+    isfinite(a) || return first(gamma_inc(a, x)), zero(a)
+    y = try
+        Mooncake.frule!!(
+            Mooncake.zero_dual(gamma_inc), Mooncake.Dual(a, one(a)),
+            Mooncake.Dual(x, zero(x)), Mooncake.zero_dual(0)
+        )
+    catch e
+        e isa ErrorException || rethrow()
+        return first(gamma_inc(a, x)), oftype(a, NaN)
+    end
+    return first(primal(y)), first(tangent(y))
+end
+
+## Terms of `H` that do not depend on `t`.
+_delay_consts(d::LogNormal) = exp(d.μ + d.σ^2 / 2)
+_delay_consts(d::Gamma) = (loggamma(d.α + 1), digamma(d.α + 1))
+function _delay_consts(d::Distributions.Weibull)
+    a = 1 + 1 / d.α
+    return (a, gamma(a), digamma(a))
+end
+
+## `H(t)` and its partials in the delay's two fields, in field order.
+function _censored_H_grad(d::LogNormal, E, t)
+    μ, σ = d.μ, d.σ
+    z = (log(t) - μ) / σ
+    M = E * normcdf(z - σ)
+    return t * normcdf(z) - M, -M, t * normpdf(z) - σ * M
+end
+function _censored_H_grad(d::Gamma, (lgk1, ψk1), t)
+    k, θ = d.α, d.θ
+    y = t / θ
+    P, Pa = _gamma_inc_da(k, y)
+    ly = log(y)
+    h = exp(k * ly - y - lgk1)
+    P1 = P - h
+    Pa1 = Pa - h * (ly - ψk1)
+    return t * P - k * θ * P1, t * Pa - θ * P1 - k * θ * Pa1, -k * P1
+end
+function _censored_H_grad(d::Distributions.Weibull, (a, Γa, ψa), t)
+    k, λ = d.α, d.θ
+    x = (t / λ)^k
+    P, Pa = _gamma_inc_da(a, x)
+    return t * -expm1(-x) - λ * Γa * P, λ * Γa * (Pa + ψa * P) / k^2,
+        -Γa * P
+end
+
+## The PMF is `raw / s` with `raw[i] = H(i) − 2H(i − 1) + H(i − 2)` floored
+## at zero, so with `c = ȳ · pmf` a positive mass passes
+## `r̄ᵢ = (ȳᵢ − c) / s` and two reversed differences take it back to `H̄`.
+## The uniform fallback passes no derivative.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(discretise_censored)},
+        d::CoDual{<:_AnalyticalFloatDelay}, n::CoDual{<:Integer}
+    )
+    dist, nmax = primal(d), primal(n)
+    T = Distributions.partype(dist)
+    c = _delay_consts(dist)
+    pc = Vector{T}(undef, nmax)
+    ∂1 = similar(pc)
+    ∂2 = similar(pc)
+    H_prev = zero(T)
+    for i in 1:nmax
+        H, ∂1[i], ∂2[i] = _censored_H_grad(dist, c, T(i))
+        pc[i] = H - H_prev
+        H_prev = H
+    end
+    raw = _lag_masses(pc, nmax)
+    s = sum(raw)
+    pmf = _normalise_masses(raw, s, dist, nmax)
+    ȳ = zero(pmf)
+    function discretise_censored_pullback!!(::NoRData)
+        g1 = g2 = zero(T)
+        if !_degenerate_total(s)
+            cȳ = dot(ȳ, pmf)
+            r̄_next = p̄_next = zero(T)
+            for i in nmax:-1:1
+                r̄ = raw[i] > 0 ? (ȳ[i] - cȳ) / s : zero(T)
+                p̄ = r̄ - r̄_next
+                H̄ = p̄ - p̄_next
+                g1 += H̄ * ∂1[i]
+                g2 += H̄ * ∂2[i]
+                r̄_next, p̄_next = r̄, p̄
+            end
+        end
+        d̄ = Mooncake.RData(NamedTuple{fieldnames(typeof(dist))}((g1, g2)))
+        return NoRData(), d̄, NoRData()
+    end
+    return CoDual(pmf, ȳ), discretise_censored_pullback!!
 end
 
 Mooncake.@is_primitive(
@@ -1624,6 +1748,117 @@ function Mooncake.rrule!!(
         return NoRData(), NoRData(), NoRData(), NoRData(), NoRData()
     end
     return CoDual(y, ȳ), zone_window_weights_pullback!!
+end
+
+## The health-zone kernel blocks and the per-patch import fraction, both
+## rebuilt on every draw of the gravity decay, destination weights and
+## shared quantity.
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(zone_gravity_kernel), Vector{<:Mooncake.IEEEFloat},
+        Matrix{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
+        Vector{<:Integer}, Integer, Mooncake.IEEEFloat,
+        Vector{<:Mooncake.IEEEFloat},
+    }
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(zone_import_fraction), Array{<:Mooncake.IEEEFloat, 3},
+        Matrix{<:Mooncake.IEEEFloat}, Vector{<:Mooncake.IEEEFloat},
+        Matrix{<:Mooncake.IEEEFloat},
+    }
+)
+
+## With `s` the shares, the share adjoint `s̄` is the within adjoint on a
+## pair in one patch and the between adjoint times the parent kernel entry
+## across patches. Each column is normalised over a destination patch, so
+## with `r_{pq} = Σ_{z ∈ p} s̄_{zq} s_{zq}` the log pull takes
+## `L̄_{zq} = s_{zq} (s̄_{zq} − r_{p(z) q})`, which reaches `log N_z` and
+## `ω_z` as a row sum, `log d_{zq}` as `−γ L̄_{zq}` and `γ` as
+## `−Σ L̄_{zq} log d_{zq}`.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(zone_gravity_kernel)}, log_pop::CoDual,
+        log_distance::CoDual, parent_between::CoDual, patch_of_zone::CoDual,
+        np::CoDual, γ::CoDual, ω::CoDual
+    )
+    lp, ld, pb = primal(log_pop), primal(log_distance), primal(parent_between)
+    poz, n_p, g, w = primal(patch_of_zone), primal(np), primal(γ), primal(ω)
+    st = zone_gravity_with_state(lp, ld, pb, poz, n_p, g, w)
+    out = zero_fcodual((; st.within, st.between))
+    ȳ = tangent(out)
+    function zone_gravity_kernel_pullback!!(::NoRData)
+        l̄p, l̄d, p̄b, ω̄ = tangent(log_pop), tangent(log_distance),
+            tangent(parent_between), tangent(ω)
+        nz = length(lp)
+        T = eltype(st.share)
+        s̄ = zeros(T, nz, nz)
+        r = zeros(T, n_p, nz)
+        @inbounds for q in 1:nz, z in 1:nz
+            z == q && continue
+            st.col[poz[z], q] > 0 || continue
+            if poz[z] == poz[q]
+                s̄[z, q] = ȳ.within[z, q]
+            else
+                s̄[z, q] = ȳ.between[z, q] * pb[z, q]
+                p̄b[z, q] += ȳ.between[z, q] * st.share[z, q]
+            end
+            r[poz[z], q] += s̄[z, q] * st.share[z, q]
+        end
+        γ̄ = zero(T)
+        @inbounds for q in 1:nz, z in 1:nz
+            z == q && continue
+            st.col[poz[z], q] > 0 || continue
+            L̄ = st.share[z, q] * (s̄[z, q] - r[poz[z], q])
+            l̄p[z] += L̄
+            ω̄[z] += L̄
+            l̄d[z, q] -= g * L̄
+            γ̄ -= L̄ * ld[z, q]
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData(),
+            NoRData(), γ̄, NoRData()
+    end
+    return out, zone_gravity_kernel_pullback!!
+end
+
+## With `f = logistic(ō + log(s / a_p))` and `s = Σ_{q ≠ p} S_{pq} e_q a_q`,
+## the logit adjoint `x̄ = f̄ f (1 − f)` goes to `ō`, `−x̄ / a_p` to `a_p` and
+## `x̄ / s` through the sum to `S`, `e` and `a`. A patch with no arrivals
+## keeps its mean odds, so only `ō` takes its adjoint.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(zone_import_fraction)}, S::CoDual, ō::CoDual,
+        e::CoDual, a::CoDual
+    )
+    Sp, op, ep, ap = primal(S), primal(ō), primal(e), primal(a)
+    st = zone_import_fraction_with_state(Sp, op, ep, ap)
+    out = zero_fcodual(st.frac)
+    f̄ = tangent(out)
+    function zone_import_fraction_pullback!!(::NoRData)
+        S̄, ō̄, ē, ā = tangent(S), tangent(ō), tangent(e), tangent(a)
+        np, n = size(op)
+        @inbounds for t in 1:n, p in 1:np
+            f = st.frac[p, t]
+            x̄ = f̄[p, t] * f * (1 - f)
+            ō̄[p, t] += x̄
+            s = st.acc[p, t]
+            s > 0 || continue
+            ## Through `y = s / a_p`, as the derived loop takes it, so a
+            ## deformation that has underflowed to zero gives the same NaN.
+            ȳ = x̄ / (s / ap[p, t])
+            ā[p, t] -= ȳ * s / ap[p, t]^2
+            s̄ = ȳ / ap[p, t]
+            for q in 1:np
+                q == p && continue
+                sq = Sp[p, q, t]
+                S̄[p, q, t] += s̄ * ep[q] * ap[q, t]
+                ē[q] += s̄ * sq * ap[q, t]
+                ā[q, t] += s̄ * sq * ep[q]
+            end
+        end
+        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData()
+    end
+    return out, zone_import_fraction_pullback!!
 end
 
 ## The health-zone renewal is a coupled loop: every zone's own force first,
