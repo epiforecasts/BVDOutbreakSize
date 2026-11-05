@@ -17,6 +17,8 @@ A minor version: every affected province is its own patch, the importation kerne
   The model does not change.
 - The per-patch treatment kernels (the patch rows through a delay, the demand share-out and the capacity and background admission shares) have hand-written Mooncake rules (#1217).
   The model does not change.
+- The censored delay PMFs (Gamma, LogNormal and Weibull) have a closed-form Mooncake rule.
+  The model does not change.
 - The treatment flow no longer re-splits each patch's BVD admissions by weights of one when the per-patch reports carry the suspected-case detection (#1212).
   The model does not change.
 - The sum-to-zero bases the patch submodels build on every evaluation pass no derivative, so Mooncake no longer tapes them (#1213).
