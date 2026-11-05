@@ -405,9 +405,14 @@ function patch_infections(
     (; y, trace) = renewal(
         Rt_matrix; history = seeds_matrix, start = L + 1, record = (:trace,)
     )
-    infections = hcat(seeds_matrix, y)
-    arrivals = first(trace.modifiers)
-    importation = hcat(zeros(eltype(arrivals), np, L), arrivals)
+    ## The call's return type infers only through constant propagation of
+    ## `record`, which a caller several frames up (the joint, under
+    ## Mooncake) does not always reach; the asserts keep the result typed
+    ## (EpiAware/ComposableRecurrences.jl#462).
+    run = convert(Matrix{Tp}, y)::Matrix{Tp}
+    arrivals = convert(Matrix{Tp}, first(trace.modifiers))::Matrix{Tp}
+    infections = hcat(seeds_matrix, run)
+    importation = hcat(zeros(Tp, np, L), arrivals)
     return (; infections, importation)
 end
 
