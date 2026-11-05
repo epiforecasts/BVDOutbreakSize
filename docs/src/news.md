@@ -312,6 +312,22 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Infrastructure
 
+- The model's recurrences and convolutions are [ComposableRecurrences](https://github.com/EpiAware/ComposableRecurrences.jl) operators, and the hand-written Mooncake rules they replace are removed (#1152).
+  The renewal and the patch renewal are a `Recurrence` with `Depletion` (and `Redistribute` across patches), the delay and PMF convolutions, the per-patch rows through a delay, the care flows and the health-zone pre-grid terms are `Convolution`s, and the deviation-knot walk is a `Recurrence`.
+  The occupancy balance is a `Depletion` with three pools and share and count flows, its discharge split read off the previous day's pools through `Recent`.
+  The health-zone split is a `Recurrence` with `Allocate`.
+  Each matches the hand-written code to round-off, so fitted values change only by round-off.
+  The care flows and the onset-reporting delay table are computed kernels built from `Survival`, and the onset-reporting anchor reads that table forward through a transposed `Convolution`.
+  The report binning and the health-zone window weights keep their own code and rules: a running sum gains nothing from the package, and the window weights through a transposed `Convolution` do a pass per health zone where the rule does one.
+  Several kernels differentiate slower under Mooncake than the hand-written rules did (timings in #1152).
+  The care flows and the onset-reporting delay table take about twice as long through computed `Survival` kernels as through the hand rules (EpiAware/ComposableRecurrences.jl#329), the occupancy balance's count flows split by the previous day's pools take about 28 times as long (EpiAware/ComposableRecurrences.jl#427), one delay over many patch rows takes about twice as long as the per-lag `axpy!` it replaces (EpiAware/ComposableRecurrences.jl#428), small calls carry a fixed overhead (EpiAware/ComposableRecurrences.jl#330), and the PMF convolution pads its input with zeros (EpiAware/ComposableRecurrences.jl#336).
+  Most of the health-zone split's extra time is Mooncake taping the broadcasts around the operators, not the operators.
+  The patch renewal asserts the types of its recorded run, since a call with `record` infers only through constant propagation, which the joint under Mooncake does not always reach; without the asserts the joint's gradient took 2.4 times as long (EpiAware/ComposableRecurrences.jl#462).
+  A patch with no health zones is left out of the zone split, since `Allocate` takes non-empty groups only (EpiAware/ComposableRecurrences.jl#326).
+  A delay convolution now gives `NaN` rather than leaving a day alone where an `Inf` meets a lag of exactly zero weight, since the package multiplies a zero weight as IEEE arithmetic does (EpiAware/ComposableRecurrences.jl#297).
+  Only a warm-up proposal that overflows the infections reaches this, and its log density is non-finite either way.
+  ComposableRecurrences 0.2 comes from GitHub through `[sources]` until it is registered.
+- The test matrix runs its version cell on Julia 1.11, the oldest the package supports, since ComposableRecurrences needs 1.11 (#1152).
 - The depot cache prune keeps a running docs build's `docs-env` cache, so the later jobs load the compiled package from `list` rather than compiling it again (#1229).
 - The zone parent extract is written beside the fit cache rather than into it, so a joint-type fit cache no longer carries an 86 MB copy nothing in the build reads (#1238).
 - The cache prune also removes superseded fit caches, and pull-request fit caches while the repository is over budget, so main's fits are not evicted (#1236).

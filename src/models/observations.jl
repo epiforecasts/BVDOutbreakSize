@@ -1820,42 +1820,27 @@ function abscond_thinned_flows(
         κ::Real, conf_hazard::AbstractVector
     )
     n = length(adm1)
+    D = max(length(pmf1), length(pmf2))
     T = promote_type(
         eltype(adm1), eltype(pmf1), eltype(adm2), eltype(pmf2),
         typeof(κ), eltype(conf_hazard)
     )
-    out1 = zeros(T, n)
-    out2 = zeros(T, n)
-    one_T = one(T)
-    nmax1 = length(pmf1)
-    nmax2 = length(pmf2)
-    @inbounds for t in 1:n
-        a1 = adm1[t]
-        a2 = adm2[t]
-        dmax1 = min(nmax1 - 1, n - t)
-        dmax2 = min(nmax2 - 1, n - t)
-        ## Both schedules run to `dboth`; only the longer one runs past it.
-        dboth = min(dmax1, dmax2)
-        ## Admission day: the cohort is not yet in the stock the balance
-        ## charges absconds against, so it faces no abscond hazard.
-        out1[t] += a1 * pmf1[1]
-        out2[t] += a2 * pmf2[1]
-        surv = one_T
-        unconf = one_T
-        for d in 1:dboth
-            unconf *= one_T - conf_hazard[t + d - 1]
-            surv *= one_T - κ * unconf
-            out1[t + d] += a1 * pmf1[d + 1] * surv
-            out2[t + d] += a2 * pmf2[d + 1] * surv
-        end
-        for d in (dboth + 1):max(dmax1, dmax2)
-            unconf *= one_T - conf_hazard[t + d - 1]
-            surv *= one_T - κ * unconf
-            d <= dmax1 && (out1[t + d] += a1 * pmf1[d + 1] * surv)
-            d <= dmax2 && (out2[t + d] += a2 * pmf2[d + 1] * surv)
-        end
-    end
-    return out1, out2
+    n == 0 && return zeros(T, 0), zeros(T, 0)
+    pmfs = zeros(T, 2, D)
+    pmfs[1, eachindex(pmf1)] .= pmf1
+    pmfs[2, eachindex(pmf2)] .= pmf2
+    ## The cohort admitted on day `u` is unconfirmed at lag `j` with
+    ## probability `Π_{i ≤ j} (1 - h[u + i - 1])`, the hazard read a day
+    ## late, and has not absconded at lag `d` with probability
+    ## `Π_{j ≤ d} (1 - κ unconf_j)`. The hazard holds its last day past the
+    ## grid. The shorter schedule is padded with zeros.
+    late = vcat(conf_hazard[1], conf_hazard, fill(conf_hazard[n], D))
+    unconf = Survival(TimeVarying(late); from = 1)
+    kernel = PerStratum(pmfs) * Survival(κ * unconf; from = 1)
+    flows = Convolution(TimeVarying(kernel, Primary()))(
+        permutedims(hcat(adm1, adm2))
+    )
+    return flows[1, :], flows[2, :]
 end
 
 """
@@ -1918,93 +1903,87 @@ function accumulate_occupancy(
         deaths::AbstractVector, recover::AbstractVector,
         ruleout::AbstractVector, κ::Real, conf_hazard::AbstractVector
     )
-    return _accumulate_occupancy(
-        Val(false), A_bvd, A_bg, deaths, recover, ruleout, κ, conf_hazard
-    )
-end
-
-## Branch flags of the occupancy balance, one bit per `max`/`clamp` side.
-## Ties go to the second argument of `max` and to the bound of `clamp`,
-## lower bound first, the sides Mooncake's own rules for them take.
-const _OCC_UNCONF = 0x01
-const _OCC_DENOM = 0x02
-const _OCC_BVD = 0x04
-const _OCC_BG = 0x08
-const _OCC_CONF_X = 0x10
-const _OCC_CONF_HI = 0x20
-const _OCC_SUSP = 0x40
-
-## The forward balance of `accumulate_occupancy`. With `Val(true)` it also
-## returns the non-case stock `O_bg` and the branch flags for each day, which
-## the Mooncake rule in `src/mooncake_rules.jl` reads.
-function _accumulate_occupancy(
-        ::Val{record}, A_bvd, A_bg, deaths, recover, ruleout, κ,
-        conf_hazard
-    ) where {record}
     n = length(A_bvd)
     T = promote_type(
         eltype(A_bvd), eltype(A_bg), eltype(deaths),
         eltype(recover), eltype(ruleout), typeof(κ), eltype(conf_hazard)
     )
-    demand = Vector{T}(undef, n)
-    O_bvd = Vector{T}(undef, n)
-    O_conf = Vector{T}(undef, n)
-    O_susp = Vector{T}(undef, n)
-    abscond = Vector{T}(undef, n)
-    O_bg = record ? Vector{T}(undef, n) : nothing
-    flags = record ? Vector{UInt8}(undef, n) : nothing
-    z = zero(T)
-    Obvd_prev = z
-    Obg_prev = z
-    Oconf_prev = z
-    Osusp_prev = z
-    ## Floor for the abscond denominator so a zero suspect pool gives a zero
-    ## split rather than 0/0.
-    ε = eps(T)
-    @inbounds for t in 1:n
-        bvd_out = deaths[t] + recover[t]
-        ab = κ * Osusp_prev
-        x_u = Obvd_prev - Oconf_prev
-        unconf = max(x_u, z)
-        denom = max(Osusp_prev, ε)
-        ab_bvd = ab * (unconf / denom)
-        ab_bg = ab * (Obg_prev / denom)
-        x_bvd = Obvd_prev + A_bvd[t] - bvd_out - ab_bvd
-        Obvd_t = max(x_bvd, z)
-        x_bg = Obg_prev + A_bg[t] - ruleout[t] - ab_bg
-        Obg_t = max(x_bg, z)
-        Dt = Obvd_t + Obg_t
-        conf_in = conf_hazard[t] * unconf
-        share = Obvd_prev > z ? Oconf_prev / Obvd_prev : z
-        x_conf = Oconf_prev + conf_in - bvd_out * share
-        Oconf_t = clamp(x_conf, z, Obvd_t)
-        x_susp = Dt - Oconf_t
-        Osusp_t = max(x_susp, z)
-        demand[t] = Dt
-        O_bvd[t] = Obvd_t
-        O_conf[t] = Oconf_t
-        O_susp[t] = Osusp_t
-        abscond[t] = ab
-        if record
-            f = 0x00
-            x_u > z && (f |= _OCC_UNCONF)
-            Osusp_prev > ε && (f |= _OCC_DENOM)
-            x_bvd > z && (f |= _OCC_BVD)
-            x_bg > z && (f |= _OCC_BG)
-            if x_conf > z
-                f |= x_conf < Obvd_t ? _OCC_CONF_X : _OCC_CONF_HI
-            end
-            x_susp > z && (f |= _OCC_SUSP)
-            O_bg[t] = Obg_t
-            flags[t] = f
-        end
-        Obvd_prev = Obvd_t
-        Obg_prev = Obg_t
-        Oconf_prev = Oconf_t
-        Osusp_prev = Osusp_t
+    if n == 0
+        e = zeros(T, 0)
+        return (; demand = e, O_bvd = e, O_conf = e, O_susp = e, abscond = e)
     end
-    y = (; demand, O_bvd, O_conf, O_susp, abscond)
-    return record ? (y, O_bg, flags) : y
+    ## The pools are the unconfirmed and confirmed true cases and the
+    ## non-case stock. Confirmation and absconding are shares of the previous
+    ## day's pools; admissions, rule-outs and discharges are counts capped by
+    ## what a pool holds. The discharges split by the previous day's confirmed
+    ## share, and a pool's overshoot below zero is charged to the other one,
+    ## which is where the balance's clamps act.
+    bvd_out = TimeVarying(deaths .+ recover)
+    adm = TimeVarying(A_bvd)
+    hz = TimeVarying(conf_hazard)
+    ## Yesterday's unconfirmed and confirmed pools, read at the one group.
+    unconf = Recent(1)
+    conf = Recent(1; coupling = [0.0 1.0 0.0; 0.0 0.0 0.0; 0.0 0.0 0.0])
+    args = (bvd_out, unconf, conf, adm, hz, κ)
+    flows = Depletion(
+        ## The hazard is a rate times a borrowed hazard, so it can pass
+        ## one; as a `Derived` its share is not checked against one.
+        Flow(:unconf => :conf, Derived(identity, hz); form = Share()),
+        Flow(:unconf => 0, κ; form = Share()),
+        Flow(:bg => 0, κ; form = Share()),
+        Flow(0 => :unconf, adm; form = Truncate()),
+        Flow(0 => :bg, TimeVarying(A_bg); form = Truncate()),
+        Flow(
+            :unconf => 0, Derived(_unconf_discharges, args...);
+            form = Truncate()
+        ),
+        Flow(
+            :conf => 0, Derived(_conf_discharges, args...);
+            form = Truncate()
+        ),
+        Flow(:bg => 0, TimeVarying(ruleout); form = Truncate());
+        pools = (:unconf, :conf, :bg)
+    )
+    ## The stocks start empty and every inflow is a flow, so the call takes
+    ## no gain and `stop` sets the number of days. The clamp floors the
+    ## unconfirmed pool when its shares pass one.
+    floor_ = ComposableRecurrences.Transform(clamp, zero(T), T(Inf))
+    Y = Recurrence([true]; modifiers = (flows, floor_))(;
+        history = zeros(T, 3, 1), stop = n
+    )
+    O_conf = Y[2, :]
+    O_bvd = Y[1, :] .+ O_conf
+    O_bg = Y[3, :]
+    O_susp = Y[1, :] .+ O_bg
+    abscond = κ .* vcat(zero(eltype(Y)), O_susp[1:(end - 1)])
+    return (; demand = O_bvd .+ O_bg, O_bvd, O_conf, O_susp, abscond)
+end
+
+## The confirmed share of the day's BVD discharges `b`, off the previous
+## day's unconfirmed and confirmed pools `u` and `c`. The pools are never
+## negative, so the test asks whether `u + c > 0`. It is asked of `abs2`,
+## whose derivative at zero is zero, because a dual number breaks a tie at
+## zero by its derivative and would divide 0 by 0.
+function _conf_share_of(b, u, c)
+    s = u + c
+    return abs2(s) > zero(s) ? b * (c / s) : zero(b * s)
+end
+
+## What each true-case pool keeps after its flows and its share `o` of the
+## discharges, before any overshoot moves to the other pool.
+_unconf_left(u, A, h, κ, o) = u * (1 - κ - h) + A - o
+_conf_left(u, c, h, o) = c + h * u - o
+
+## The discharge count of each true-case pool: its share of the discharges,
+## plus the other pool's overshoot below zero, so that the total true-case
+## stock rather than each pool takes the floor.
+function _unconf_discharges(b, u, c, A, h, κ)
+    oc = _conf_share_of(b, u, c)
+    return (b - oc) + max(-_conf_left(u, c, h, oc), zero(oc))
+end
+function _conf_discharges(b, u, c, A, h, κ)
+    oc = _conf_share_of(b, u, c)
+    return oc + max(-_unconf_left(u, A, h, κ, b - oc), zero(oc))
 end
 
 """
@@ -2088,25 +2067,14 @@ function two_clock_confirmed(
     )
     n = length(A_bvd)
     T = promote_type(eltype(A_bvd), eltype(conf_hazard), eltype(S_clin))
-    O_conf = Vector{T}(undef, n)
     L = length(S_clin)
-    one_T = one(T)
-    @inbounds for t in 1:n
-        acc = zero(T)
-        ## `prod_unconf` = probability cohort `u` is still unconfirmed at day
-        ## `t`, `∏_{j=u+1}^{t}(1 − hazard_j)`, extended one factor per step as
-        ## `u` walks back from `t`. `S_clin` is zero past its support, so the
-        ## walk stops at cohort age `L - 1`.
-        prod_unconf = one_T
-        for u in t:-1:max(1, t - L + 1)
-            d = t - u
-            cdf_conf = one_T - prod_unconf
-            acc += A_bvd[u] * cdf_conf * S_clin[d + 1]
-            prod_unconf *= (one_T - conf_hazard[u])
-        end
-        O_conf[t] = acc
-    end
-    return O_conf
+    n == 0 && return zeros(T, 0)
+    ## The cohort admitted on day `u` is confirmed by lag `d` with
+    ## probability `1 - Π_{j ≤ d} (1 - h[u + j])`; the hazard holds its last
+    ## day past the grid.
+    h = vcat(conf_hazard, fill(conf_hazard[n], L))
+    confirmed = S_clin * (1 - Survival(TimeVarying(h); from = 1))
+    return Convolution(TimeVarying(confirmed, Primary()))(A_bvd)
 end
 
 """
@@ -3384,12 +3352,17 @@ function onset_report_cdf_table(
     )
     T = promote_type(eltype(logit_h0), eltype(γ))
     nu = max(Int(u_hi) - Int(u_lo) + 1, 0)
-    table = Matrix{T}(undef, length(logit_h0), nu)
-    ## The survival products, then their complements in place.
-    _onset_columns!(nothing, table, logit_h0, γ, grid_start, u_lo)
-    @. table = one(T) - table
-    return table
+    D, ng = length(logit_h0), length(γ)
+    (nu == 0 || D == 0) && return zeros(T, D, nu)
+    ## Column `k`, onset date `u_lo + k - 1`, reads the calendar offset of
+    ## delay `l + 1` at `k + l + u_lo - grid_start`, clamped to the grid.
+    off = Int(u_lo) - Int(grid_start)
+    γk = [γ[clamp(t + off, 1, ng)] for t in 1:(nu + D - 1)]
+    hazard = Derived(_logistic_sum, logit_h0, TimeVarying(γk))
+    return kernel_weights(TimeVarying(1 - Survival(hazard), Primary()), nu)
 end
+
+_logistic_sum(a, b) = logistic(a + b)
 
 ## The survival recurrence of each onset date's delay column, the one walk
 ## `onset_report_cdf_table`, `onset_report_expected_total` and the table's
@@ -3476,27 +3449,18 @@ function onset_report_anchor_series(
         cdf_table::AbstractMatrix,
         u_lo::Integer, a::AbstractVector
     )
-    D = size(cdf_table, 1)
-    nu = size(cdf_table, 2)
+    D, nu = size(cdf_table)
     T = promote_type(eltype(cdf_table), eltype(a))
-    na = length(a)
-    out = Vector{T}(undef, nu)
-    ## `G(u, d)` shares one survival product across every `d`, and its
-    ## denominator does not depend on `d`, so the weighted sum runs off the
-    ## onset date's table column rather than rebuilding `G` per delay.
-    @inbounds for k in 1:nu
-        u = Int(u_lo) + k - 1
-        invden = inv(safe_rate(D > 0 ? cdf_table[D, k] : zero(T)))
-        g_prev = zero(T)
-        acc = zero(T)
-        for d in 0:(D - 1)
-            g_cur = cdf_table[d + 1, k] * invden
-            acc += (g_cur - g_prev) * a[clamp(u + d, 1, na)]
-            g_prev = g_cur
-        end
-        out[k] = acc
-    end
-    return out
+    (nu == 0 || D == 0) && return zeros(T, nu)
+    ## Summed by parts, `Σ_d (F_d - F_{d-1}) a(u + d)` is
+    ## `Σ_d F_d (a(u + d) - a(u + d + 1)) + F_{D-1} a(u + D)`, which reads the
+    ## table itself forward from each onset date. `a` runs from the first
+    ## onset date and holds its last value past its end.
+    ext = vcat(a[Int(u_lo):end], fill(a[end], max(Int(u_lo) + nu - 1 + D - length(a), 0)))
+    Δa = ext[1:(end - 1)] .- ext[2:end]
+    reads = Convolution(TimeVarying(cdf_table, Primary()))'(Δa; stop = nu)
+    last = cdf_table[D, :]
+    return (reads .+ last .* ext[(D + 1):(D + nu)]) ./ safe_rate.(last)
 end
 
 """

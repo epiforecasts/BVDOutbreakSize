@@ -63,7 +63,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - julia-version: 'lts'
+          # The oldest Julia the package supports. ComposableRecurrences
+          # needs 1.11, so the 1.10 LTS cannot install it.
+          - julia-version: '1.11'
             os: ubuntu-latest
             experimental: false
           - julia-version: '1'
@@ -107,14 +109,14 @@ jobs:
         with:
           # macOS and Windows are the portability cells: give them the
           # platform-sensitive items only, since the `:slow` NUTS fits do not
-          # vary by platform. The lts cell keeps them, as the one check of
+          # vary by platform. The 1.11 cell keeps them, as the one check of
           # the fits on the older Julia. Everything tagged `:quality` or
           # `:ad` runs once in the `quality` and `ad-gradients` jobs below
           # rather than on any matrix cell: those items do not vary by
           # platform or Julia version. The `:ad` items are ~19 min of
           # Mooncake gradient compilation.
           # See test/runtests.jl.
-          test_args: ${{ matrix.julia-version == 'lts' && 'skip_quality' || 'fast' }}
+          test_args: ${{ matrix.julia-version == '1.11' && 'skip_quality' || 'fast' }}
           # Only the `coverage` job uploads coverage. Instrumented code
           # precompiles and runs slower for a result nothing reads.
           coverage: false
@@ -194,6 +196,11 @@ jobs:
           # at the bottom of Mooncake's 0.5 range. This is an upstream
           # extension issue, not a wrong BVD compat bound.
           skip: Pkg,TOML,Dates,Printf,Random,Statistics,Test,Mooncake
+      # The action builds its manifest from the registry and leaves out
+      # ComposableRecurrences, which `[sources]` takes from GitHub until 0.2
+      # is registered. Resolving adds it and keeps the downgraded versions.
+      - name: Add the source dependencies to the manifest
+        run: julia --project=. -e 'using Pkg; Pkg.resolve()'
       - uses: julia-actions/julia-runtest@v1
         with:
           # `downgrade` ARG also skips :ad items: Mooncake-gradient
