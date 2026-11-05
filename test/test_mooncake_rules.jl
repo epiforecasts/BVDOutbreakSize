@@ -26,10 +26,13 @@
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
         zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
+        zone_gravity_kernel, zone_import_fraction,
         convolve_rows, _share_out, _admission_centred_shares,
         _background_admission_shares, sum_to_zero_basis,
         _embedded_sum_to_zero_basis, knot_days, bin_row_increments,
-        patch_rt_matrix, future_knot_days, importation_epsilon_matrix, sigmoid_ramp
+        patch_rt_matrix, future_knot_days, importation_epsilon_matrix,
+        sigmoid_ramp, discretise_censored, lognormal_meansd, cdf_nmax
+    using Distributions: Gamma, LogNormal, Weibull
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -576,6 +579,44 @@
             [1; vstops[1:(end - 1)] .+ 1], vstops, 161; perf = true
         )
 
+        ## The zone kernel blocks: origins with a destination patch of one
+        ## zone, a patch of one zone and a log distance of zero where two
+        ## centroids coincide. The import fraction: an arrival share of
+        ## zero beside nonzero ones.
+        poz = [1, 1, 1, 2, 2, 3]
+        ld = abs.(randn(zrng, 6, 6))
+        ld[1, 2] = ld[2, 1] = 0.0
+        pb = [poz[z] == poz[q] ? 0.0 : 0.1 + rand(zrng) for z in 1:6, q in 1:6]
+        add!(
+            "3 patches", zone_gravity_kernel, randn(zrng, 6), ld, pb, poz, 3,
+            0.7, randn(zrng, 6)
+        )
+        pz = repeat(1:8; inner = 8)
+        add!(
+            "64 zones, 8 patches", zone_gravity_kernel, randn(zrng, 64),
+            abs.(randn(zrng, 64, 64)),
+            [pz[z] == pz[q] ? 0.0 : rand(zrng) for z in 1:64, q in 1:64], pz,
+            8, 1.3, randn(zrng, 64); perf = true
+        )
+        S = rand(zrng, 3, 3, 10)
+        for t in 1:10, p in 1:3
+            S[p, p, t] = 0.0
+        end
+        S[1, 2, 3] = 0.0
+        add!(
+            "3 patches", zone_import_fraction, S, randn(zrng, 3, 10),
+            0.5 .+ rand(zrng, 3), 0.5 .+ rand(zrng, 3, 10)
+        )
+        S8 = rand(zrng, 8, 8, 261)
+        for t in 1:261, p in 1:8
+            S8[p, p, t] = 0.0
+        end
+        add!(
+            "8 patches, n = 261", zone_import_fraction, S8,
+            randn(zrng, 8, 261), 0.5 .+ rand(zrng, 8),
+            0.5 .+ rand(zrng, 8, 261); perf = true
+        )
+
         ## The data-only helpers pass no derivative. Their inputs are the
         ## integer day indices and counts the histories carry, including a
         ## `missing` observation vector and a capacity history with no
@@ -646,6 +687,30 @@
         add!(
             "no breakpoint", importation_epsilon_matrix, 0.02,
             0.5 .* randn(erng, 3), -0.3, sigmoid_ramp(20, missing)
+        )
+
+        ## The model's delays at their own truncations, a short truncation,
+        ## a large Gamma shape, a Weibull far into its tail, and a LogNormal
+        ## with no mass before `nmax`, which takes the uniform fallback.
+        delays = [
+            ("generation interval", Gamma(2.71, 5.65)),
+            ("onset to report", Gamma(1.178, 3.694)),
+            ("onset to death", Gamma(3.33, 3.83)),
+            ("incubation", lognormal_meansd(6.3, 3.5)),
+            ("receipt", lognormal_meansd(4.5, 4.0)),
+            ("Weibull", Weibull(1.5, 5.0)),
+        ]
+        for (note, d) in delays
+            add!(
+                note, discretise_censored, d, cdf_nmax(d);
+                perf = note == "generation interval"
+            )
+        end
+        add!("nmax = 5", discretise_censored, Gamma(2.71, 5.65), 5)
+        add!("Gamma shape 50", discretise_censored, Gamma(50.0, 0.5), 40)
+        add!("Weibull tail", discretise_censored, Weibull(2.0, 3.0), 40)
+        add!(
+            "uniform fallback", discretise_censored, LogNormal(50.0, 0.5), 20
         )
         return cases
     end
@@ -899,12 +964,66 @@ end
     @test all(map((k, v) -> getproperty(ȳ, k) == v, ks, given))
 end
 
+@testitem "Mooncake rules: the import fraction matches its formula with no arrivals" tags = [
+    :ad,
+] begin
+    using Random: Xoshiro
+    using Mooncake: Mooncake
+    using StatsFuns: logistic
+    using BVDOutbreakSize: zone_import_fraction
+
+    ## The fraction written from its formula, which Mooncake derives.
+    function reference(S, ō, e, a)
+        np, n = size(ō)
+        return [
+            begin
+                s = sum(S[p, q, t] * e[q] * a[q, t] for q in 1:np if q != p)
+                logistic(ō[p, t] + (s > 0 ? log(s / a[p, t]) : 0.0))
+            end for p in 1:np, t in 1:n
+        ]
+    end
+    function value_and_gradient(f, S, ō, e, a, W)
+        loss(S, ō, e, a) = sum(W .* f(S, ō, e, a))
+        rule = Mooncake.build_rrule(loss, S, ō, e, a)
+        v, g = Mooncake.value_and_gradient!!(rule, loss, S, ō, e, a)
+        return v, g[2:end]
+    end
+    same(x, y) = isequal(isnan.(x), isnan.(y)) &&
+        isequal(isinf.(x), isinf.(y)) &&
+        isapprox(
+        ifelse.(isfinite.(x), x, 0.0), ifelse.(isfinite.(y), y, 0.0);
+        rtol = 1.0e-12, atol = 1.0e-14
+    )
+
+    rng = Xoshiro(20261104)
+    np, n = 3, 8
+    S = rand(rng, np, np, n)
+    for t in 1:n, p in 1:np
+        S[p, p, t] = 0.0
+    end
+    ## A patch with no arrivals on one day, and on another a deformation
+    ## that has underflowed to zero for every sender into patch 1.
+    S[2, :, 3] .= 0.0
+    a = 0.5 .+ rand(rng, np, n)
+    a[2:3, 5] .= 0.0
+    ō = randn(rng, np, n)
+    e = 0.5 .+ rand(rng, np)
+    W = randn(rng, np, n)
+    @test zone_import_fraction(S, ō, e, a) ≈ reference(S, ō, e, a)
+    vr, gr = value_and_gradient(zone_import_fraction, S, ō, e, a, W)
+    vd, gd = value_and_gradient(reference, S, ō, e, a, W)
+    @test vr ≈ vd
+    for (x, y) in zip(gr, gd)
+        @test same(x, y)
+    end
+end
+
 @testitem "Mooncake rules: guarded inputs pass no derivative" tags = [:ad] begin
     using Random: Xoshiro
     using Mooncake: Mooncake
-    using Distributions: logpdf
+    using Distributions: logpdf, Gamma, LogNormal, Weibull
     using BVDOutbreakSize: NegBinomialVector, StudentTVector,
-        zone_share_renewal_kernel, _share_out
+        zone_share_renewal_kernel, _share_out, discretise_censored
 
     function mgrad(f, args...)
         rule = Mooncake.build_rrule(f, args...)
@@ -963,6 +1082,26 @@ end
     @test all(iszero, gs[:, 5])
     @test all(!iszero, gs[:, 4])
     @test gd[5] ≈ sum(weights[:, 5]) / 4
+
+    ## Delays a warm-up proposal can reach. Those on the uniform fallback
+    ## pass no derivative. A shape too large for the incomplete gamma
+    ## derivative to converge passes `NaN` to the shape rather than
+    ## throwing.
+    pmf_grad(d) = Mooncake.value_and_pullback!!(
+        Mooncake.build_rrule(discretise_censored, d, 20), ones(21),
+        discretise_censored, d, 20
+    )
+    for d in (
+            Gamma(Inf, 1.0), Gamma(2.0, Inf), LogNormal(0.0, Inf),
+            Weibull(1.0, Inf),
+        )
+        v, (_, d̄, _) = pmf_grad(d)
+        @test all(==(1 / 21), v)
+        @test all(iszero, values(d̄.fields))
+    end
+    v, (_, d̄, _) = pmf_grad(Gamma(1.0e12, 1.0e-11))
+    @test sum(v) ≈ 1
+    @test isnan(d̄.fields.α)
 end
 
 @testitem "Mooncake rules: the joint's likelihood rules fire" tags = [:ad] begin

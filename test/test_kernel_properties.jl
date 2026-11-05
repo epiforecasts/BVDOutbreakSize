@@ -295,6 +295,26 @@ end
     @test stick_breaking_loglik([1], [7], [1.0], ρ) == 0
 end
 
+@testitem "stick_breaking_loglik: empty rows score zero" begin
+    using BVDOutbreakSize: stick_breaking_loglik, _stick_breaking_cells,
+        BetaBinomialVector
+    using Distributions: logpdf
+    ## The first group has no counts, so both its scored rows are empty. The
+    ## second row of the second group has six trials, so it stays.
+    g = [1, 1, 1, 2, 2, 2]
+    y = [0, 0, 0, 4, 0, 6]
+    sh = [0.5, 0.3, 0.2, 0.4, 0.1, 0.5]
+    ρ = 0.1
+    every = _stick_breaking_cells(g, y, sh)
+    kept = _stick_breaking_cells(g, y, sh; drop_empty = true)
+    @test every.trials == [0, 0, 10, 6]
+    @test kept.trials == [10, 6]
+    @test kept.obs == [4, 0]
+    @test kept.p == every.p[3:4]
+    @test stick_breaking_loglik(g, y, sh, ρ) ==
+        logpdf(BetaBinomialVector(every.trials, every.p, ρ), every.obs)
+end
+
 @testitem "onset_report_expected_total: the sum of each date's reported share" setup = [
     KernelProperties,
 ] begin
