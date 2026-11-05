@@ -15,7 +15,8 @@
 # backend upgrade, delete this file rather than maintain it.
 
 using Mooncake: CoDual, NoFData, NoRData, primal, tangent
-using SpecialFunctions: digamma
+using SpecialFunctions: digamma, gamma, gamma_inc, loggamma
+using StatsFuns: normcdf, normpdf
 
 ## An array argument a rule accepts: a float array, or a view into one (a
 ## row of a per-patch matrix). A view's tangent is its parent's tangent, so
@@ -256,6 +257,129 @@ function Mooncake.rrule!!(
         return NoRData(), oftype(Rp, a * G / Rp), NoRData()
     end
     return CoDual(r, NoFData()), euler_lotka_r_pullback!!
+end
+
+# Censored delay PMFs from `renewal.jl`. With `H(t) = t·F(t) − M(t)`, which
+# is `E[(t − T)⁺]`, a delay parameter `θ` enters as
+# `∂H/∂θ = −E[∂T/∂θ · 1{T < t}]`, closed form for each family:
+#
+#     LogNormal (μ, σ), z = (log t − μ) / σ:
+#         ∂H/∂μ = −M,    ∂H/∂σ = −σ M + t φ(z)
+#     Gamma (k, θ), y = t / θ, h = y^k e^{−y} / Γ(k + 1):
+#         ∂H/∂θ = −k P(k + 1, y)
+#         ∂H/∂k = t Pₐ(k, y) − θ P(k + 1, y) − k θ Pₐ(k + 1, y)
+#         P(k + 1, y) = P − h,    Pₐ(k + 1, y) = Pₐ − h (log y − ψ(k + 1))
+#     Weibull (k, λ), x = (t / λ)^k, a = 1 + 1 / k:
+#         ∂H/∂λ = −Γ(a) P(a, x),
+#         ∂H/∂k = λ Γ(a) (Pₐ(a, x) + ψ(a) P(a, x)) / k²
+#
+# `P` is the regularised lower incomplete gamma and `Pₐ = ∂P/∂a` has no
+# closed form, so it comes from the backend's forward rule for `gamma_inc`.
+# The rule evaluates `H` from the same identity as the package function,
+# since it needs `P` and `Pₐ` from one call. `test_rule` checks its value.
+
+const _AnalyticalFloatDelay = Union{
+    Gamma{<:Mooncake.IEEEFloat}, LogNormal{<:Mooncake.IEEEFloat},
+    Distributions.Weibull{<:Mooncake.IEEEFloat},
+}
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{typeof(discretise_censored), _AnalyticalFloatDelay, Integer},
+)
+
+## `P(a, x)` and `∂P/∂a`. A non-finite shape passes no derivative, and a
+## shape too large for the derivative to converge passes `NaN`, as the
+## derived rule does, rather than throwing mid-sample.
+function _gamma_inc_da(a, x)
+    isfinite(a) || return first(gamma_inc(a, x)), zero(a)
+    y = try
+        Mooncake.frule!!(
+            Mooncake.zero_dual(gamma_inc), Mooncake.Dual(a, one(a)),
+            Mooncake.Dual(x, zero(x)), Mooncake.zero_dual(0)
+        )
+    catch e
+        e isa ErrorException || rethrow()
+        return first(gamma_inc(a, x)), oftype(a, NaN)
+    end
+    return first(primal(y)), first(tangent(y))
+end
+
+## Terms of `H` that do not depend on `t`.
+_delay_consts(d::LogNormal) = exp(d.μ + d.σ^2 / 2)
+_delay_consts(d::Gamma) = (loggamma(d.α + 1), digamma(d.α + 1))
+function _delay_consts(d::Distributions.Weibull)
+    a = 1 + 1 / d.α
+    return (a, gamma(a), digamma(a))
+end
+
+## `H(t)` and its partials in the delay's two fields, in field order.
+function _censored_H_grad(d::LogNormal, E, t)
+    μ, σ = d.μ, d.σ
+    z = (log(t) - μ) / σ
+    M = E * normcdf(z - σ)
+    return t * normcdf(z) - M, -M, t * normpdf(z) - σ * M
+end
+function _censored_H_grad(d::Gamma, (lgk1, ψk1), t)
+    k, θ = d.α, d.θ
+    y = t / θ
+    P, Pa = _gamma_inc_da(k, y)
+    ly = log(y)
+    h = exp(k * ly - y - lgk1)
+    P1 = P - h
+    Pa1 = Pa - h * (ly - ψk1)
+    return t * P - k * θ * P1, t * Pa - θ * P1 - k * θ * Pa1, -k * P1
+end
+function _censored_H_grad(d::Distributions.Weibull, (a, Γa, ψa), t)
+    k, λ = d.α, d.θ
+    x = (t / λ)^k
+    P, Pa = _gamma_inc_da(a, x)
+    return t * -expm1(-x) - λ * Γa * P, λ * Γa * (Pa + ψa * P) / k^2,
+        -Γa * P
+end
+
+## The PMF is `raw / s` with `raw[i] = H(i) − 2H(i − 1) + H(i − 2)` floored
+## at zero, so with `c = ȳ · pmf` a positive mass passes
+## `r̄ᵢ = (ȳᵢ − c) / s` and two reversed differences take it back to `H̄`.
+## The uniform fallback passes no derivative.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(discretise_censored)},
+        d::CoDual{<:_AnalyticalFloatDelay}, n::CoDual{<:Integer}
+    )
+    dist, nmax = primal(d), primal(n)
+    T = Distributions.partype(dist)
+    c = _delay_consts(dist)
+    pc = Vector{T}(undef, nmax)
+    ∂1 = similar(pc)
+    ∂2 = similar(pc)
+    H_prev = zero(T)
+    for i in 1:nmax
+        H, ∂1[i], ∂2[i] = _censored_H_grad(dist, c, T(i))
+        pc[i] = H - H_prev
+        H_prev = H
+    end
+    raw = _lag_masses(pc, nmax)
+    s = sum(raw)
+    pmf = _normalise_masses(raw, s, dist, nmax)
+    ȳ = zero(pmf)
+    function discretise_censored_pullback!!(::NoRData)
+        g1 = g2 = zero(T)
+        if !_degenerate_total(s)
+            cȳ = dot(ȳ, pmf)
+            r̄_next = p̄_next = zero(T)
+            for i in nmax:-1:1
+                r̄ = raw[i] > 0 ? (ȳ[i] - cȳ) / s : zero(T)
+                p̄ = r̄ - r̄_next
+                H̄ = p̄ - p̄_next
+                g1 += H̄ * ∂1[i]
+                g2 += H̄ * ∂2[i]
+                r̄_next, p̄_next = r̄, p̄
+            end
+        end
+        d̄ = Mooncake.RData(NamedTuple{fieldnames(typeof(dist))}((g1, g2)))
+        return NoRData(), d̄, NoRData()
+    end
+    return CoDual(pmf, ȳ), discretise_censored_pullback!!
 end
 
 Mooncake.@is_primitive(

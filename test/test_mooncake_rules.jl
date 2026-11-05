@@ -30,7 +30,9 @@
         convolve_rows, _share_out, _admission_centred_shares,
         _background_admission_shares, sum_to_zero_basis,
         _embedded_sum_to_zero_basis, knot_days, bin_row_increments,
-        patch_rt_matrix, future_knot_days, importation_epsilon_matrix, sigmoid_ramp
+        patch_rt_matrix, future_knot_days, importation_epsilon_matrix,
+        sigmoid_ramp, discretise_censored, lognormal_meansd, cdf_nmax
+    using Distributions: Gamma, LogNormal, Weibull
 
     ## A positive PMF of length `L` with total mass `mass`.
     pmf(rng, L; mass = 1.0) = (p = rand(rng, L) .+ 0.1; p .* (mass / sum(p)))
@@ -662,6 +664,30 @@
             "no breakpoint", importation_epsilon_matrix, 0.02,
             0.5 .* randn(erng, 3), -0.3, sigmoid_ramp(20, missing)
         )
+
+        ## The model's delays at their own truncations, a short truncation,
+        ## a large Gamma shape, a Weibull far into its tail, and a LogNormal
+        ## with no mass before `nmax`, which takes the uniform fallback.
+        delays = [
+            ("generation interval", Gamma(2.71, 5.65)),
+            ("onset to report", Gamma(1.178, 3.694)),
+            ("onset to death", Gamma(3.33, 3.83)),
+            ("incubation", lognormal_meansd(6.3, 3.5)),
+            ("receipt", lognormal_meansd(4.5, 4.0)),
+            ("Weibull", Weibull(1.5, 5.0)),
+        ]
+        for (note, d) in delays
+            add!(
+                note, discretise_censored, d, cdf_nmax(d);
+                perf = note == "generation interval"
+            )
+        end
+        add!("nmax = 5", discretise_censored, Gamma(2.71, 5.65), 5)
+        add!("Gamma shape 50", discretise_censored, Gamma(50.0, 0.5), 40)
+        add!("Weibull tail", discretise_censored, Weibull(2.0, 3.0), 40)
+        add!(
+            "uniform fallback", discretise_censored, LogNormal(50.0, 0.5), 20
+        )
         return cases
     end
 end
@@ -868,9 +894,9 @@ end
 @testitem "Mooncake rules: guarded inputs pass no derivative" tags = [:ad] begin
     using Random: Xoshiro
     using Mooncake: Mooncake
-    using Distributions: logpdf
+    using Distributions: logpdf, Gamma, LogNormal, Weibull
     using BVDOutbreakSize: NegBinomialVector, StudentTVector,
-        zone_share_renewal_kernel, _share_out
+        zone_share_renewal_kernel, _share_out, discretise_censored
 
     function mgrad(f, args...)
         rule = Mooncake.build_rrule(f, args...)
@@ -929,6 +955,26 @@ end
     @test all(iszero, gs[:, 5])
     @test all(!iszero, gs[:, 4])
     @test gd[5] ≈ sum(weights[:, 5]) / 4
+
+    ## Delays a warm-up proposal can reach. Those on the uniform fallback
+    ## pass no derivative. A shape too large for the incomplete gamma
+    ## derivative to converge passes `NaN` to the shape rather than
+    ## throwing.
+    pmf_grad(d) = Mooncake.value_and_pullback!!(
+        Mooncake.build_rrule(discretise_censored, d, 20), ones(21),
+        discretise_censored, d, 20
+    )
+    for d in (
+            Gamma(Inf, 1.0), Gamma(2.0, Inf), LogNormal(0.0, Inf),
+            Weibull(1.0, Inf),
+        )
+        v, (_, d̄, _) = pmf_grad(d)
+        @test all(==(1 / 21), v)
+        @test all(iszero, values(d̄.fields))
+    end
+    v, (_, d̄, _) = pmf_grad(Gamma(1.0e12, 1.0e-11))
+    @test sum(v) ≈ 1
+    @test isnan(d̄.fields.α)
 end
 
 @testitem "Mooncake rules: the joint's likelihood rules fire" tags = [:ad] begin
