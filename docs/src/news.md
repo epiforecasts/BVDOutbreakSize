@@ -13,11 +13,14 @@ A minor version: every affected province is its own patch, the importation kerne
 
 - The health-zone kernel blocks and import fractions are each built in one Mooncake rule.
   The model does not change.
+- Fits run BLAS on one thread while the chains sample, each chain calling it on its own thread.
 - The per-patch Rt matrix and importation fractions are each built in one Mooncake rule.
   The model does not change.
 - The per-patch onsets and the onsets carried to confirmation go through the per-patch row convolution rule.
   The model does not change.
 - The per-patch treatment kernels (the patch rows through a delay, the demand share-out and the capacity and background admission shares) have hand-written Mooncake rules (#1217).
+  The model does not change.
+- The censored delay PMFs (Gamma, LogNormal and Weibull) have a closed-form Mooncake rule.
   The model does not change.
 - The treatment flow no longer re-splits each patch's BVD admissions by weights of one when the per-patch reports carry the suspected-case detection (#1212).
   The model does not change.
@@ -122,6 +125,11 @@ A minor version: every affected province is its own patch, the importation kerne
 ### Data
 
 - A `[skip_dates]` manifest block leaves listed vintages out of a loaded history while keeping them in the manifest as printed, so a report whose cumulative a later report withdraws merges into the next window rather than reading as a fall (#1194).
+- The model cut-off advances to SitRep 171, 1 November.
+  Confirmed cases rise 65 and confirmed deaths 23, both equal to the printed counts.
+  The isolation tile (961) is the sum of the provinces without Haut-Uélé, which sent no care data, and is kept.
+  `data/onset_dashboard_history.csv` adds the dashboard snapshot of 3 November.
+  Fitted values change with the new data.
 - The model cut-off advances to SitRep 170, 31 October.
   SitRep 170 drops the SitRep 169 Ituri harmonisation without comment, so its national confirmed deaths (5 103) fall 269 below SitRep 169's 5 372.
   30 October is skipped for the national, province and zone deaths and the zone cases, so their 29 to 31 October step matches the two days' printed counts (#1188).
