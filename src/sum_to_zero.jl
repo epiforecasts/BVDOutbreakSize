@@ -322,6 +322,9 @@ function sum_to_zero_ar1(
     )
     T = promote_type(eltype(start), eltype(F), eltype(Z), typeof(φ))
     size(Z, 2) == 0 && return zeros(T, length(start), 0)
+    ## Knot k is `φ` times knot k − 1 plus column k of `F * Z`: the one-lag
+    ## kernel `[φ]`, a multiplier of one (`true`), `start` as the knot before
+    ## the first, and the innovations as the additive input.
     return Recurrence([φ])(
         true; history = reshape(start, :, 1), add = F * Z
     )
