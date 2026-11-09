@@ -1141,3 +1141,155 @@ function Mooncake.rrule!!(
     end
     return out, zone_import_fraction_pullback!!
 end
+
+## The read-out of the health-zone renewal: forces, shares, infections and
+## imports from the zones' infections and the split's trace. Derived, each
+## broadcast it replaces costs tens of times its forward pass.
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(zone_mixed_outputs), Matrix{<:Mooncake.IEEEFloat},
+        Matrix{<:Mooncake.IEEEFloat}, Vector{<:Mooncake.IEEEFloat},
+        Matrix{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
+        Matrix{<:Mooncake.IEEEFloat}, Vector{<:UnitRange}, Integer,
+    }
+)
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(zone_unmixed_outputs), Matrix{<:Mooncake.IEEEFloat},
+        Matrix{<:Mooncake.IEEEFloat}, Vector{<:Mooncake.IEEEFloat},
+        Matrix{<:Mooncake.IEEEFloat}, Vector{<:UnitRange},
+    }
+)
+
+## The forces' adjoint `F̄` `(n_days × n_zones)` back to `Iz`, `g` and `pre`.
+function _zone_forces_pullback!(Īz, ḡ, p̄re, F̄, Iz, g)
+    nz, nd = size(Iz)
+    L = length(g)
+    @inbounds for z in 1:nz, j in 1:nd
+        f̄ = F̄[j, z]
+        p̄re[z, j] += f̄
+        for s in 1:min(L, j - 1)
+            ḡ[s] += f̄ * Iz[z, j - s]
+            Īz[z, j - s] += f̄ * g[s]
+        end
+    end
+    return nothing
+end
+
+## A share `Iz / max(I_p, ε)` passes `1 / d` to the zone and `−Iz / d²` to
+## the patch total while it is above the floor. An import is the patch's
+## arrivals `a_p I_p` times a weight `x_z / Σ_{z ∈ p} x_z` on the import
+## pattern, or on the spilled force when the pattern sums to zero, so the
+## weight's adjoint `w̄_z` reaches `x_z` as `w̄_z / s − Σ w̄ x / s²`.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(zone_mixed_outputs)}, Iz::CoDual, tr::CoDual,
+        g::CoDual, pre::CoDual, I_bar::CoDual, import_fraction::CoDual,
+        patch_ranges::CoDual, t0::CoDual
+    )
+    Izp, trp, gp, prep = primal(Iz), primal(tr), primal(g), primal(pre)
+    Ib, ifr, ranges, t0p = primal(I_bar), primal(import_fraction),
+        primal(patch_ranges), primal(t0)
+    out = zero_fcodual(
+        zone_mixed_outputs(Izp, trp, gp, prep, Ib, ifr, ranges, t0p)
+    )
+    ȳ = tangent(out)
+    function zone_mixed_outputs_pullback!!(::NoRData)
+        Īz, t̄r, ḡ, p̄re = tangent(Iz), tangent(tr), tangent(g), tangent(pre)
+        Īb, īfr = tangent(I_bar), tangent(import_fraction)
+        nz, nd = size(Izp)
+        T = eltype(ȳ.shares)
+        floor_ = eps(T)
+        @inbounds for j in 1:nd, (p, zs) in enumerate(ranges)
+            isempty(zs) && continue
+            t = t0p + j - 1
+            Ip = Ib[p, t]
+            d = max(Ip, floor_)
+            a = ifr[p, t]
+            arrivals = a * Ip
+            sv = zero(T)
+            sh = zero(T)
+            for z in zs
+                sv += trp[z, j]
+                sh += trp[nz + z, j]
+            end
+            for z in zs
+                s̄ = ȳ.shares[j, z]
+                Īz[z, j] += s̄ / d
+                Ip > floor_ && (Īb[p, t] -= s̄ * Izp[z, j] / d^2)
+            end
+            off, s, through = sh > floor_ ? (nz, sh, true) :
+                (0, max(sv, floor_), sv > floor_)
+            ā = zero(T)
+            c = zero(T)
+            for z in zs
+                x = trp[off + z, j]
+                m̄ = ȳ.imports[j, z]
+                ā += m̄ * x / s
+                w̄ = m̄ * arrivals
+                t̄r[off + z, j] += w̄ / s
+                c += w̄ * x
+            end
+            if through
+                c /= s^2
+                for z in zs
+                    t̄r[off + z, j] -= c
+                end
+            end
+            īfr[p, t] += ā * Ip
+            Īb[p, t] += ā * a
+        end
+        @inbounds for z in 1:nz, j in 1:nd
+            Īz[z, j] += ȳ.infections[j, z]
+        end
+        _zone_forces_pullback!(Īz, ḡ, p̄re, ȳ.forces, Izp, gp)
+        return ntuple(_ -> NoRData(), 9)
+    end
+    return out, zone_mixed_outputs_pullback!!
+end
+
+## A share `u_z / max(Σ_{z ∈ p} u_z, ε)` with `u = gain × force` passes
+## `ū_z = s̄_z / P − Σ s̄ u / P²` to `u`, which reaches the gain and adds to
+## the force's adjoint before it goes back through the convolution.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(zone_unmixed_outputs)}, Iz::CoDual, gain::CoDual,
+        g::CoDual, pre::CoDual, patch_ranges::CoDual
+    )
+    Izp, gnp, gp, prep = primal(Iz), primal(gain), primal(g), primal(pre)
+    ranges = primal(patch_ranges)
+    res = zone_unmixed_outputs(Izp, gnp, gp, prep, ranges)
+    out = zero_fcodual(res)
+    ȳ = tangent(out)
+    function zone_unmixed_outputs_pullback!!(::NoRData)
+        Īz, ḡain, ḡ, p̄re = tangent(Iz), tangent(gain), tangent(g),
+            tangent(pre)
+        nz, nd = size(Izp)
+        F = res.forces
+        F̄ = copy(ȳ.forces)
+        T = eltype(F)
+        floor_ = eps(T)
+        @inbounds for j in 1:nd, zs in ranges
+            tot = zero(T)
+            r = zero(T)
+            for z in zs
+                u = gnp[z, j] * F[j, z]
+                tot += u
+                r += ȳ.shares[j, z] * u
+            end
+            P = max(tot, floor_)
+            c = tot > floor_ ? r / P^2 : zero(T)
+            for z in zs
+                ū = ȳ.shares[j, z] / P - c
+                ḡain[z, j] += ū * F[j, z]
+                F̄[j, z] += ū * gnp[z, j]
+            end
+        end
+        @inbounds for z in 1:nz, j in 1:nd
+            Īz[z, j] += ȳ.infections[j, z]
+        end
+        _zone_forces_pullback!(Īz, ḡ, p̄re, F̄, Izp, gp)
+        return ntuple(_ -> NoRData(), 6)
+    end
+    return out, zone_unmixed_outputs_pullback!!
+end

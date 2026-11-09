@@ -1029,16 +1029,13 @@ function zone_share_renewal_kernel(
     end
     days = t0:last_day
     ## `member[p, z]` is one when zone `z` is in patch `p`, so `member' * x`
-    ## gives each zone its patch's row of `x` and `member' * (member * x)`
-    ## each zone its patch's sum over its zones.
+    ## gives each zone its patch's row of `x`.
     member = zeros(length(patch_ranges), nz)
     for (p, zs) in enumerate(patch_ranges)
         member[p, zs] .= 1
     end
-    zone_rows(x) = permutedims(member) * x
-    patch_sums(x) = zone_rows(member * x)
     gain = exp.(permutedims(δ_daily))
-    pre = w0 .* zone_rows(force_pre[:, days])
+    pre = w0 .* (permutedims(member) * force_pre[:, days])
     ## `Allocate` takes non-empty groups only; a patch with no zones has
     ## nothing to split (EpiAware/ComposableRecurrences.jl#326).
     held = findall(!isempty, patch_ranges)
@@ -1058,33 +1055,128 @@ function zone_share_renewal_kernel(
     run = on ?
         renewal(gain; history = h0, add = gain .* pre, record = (:trace,)) :
         (; y = renewal(gain; history = h0, add = gain .* pre))
-    Iz = run.y
-    forces = Convolution(vcat(false, g))(Iz) .+ pre
-    floor_ = eps(eltype(Iz))
-    shares = if on
-        Iz ./ max.(zone_rows(I_bar[:, days]), floor_)
-    else
-        u = gain .* forces
-        u ./ max.(patch_sums(u), floor_)
+    ## The run's return type infers only through constant propagation of
+    ## `record`, which a caller under Mooncake does not always reach, so the
+    ## asserts keep it typed (EpiAware/ComposableRecurrences.jl#462).
+    T = promote_type(
+        eltype(gain), eltype(pre), eltype(g), eltype(I_bar),
+        on ? promote_type(
+                eltype(mix.within), eltype(mix.between),
+                eltype(mix.origin_weight), eltype(mix.import_fraction),
+                eltype(ε)
+            ) : Bool
+    )
+    Iz = convert(Matrix{T}, run.y)::Matrix{T}
+    on || return zone_unmixed_outputs(Iz, gain, g, pre, patch_ranges)
+    tr = convert(Matrix{T}, first(run.trace.modifiers))::Matrix{T}
+    return zone_mixed_outputs(
+        Iz, tr, g, pre, I_bar, mix.import_fraction, patch_ranges, t0
+    )
+end
+
+## The forces of [`zone_share_renewal`](@ref) as `(n_days × n_zones)`: each
+## zone's own infections through the generation interval `g`, lags `1 … L`,
+## plus its force from before the grid `pre` `(n_zones × n_days)`.
+function _zone_forces(
+        Iz::AbstractMatrix, g::AbstractVector, pre::AbstractMatrix,
+        ::Type{T}
+    ) where {T}
+    nz, nd = size(Iz)
+    L = length(g)
+    forces = zeros(T, nd, nz)
+    @inbounds for z in 1:nz, j in 1:nd
+        acc = T(pre[z, j])
+        for s in 1:min(L, j - 1)
+            acc += g[s] * Iz[z, j - s]
+        end
+        forces[j, z] = acc
     end
-    imports = if on
-        ## The trace holds the spilled force and then the import pattern. A
-        ## patch whose pattern sums to zero, with no infected zones elsewhere
-        ## to send to it, takes its arrivals by its own spilled force.
-        tr = first(run.trace.modifiers)
-        v, h = tr[1:nz, :], tr[(nz + 1):(2nz), :]
-        arrivals = zone_rows(mix.import_fraction[:, days] .* I_bar[:, days])
-        sh = patch_sums(h)
-        arrivals .* ifelse.(
-            sh .> floor_, h ./ max.(sh, floor_),
-            v ./ max.(patch_sums(v), floor_)
-        )
-    else
-        zero(Iz)
+    return forces
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The outputs of [`zone_share_renewal`](@ref) with mixing, each
+`(n_days × n_zones)`, from the zones' infections `Iz`
+`(n_zones × n_days)` and the split's recorded trace `tr`: the spilled
+forces in its first `n_zones` rows and the import pattern after them.
+A zone's share is its infections over its patch's, and its imports are its
+patch's arrivals split by the import pattern. A patch whose pattern sums to
+zero, with no infected zones elsewhere to send to it, splits its arrivals
+by its own spilled force. Plain loops with their own reverse rule, which
+replace broadcasts whose derived rules cost far more than their forward
+pass.
+"""
+function zone_mixed_outputs(
+        Iz::AbstractMatrix, tr::AbstractMatrix, g::AbstractVector,
+        pre::AbstractMatrix, I_bar::AbstractMatrix,
+        import_fraction::AbstractMatrix,
+        patch_ranges::AbstractVector{<:UnitRange}, t0::Integer
+    )
+    nz, nd = size(Iz)
+    T = promote_type(
+        eltype(Iz), eltype(tr), eltype(g), eltype(pre), eltype(I_bar),
+        eltype(import_fraction)
+    )
+    forces = _zone_forces(Iz, g, pre, T)
+    shares = zeros(T, nd, nz)
+    imports = zeros(T, nd, nz)
+    floor_ = eps(T)
+    @inbounds for j in 1:nd, (p, zs) in enumerate(patch_ranges)
+        isempty(zs) && continue
+        t = t0 + j - 1
+        Ip = I_bar[p, t]
+        d = max(Ip, floor_)
+        arrivals = import_fraction[p, t] * Ip
+        sv = zero(T)
+        sh = zero(T)
+        for z in zs
+            sv += tr[z, j]
+            sh += tr[nz + z, j]
+        end
+        for z in zs
+            shares[j, z] = Iz[z, j] / d
+            w = sh > floor_ ? tr[nz + z, j] / sh :
+                tr[z, j] / max(sv, floor_)
+            imports[j, z] = arrivals * w
+        end
     end
     return (;
-        shares = permutedims(shares), forces = permutedims(forces),
-        infections = permutedims(Iz), imports = permutedims(imports),
+        shares, forces, infections = Matrix{T}(permutedims(Iz)), imports,
+    )
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The outputs of [`zone_share_renewal`](@ref) without mixing, as
+[`zone_mixed_outputs`](@ref) gives them with it: each zone's share is its
+force times its gain `gain` `(n_zones × n_days)` over its patch's sum of
+the same, and the imports are zero.
+"""
+function zone_unmixed_outputs(
+        Iz::AbstractMatrix, gain::AbstractMatrix, g::AbstractVector,
+        pre::AbstractMatrix, patch_ranges::AbstractVector{<:UnitRange}
+    )
+    nz, nd = size(Iz)
+    T = promote_type(eltype(Iz), eltype(gain), eltype(g), eltype(pre))
+    forces = _zone_forces(Iz, g, pre, T)
+    shares = zeros(T, nd, nz)
+    floor_ = eps(T)
+    @inbounds for j in 1:nd, zs in patch_ranges
+        tot = zero(T)
+        for z in zs
+            tot += gain[z, j] * forces[j, z]
+        end
+        P = max(tot, floor_)
+        for z in zs
+            shares[j, z] = gain[z, j] * forces[j, z] / P
+        end
+    end
+    return (;
+        shares, forces, infections = Matrix{T}(permutedims(Iz)),
+        imports = zeros(T, nd, nz),
     )
 end
 

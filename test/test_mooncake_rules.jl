@@ -27,7 +27,8 @@
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
         zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
-        zone_gravity_kernel, zone_import_fraction,
+        zone_gravity_kernel, zone_import_fraction, zone_mixed_outputs,
+        zone_unmixed_outputs,
         convolve_rows, _share_out, _admission_centred_shares,
         _background_admission_shares, sum_to_zero_basis,
         _embedded_sum_to_zero_basis, knot_days, bin_row_increments,
@@ -568,6 +569,43 @@
         add!(
             "62 zones, n = 220", zone,
             zone_args(zrng, [21, 21, 20]; nd = 220, t0 = 30, L = 12)...;
+            perf = true
+        )
+
+        ## The read-out after the zone renewal, from the zones' infections
+        ## and the split's trace: a patch with no zones, a patch whose
+        ## import pattern is empty on some days (so the arrivals split on
+        ## the spilled force, with no other zone's pattern to perturb into
+        ## it), and the unmixed shares on the forces.
+        function readout_args(rng, sizes; nd = 12, t0 = 4, L = 4)
+            I_bar, g, δ, w0, ranges, t0_, fp, mix, ε = zone_args(
+                rng, sizes; nd, t0, L
+            )
+            nz = size(δ, 2)
+            tr = rand(rng, 2nz, nd) .+ 0.1
+            return (
+                mixed = (
+                    rand(rng, nz, nd) .+ 0.1, tr, g, rand(rng, nz, nd), I_bar,
+                    mix.import_fraction, ranges, t0_,
+                ),
+                unmixed = (
+                    rand(rng, nz, nd) .+ 0.1, exp.(0.3 .* randn(rng, nz, nd)),
+                    g, rand(rng, nz, nd), ranges,
+                ),
+            )
+        end
+        ra = readout_args(zrng, [3, 2])
+        add!("2 patches", zone_mixed_outputs, ra.mixed...)
+        add!("2 patches", zone_unmixed_outputs, ra.unmixed...)
+        ra = readout_args(zrng, [3, 0, 2]; nd = 3, L = 6)
+        add!("patch with no zones, G > n", zone_mixed_outputs, ra.mixed...)
+        add!(
+            "patch with no zones, G > n", zone_unmixed_outputs, ra.unmixed...
+        )
+        ra = readout_args(zrng, [21, 21, 20]; nd = 220, t0 = 30, L = 12)
+        add!("62 zones, n = 220", zone_mixed_outputs, ra.mixed...; perf = true)
+        add!(
+            "62 zones, n = 220", zone_unmixed_outputs, ra.unmixed...;
             perf = true
         )
 
