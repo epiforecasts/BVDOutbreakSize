@@ -55,8 +55,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
     # Below GitHub's 6h job ceiling, which a stalled cell otherwise sits on
-    # before being reported as cancelled rather than failed.
-    timeout-minutes: 150
+    # before being reported as cancelled rather than failed. The 1.11 cell
+    # runs the `:slow` fits too, and on 1.11 its tests take 125 min or more
+    # where the same set took about 85 min on the 1.10 LTS.
+    timeout-minutes: ${{ matrix.julia-version == '1.11' && 210 || 150 }}
     # Julia 1 on Linux is the `coverage` job in codecoverage.yaml, which runs
     # the same `skip_quality` set, so it has no cell here.
     strategy:
