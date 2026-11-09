@@ -331,7 +331,6 @@ A minor version: every affected province is its own patch, the importation kerne
   The health-zone renewal's inputs to the zone split and its read-out (forces, shares and imports after it) are plain loops with hand-written Mooncake rules, since the broadcasts they replace cost tens of times their forward pass under Mooncake.
   The split itself takes about twice as long as `main`'s hand rule for the whole kernel (EpiAware/ComposableRecurrences.jl#469).
   `convolve_delay` takes a patch matrix row by row, so the separate `convolve_rows` is removed.
-  A patch with no health zones is left out of the zone split, since `Allocate` takes non-empty groups only (EpiAware/ComposableRecurrences.jl#326).
   A delay convolution now gives `NaN` rather than leaving a day alone where an `Inf` meets a lag of exactly zero weight, since the package multiplies a zero weight as IEEE arithmetic does (EpiAware/ComposableRecurrences.jl#297).
   Only a warm-up proposal that overflows the infections reaches this, and its log density is non-finite either way.
   ComposableRecurrences 0.2 comes from GitHub through `[sources]` until it is registered.

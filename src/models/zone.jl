@@ -1031,20 +1031,17 @@ function zone_share_renewal_kernel(
     (; gain, pre, add) = zone_split_inputs(
         δ_daily, w0, force_pre, patch_ranges, t0
     )
-    ## `Allocate` takes non-empty groups only; a patch with no zones has
-    ## nothing to split (EpiAware/ComposableRecurrences.jl#326).
-    held = findall(!isempty, patch_ranges)
-    totals = TimeVarying(PerStratum(I_bar[held, days]))
+    totals = TimeVarying(PerStratum(I_bar[:, days]))
     split = on ?
         Allocate(
-            patch_ranges[held], totals;
+            patch_ranges, totals;
             imports = (
-                TimeVarying(PerStratum(mix.import_fraction[held, days])),
+                TimeVarying(PerStratum(mix.import_fraction[:, days])),
                 mix.between .* permutedims(mix.origin_weight),
             ),
             spill = Redistribute(mix.within, ε)
         ) :
-        Allocate(patch_ranges[held], totals)
+        Allocate(patch_ranges, totals)
     renewal = Recurrence(g; modifiers = (split,))
     h0 = zeros(eltype(gain), nz, 1)
     run = on ?

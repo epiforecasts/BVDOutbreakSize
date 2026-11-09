@@ -315,7 +315,7 @@ end
 """
 The `m` knots after `start` of the AR(1) of [`sum_to_zero_knots`](@ref),
 with the `m` columns of `Z` as the innovation draws through the loading
-`F`.
+`F`. With no columns in `Z` it returns a `length(start) × 0` matrix.
 """
 function sum_to_zero_ar1(
         start::AbstractVector, F::AbstractMatrix, Z::AbstractMatrix, φ::Real
