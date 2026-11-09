@@ -284,9 +284,9 @@ the pair is kept when the parent's mean infections over that window reach
 seeded, whose log sums are not normal. Over the kept pairs the log sums
 have mean `m` and sample covariance `Σ`. The Cholesky factor `L` is taken
 after adding `ridge` of each cell's own variance to the diagonal, so that
-`log S = m + L η` with `η ∼ N(0, I_d)` reproduces the parent's joint
-posterior on the shared quantity to first order. `Σ` is rank deficient
-whenever the parent carries fewer draws than there are cells. The
+`log S = m + L η` with `η ∼ N(0, I_d)` reproduces the parent's
+posterior on each block of the shared quantity to first order. `Σ` is
+rank deficient whenever the parent carries fewer draws than there are cells. The
 factorisation then blends toward `diag(Σ)` at the smallest weight that
 succeeds (`_zone_meld_factor`). Shrinking toward the diagonal of
 `Σ` rather than toward the identity keeps every week's own variance and
@@ -308,11 +308,15 @@ kept midpoint fell before `t0` would break that, and is an error.
 
 `extra` holds further shared quantities, one row per parent draw and one
 column each, on the scale they are melded on. They are appended after the
-patch-week cells as `extra_cells`, so the infection block of `L` is the
-leading block, and their rows of `weights` are zero: they reach the zone
-model through `L η` alone. The zone stage passes the per-origin log
-importation intensity here when the zones mix, followed by the log
-generation-interval and delay parameters.
+patch-week cells as `extra_cells`, and their rows of `weights` are zero:
+they reach the zone model through `L η` alone. The zone stage passes the
+per-origin log importation intensity here when the zones mix, followed by
+the log generation-interval and delay parameters.
+
+The covariance between the patch-week cells and the extra cells is set to
+zero, so `L` is block diagonal. The zone data inform the delays but not a
+patch's level, and that covariance would carry their pull on the delays
+into every patch's level.
 
 Returns `(; weights, L, cells_patch, cells_week, midpoints, d, extra_cells,
 mean_log, log_sums)`, `log_sums` holding the per-draw log sums and the
@@ -368,8 +372,13 @@ function zone_meld_block(
     ## toward the diagonal of the sample covariance rather than toward the
     ## identity keeps every week's own marginal variance and gives up only
     ## the correlations, which is the direction the parent's own posterior
-    ## is least able to support.
-    L = _zone_meld_factor(cov(S), d; ridge)
+    ## is least able to support. The patch-week cells and the extra cells
+    ## are each shrunk and factorised as their own block.
+    Σ = cov(S)
+    L = zeros(Float64, d, d)
+    for c in (1:d_inf, extra_cells)
+        isempty(c) || (L[c, c] .= _zone_meld_factor(Σ[c, c], length(c); ridge))
+    end
     weights = zeros(Float64, np * n, d)
     for p in 1:np
         cs = findall(==(p), cells_patch)
@@ -409,7 +418,8 @@ The shared quantity is extended over the forecast weeks. Each parent draw's
 log weekly patch infections over the fitted cells of `meld` and over the
 future windows `(n, n + 7]`, … (kept where the parent's mean reaches
 `min_infections`) are stacked, and their covariance factorised with the
-fitted block held at `meld.L`:
+fitted block held at `meld.L` and, as in [`zone_meld_block`](@ref), no
+covariance between the future weeks and the extra cells:
 
 ```math
 L = \\begin{pmatrix} L_{11} & 0 \\\\ L_{21} & L_{22} \\end{pmatrix},
@@ -477,8 +487,10 @@ function zone_forecast_block(
             for i in 1:ndraw, c in 1:df
     ]
     Σ = cov(hcat(meld.log_sums, S_f))
+    Σ21 = Σ[(d + 1):end, 1:d]
+    Σ21[:, meld.extra_cells] .= 0
     L21 = d == 0 ? zeros(df, 0) :
-        Σ[(d + 1):end, 1:d] / transpose(LowerTriangular(meld.L))
+        Σ21 / transpose(LowerTriangular(meld.L))
     L22 = df == 0 ? zeros(0, 0) :
         _zone_meld_factor(
             Symmetric(Σ[(d + 1):end, (d + 1):end] - L21 * transpose(L21)), df;
@@ -604,29 +616,10 @@ arrival share keeps its mean odds.
 """
 function zone_draw_mixing(mix, scale, e, blocks = nothing)
     np, n = size(mix.import_log_odds)
-    Tp = promote_type(
-        eltype(mix.import_log_odds),
-        scale === nothing ? Float64 : eltype(scale),
-        e === nothing ? Float64 : eltype(e)
+    frac = zone_import_fraction(
+        mix.arrival_shares, mix.import_log_odds,
+        e === nothing ? ones(np) : e, scale === nothing ? ones(np, n) : scale
     )
-    frac = Matrix{Tp}(undef, np, n)
-    @inbounds for t in 1:n, p in 1:np
-        acc = zero(Tp)
-        for q in 1:np
-            q == p && continue
-            sq = mix.arrival_shares[p, q, t]
-            iszero(sq) && continue
-            eq = e === nothing ? one(Tp) : e[q]
-            aq = scale === nothing ? one(Tp) : scale[q, t]
-            acc += sq * eq * aq
-        end
-        lo = mix.import_log_odds[p, t]
-        if acc > 0
-            ap = scale === nothing ? one(Tp) : scale[p, t]
-            lo += log(acc / ap)
-        end
-        frac[p, t] = logistic(lo)
-    end
     origin_weight = e === nothing ? mix.origin_weight :
         mix.origin_weight .* e[mix.patch_of_zone]
     within, between = blocks === nothing ? (mix.within, mix.between) :
@@ -635,6 +628,43 @@ function zone_draw_mixing(mix, scale, e, blocks = nothing)
         within, between, origin_weight, import_fraction = frac,
         mix.patch_of_zone,
     )
+end
+
+## The import fraction of `zone_draw_mixing` from the arrival shares `S`
+## `(n_patches × n_patches × n)`, the mean log odds `ō` `(n_patches × n)`,
+## the origin multipliers `e` and the deformation `a`. A plain loop with its
+## own reverse rule.
+function zone_import_fraction(
+        S::AbstractArray{<:Real, 3}, ō::AbstractMatrix, e::AbstractVector,
+        a::AbstractMatrix
+    )
+    return zone_import_fraction_with_state(S, ō, e, a).frac
+end
+
+## `zone_import_fraction` keeping the weighted arrival sums `acc` the reverse
+## rule reads.
+function zone_import_fraction_with_state(
+        S::AbstractArray{<:Real, 3}, ō::AbstractMatrix, e::AbstractVector,
+        a::AbstractMatrix
+    )
+    np, n = size(ō)
+    Tp = promote_type(eltype(S), eltype(ō), eltype(e), eltype(a))
+    frac = Matrix{Tp}(undef, np, n)
+    acc = zeros(Tp, np, n)
+    @inbounds for t in 1:n, p in 1:np
+        s = zero(Tp)
+        for q in 1:np
+            q == p && continue
+            sq = S[p, q, t]
+            iszero(sq) && continue
+            s += sq * e[q] * a[q, t]
+        end
+        acc[p, t] = s
+        lo = ō[p, t]
+        s > 0 && (lo += log(s / a[p, t]))
+        frac[p, t] = logistic(lo)
+    end
+    return (; frac, acc)
 end
 
 """
@@ -1538,12 +1568,14 @@ infections in each patch, when the zones mix of its log importation
 intensity per origin patch, and of its log generation-interval and delay
 parameters, the quantities the two stages share
 ([`zone_meld_block`](@ref)). Its Cholesky factor carries the province
-model's joint posterior over all patches, weeks and origins together, so a
-draw moves whole patch trajectories, and moves the patches together where
-the province model says they move together. The daily patch trajectory the
-draw implies is the province model's mean curve times `exp(a_p(t))` with
-`a = L η` ([`zone_parent_scale`](@ref)), its origin intensities the mean
-times `e = exp(c)` ([`zone_parent_epsilon`](@ref)), and its generation
+model's joint posterior over all patches and weeks together, so a draw
+moves whole patch trajectories, and moves the patches together where the
+province model says they move together. The factor is block diagonal
+between the patch-week cells and the origin and delay cells. The daily
+patch trajectory the draw implies is the province model's mean curve
+times `exp(a_p(t))` with `a = L η` ([`zone_parent_scale`](@ref)), its
+origin intensities the mean times `e = exp(c)`
+([`zone_parent_epsilon`](@ref)), and its generation
 interval and delays are rebuilt from the drawn parameters
 ([`zone_delay_parameters`](@ref), [`zone_delay_terms`](@ref)). The zone
 model is conditional on all three.
@@ -2162,10 +2194,10 @@ $(TYPEDSIGNATURES)
 
 The fixed inputs of [`zone_gravity_blocks`](@ref), built once per fit: the
 log populations, the log distances between centroids (zero where two
-coincide, so the pull is the population alone), the off-diagonal and
-same-patch masks, the parent kernel entry of every zone pair in different
-patches, the patch indicator `(n_patches × n_zones)` and the block-diagonal
-sum-to-zero basis `(n_zones × Σ_p (n_p − 1))` of the destination weights.
+coincide, so the pull is the population alone), the parent kernel entry of
+every zone pair in different patches, the patch count and the
+block-diagonal sum-to-zero basis `(n_zones × Σ_p (n_p − 1))` of the
+destination weights.
 """
 function zone_gravity_inputs(
         pops::AbstractVector, coords::AbstractVector,
@@ -2188,15 +2220,11 @@ function zone_gravity_inputs(
         log_distance = [
             d[z, q] > 0 ? log(d[z, q]) : 0.0 for z in 1:nz, q in 1:nz
         ],
-        off_diagonal = [Float64(z != q) for z in 1:nz, q in 1:nz],
-        same_patch = [
-            Float64(z != q && poz[z] == poz[q]) for z in 1:nz, q in 1:nz
-        ],
         parent_between = [
             poz[z] == poz[q] ? 0.0 : Float64(parent_kernel[poz[z], poz[q]])
                 for z in 1:nz, q in 1:nz
         ],
-        indicator = [Float64(poz[z] == p) for p in 1:np, z in 1:nz],
+        n_patches = np,
         destination_basis = _zone_destination_basis(poz, np),
         patch_of_zone = poz,
     )
@@ -2221,34 +2249,87 @@ end
 """
 $(TYPEDSIGNATURES)
 
-The blocks ([`zone_pattern_blocks`](@ref)) of the log gravity pull at decay
-`γ` plus the log destination weights `ω`.
+The within and between blocks of the zone kernel at gravity decay `γ` and
+log destination weights `ω`, from the fixed inputs `g`
+([`zone_gravity_inputs`](@ref)). The log pull of destination `z` on origin
+`q ≠ z` is
+
+```math
+L_{zq} = \\log N_z − γ \\log d_{zq} + ω_z,
+```
+
+and each origin's column of `exp(L)` is normalised over every destination
+patch, within its own patch to one and into another to the parent kernel
+entry `K_{p(z) p(q)}`:
+
+```math
+\\text{within}_{zq} = \\frac{e^{L_{zq}}}{\\sum_{z' ∈ p(z)} e^{L_{z'q}}}
+\\quad (p(z) = p(q)),
+\\qquad
+\\text{between}_{zq} = K_{p(z) p(q)}
+\\frac{e^{L_{zq}}}{\\sum_{z' ∈ p(z)} e^{L_{z'q}}}
+\\quad (p(z) ≠ p(q)).
+```
+
+The totals into each patch do not depend on `L`, which moves only the split
+over a patch's zones. An origin with no pull into a patch keeps a zero
+column there. A plain loop with its own reverse rule.
 """
 function zone_gravity_blocks(g, γ::Real, ω::AbstractVector)
-    return zone_pattern_blocks(g, zone_log_gravity(g, γ) .+ ω)
+    return zone_gravity_kernel(
+        g.log_pop, g.log_distance, g.parent_between, g.patch_of_zone,
+        g.n_patches, γ, ω
+    )
 end
 
-"The log gravity pull `log N_z − γ log d_zq`, the centre of the zone kernel."
-zone_log_gravity(g, γ::Real) = g.log_pop .- γ .* g.log_distance
-
-"""
-$(TYPEDSIGNATURES)
-
-The within and between blocks of a log pattern `L`, `L[z, q]` the log
-relative pull of destination `z` on origin `q`. Each origin's column of
-`exp(L)` is normalised over every destination patch, within its own patch
-to one and into another to the parent kernel entry, so the totals into
-each patch do not depend on `L` and it moves only the split over a patch's
-zones.
-"""
-function zone_pattern_blocks(g, L::AbstractMatrix)
-    pull = g.off_diagonal .* exp.(L)
-    col = g.indicator * pull
-    ## An origin with no pull into a patch keeps a zero column, not 0/0.
-    share = pull ./ ifelse.(col .> 0, col, one.(col))[g.patch_of_zone, :]
-    return (;
-        within = share .* g.same_patch, between = share .* g.parent_between,
+## `zone_gravity_blocks` from its inputs, the form the reverse rule in
+## `mooncake_rules.jl` is written against.
+function zone_gravity_kernel(
+        log_pop::AbstractVector, log_distance::AbstractMatrix,
+        parent_between::AbstractMatrix,
+        patch_of_zone::AbstractVector{<:Integer}, np::Integer, γ::Real,
+        ω::AbstractVector
     )
+    st = zone_gravity_with_state(
+        log_pop, log_distance, parent_between, patch_of_zone, np, γ, ω
+    )
+    return (; st.within, st.between)
+end
+
+## `zone_gravity_kernel` keeping the shares and the patch totals of the pull
+## that its reverse rule reads.
+function zone_gravity_with_state(
+        log_pop::AbstractVector, log_distance::AbstractMatrix,
+        parent_between::AbstractMatrix,
+        patch_of_zone::AbstractVector{<:Integer}, np::Integer, γ::Real,
+        ω::AbstractVector
+    )
+    nz = length(log_pop)
+    Tp = promote_type(
+        eltype(log_pop), eltype(log_distance), eltype(parent_between),
+        typeof(float(γ)), eltype(ω)
+    )
+    share = zeros(Tp, nz, nz)
+    col = zeros(Tp, np, nz)
+    @inbounds for q in 1:nz, z in 1:nz
+        z == q && continue
+        v = exp(log_pop[z] - γ * log_distance[z, q] + ω[z])
+        share[z, q] = v
+        col[patch_of_zone[z], q] += v
+    end
+    within = zeros(Tp, nz, nz)
+    between = zeros(Tp, nz, nz)
+    @inbounds for q in 1:nz, z in 1:nz
+        c = col[patch_of_zone[z], q]
+        c > 0 || continue
+        share[z, q] /= c
+        if patch_of_zone[z] == patch_of_zone[q]
+            within[z, q] = share[z, q]
+        else
+            between[z, q] = share[z, q] * parent_between[z, q]
+        end
+    end
+    return (; within, between, share, col)
 end
 
 """
