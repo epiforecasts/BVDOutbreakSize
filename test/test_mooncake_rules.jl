@@ -28,7 +28,7 @@
         BetaBinomialVector, censoring_cap, euler_lotka_r,
         zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
         zone_gravity_kernel, zone_import_fraction, zone_mixed_outputs,
-        zone_unmixed_outputs,
+        zone_unmixed_outputs, zone_split_inputs,
         _share_out, _admission_centred_shares,
         _background_admission_shares, sum_to_zero_basis,
         _embedded_sum_to_zero_basis, knot_days, bin_row_increments,
@@ -594,6 +594,22 @@
                 ),
             )
         end
+        ## The split's inputs from the daily deviations, the initial shares
+        ## and the pre-grid patch forces, with a patch that has no zones.
+        for sizes in ([3, 2], [3, 0, 2])
+            I_bar, g, δ, w0, ranges, t0_, fp = zone_args(zrng, sizes)
+            add!(
+                "$(length(sizes)) patches", zone_split_inputs, δ, w0, fp,
+                ranges, t0_
+            )
+        end
+        I_bar, g, δ, w0, ranges, t0_, fp = zone_args(
+            zrng, [21, 21, 20]; nd = 220, t0 = 30, L = 12
+        )
+        add!(
+            "62 zones, n = 220", zone_split_inputs, δ, w0, fp, ranges, t0_;
+            perf = true
+        )
         ra = readout_args(zrng, [3, 2])
         add!("2 patches", zone_mixed_outputs, ra.mixed...)
         add!("2 patches", zone_unmixed_outputs, ra.unmixed...)

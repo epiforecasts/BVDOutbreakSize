@@ -1293,3 +1293,42 @@ function Mooncake.rrule!!(
     end
     return out, zone_unmixed_outputs_pullback!!
 end
+
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(zone_split_inputs), Matrix{<:Mooncake.IEEEFloat},
+        Vector{<:Mooncake.IEEEFloat}, Matrix{<:Mooncake.IEEEFloat},
+        Vector{<:UnitRange}, Integer,
+    }
+)
+
+## The additive input `add = gain × pre` adds `ādd × pre` to the gain's
+## adjoint and `ādd × gain` to the pre-grid force's. The gain is
+## `exp(δ)`, so its adjoint reaches `δ` times the gain, and the force is
+## `w0 × force_pre`, so its adjoint reaches each factor times the other.
+function Mooncake.rrule!!(
+        ::CoDual{typeof(zone_split_inputs)}, δ_daily::CoDual, w0::CoDual,
+        force_pre::CoDual, patch_ranges::CoDual, t0::CoDual
+    )
+    δp, w0p, fpp = primal(δ_daily), primal(w0), primal(force_pre)
+    ranges, t0p = primal(patch_ranges), primal(t0)
+    res = zone_split_inputs(δp, w0p, fpp, ranges, t0p)
+    out = zero_fcodual(res)
+    ȳ = tangent(out)
+    function zone_split_inputs_pullback!!(::NoRData)
+        δ̄, w̄0, f̄p = tangent(δ_daily), tangent(w0), tangent(force_pre)
+        nd = size(δp, 1)
+        @inbounds for j in 1:nd, (p, zs) in enumerate(ranges), z in zs
+            t = t0p + j - 1
+            gn, pr = res.gain[z, j], res.pre[z, j]
+            ḡn = ȳ.gain[z, j] + ȳ.add[z, j] * pr
+            p̄r = ȳ.pre[z, j] + ȳ.add[z, j] * gn
+            δ̄[j, z] += ḡn * gn
+            w̄0[z] += p̄r * fpp[p, t]
+            f̄p[p, t] += p̄r * w0p[z]
+        end
+        return ntuple(_ -> NoRData(), 6)
+    end
+    return out, zone_split_inputs_pullback!!
+end

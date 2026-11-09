@@ -1028,14 +1028,9 @@ function zone_share_renewal_kernel(
         )
     end
     days = t0:last_day
-    ## `member[p, z]` is one when zone `z` is in patch `p`, so `member' * x`
-    ## gives each zone its patch's row of `x`.
-    member = zeros(length(patch_ranges), nz)
-    for (p, zs) in enumerate(patch_ranges)
-        member[p, zs] .= 1
-    end
-    gain = exp.(permutedims(δ_daily))
-    pre = w0 .* (permutedims(member) * force_pre[:, days])
+    (; gain, pre, add) = zone_split_inputs(
+        δ_daily, w0, force_pre, patch_ranges, t0
+    )
     ## `Allocate` takes non-empty groups only; a patch with no zones has
     ## nothing to split (EpiAware/ComposableRecurrences.jl#326).
     held = findall(!isempty, patch_ranges)
@@ -1053,8 +1048,8 @@ function zone_share_renewal_kernel(
     renewal = Recurrence(g; modifiers = (split,))
     h0 = zeros(eltype(gain), nz, 1)
     run = on ?
-        renewal(gain; history = h0, add = gain .* pre, record = (:trace,)) :
-        (; y = renewal(gain; history = h0, add = gain .* pre))
+        renewal(gain; history = h0, add, record = (:trace,)) :
+        (; y = renewal(gain; history = h0, add))
     ## The run's return type infers only through constant propagation of
     ## `record`, which a caller under Mooncake does not always reach, so the
     ## asserts keep it typed (EpiAware/ComposableRecurrences.jl#462).
@@ -1072,6 +1067,34 @@ function zone_share_renewal_kernel(
     return zone_mixed_outputs(
         Iz, tr, g, pre, I_bar, mix.import_fraction, patch_ranges, t0
     )
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The inputs of the zone split in [`zone_share_renewal`](@ref), each
+`(n_zones × n_days)` over the grid days from `t0`: the daily gain
+`exp(δ_daily)`, each zone's force from before the grid (its initial share
+`w0` times its patch's row of `force_pre`) and their product, the split's
+additive input. A plain loop with its own reverse rule, as
+[`zone_mixed_outputs`](@ref) is.
+"""
+function zone_split_inputs(
+        δ_daily::AbstractMatrix, w0::AbstractVector,
+        force_pre::AbstractMatrix,
+        patch_ranges::AbstractVector{<:UnitRange}, t0::Integer
+    )
+    nd, nz = size(δ_daily)
+    T = promote_type(eltype(δ_daily), eltype(w0), eltype(force_pre))
+    gain = zeros(T, nz, nd)
+    pre = zeros(T, nz, nd)
+    add = zeros(T, nz, nd)
+    @inbounds for j in 1:nd, (p, zs) in enumerate(patch_ranges), z in zs
+        gain[z, j] = exp(δ_daily[j, z])
+        pre[z, j] = w0[z] * force_pre[p, t0 + j - 1]
+        add[z, j] = gain[z, j] * pre[z, j]
+    end
+    return (; gain, pre, add)
 end
 
 ## The forces of [`zone_share_renewal`](@ref) as `(n_days × n_zones)`: each
