@@ -1187,7 +1187,7 @@ cfr_prior_fig #hide
 # A BVD true case leaves by dying at the in-care case-fatality ratio $\text{CFR}_{\text{iso}}$ over the admission-to-death stay, or by recovering over the longer admission-to-recovery stay.
 # A non-case leaves by a negative test over the rule-out stay, or absconds.
 # The death-stay prior is the admission-to-death delay from the line-list reanalysis [bdbv_linelist_analysis_2026](@cite), and the non-BVD rule-out stay is its own delay, centred on the report-to-receipt laboratory turnaround with wider priors.
-# The stays are discretised delays with priors on the admission delay mean $\mathrm{Normal}(2,\ 1)$ and SD $\mathrm{Normal}(1.5,\ 1)$, the death-stay Gamma shape $\mathrm{Normal}(2.15,\ 0.60)$ and scale $\mathrm{Normal}(3.91,\ 1.38)$, the recovery-stay mean $\mathrm{Normal}(14,\ 5)$ and SD $\mathrm{Normal}(8,\ 4)$, and the rule-out-stay mean $\mathrm{Normal}(4.5,\ 2)$ and SD $\mathrm{Normal}(4,\ 1.5)$, each truncated below.
+# The stays are discretised delays with priors on the admission delay mean $\mathrm{Normal}(2,\ 1)$ and SD $\mathrm{Normal}(1.5,\ 1)$, the death-stay Gamma shape $\mathrm{Normal}(2.15,\ 0.60)$ and scale $\mathrm{Normal}(3.91,\ 1.38)$, the recovery-stay mean $\mathrm{Normal}(14,\ 5)$ and SD $\mathrm{Normal}(8,\ 4)$, and the rule-out-stay mean $\mathrm{Normal}(4.5,\ 2)$ and SD $\mathrm{Normal}(4,\ 1.5)$, each truncated below at zero.
 #
 # Each day's occupancy is the previous day's bed stock plus the day's admissions, less its deaths, recoveries, rule-outs and absconds.
 # The abscond outflow drains the suspected pool at a small daily fraction $\kappa$ of the previous day's suspected occupancy,
@@ -1622,7 +1622,7 @@ cfr_prior_fig #hide
 #     \text{confirmed}_{t-s}\, f_{\text{cr},s}.
 # ```
 #
-# $f_{\text{cr}}$ is a discretised LogNormal with mean $\sim \mathrm{Normal}(14,\ 5)$ and SD $\sim \mathrm{Normal}(8,\ 4)$, both truncated below at one day.
+# $f_{\text{cr}}$ is a discretised LogNormal with mean $\sim \mathrm{Normal}(14,\ 5)$ and SD $\sim \mathrm{Normal}(8,\ 4)$, both truncated below at zero.
 # The recovery proportion is $1 - \mathrm{CFR}$ shifted on the log-odds scale by a sampled offset $\delta_{\text{rec}} \sim \mathrm{Normal}(0, 0.5)$ for the confirmed cases' departure from the population the CFR is defined over,
 #
 # ```math

@@ -1022,3 +1022,20 @@ end
     @test floored(0.0) < floored(0.02)
     @test floored(0.02) <= floored(0.1)
 end
+
+@testitem "treatment and recovery delay priors are truncated at zero" begin
+    using BVDOutbreakSize: treatment_flow_defaults, recovered_model
+    d = treatment_flow_defaults()
+    delays = (
+        d.admission_delay, d.recovery_los, d.ruleout_los,
+        recovered_model(
+            (; days = Int[], counts = Int[]), 0, fill(1.0, 5), 0.3
+        ).defaults.confirmation_to_recovery,
+    )
+    for delay in delays
+        @test minimum(delay.defaults.mean_prior) == 0
+        @test minimum(delay.defaults.sd_prior) == 0
+    end
+    @test minimum(d.death_los.defaults.alpha_prior) == 0
+    @test minimum(d.death_los.defaults.theta_prior) == 0
+end
