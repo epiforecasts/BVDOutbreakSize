@@ -330,6 +330,7 @@ A minor version: every affected province is its own patch, the importation kerne
   The patch renewal asserts the types of its recorded run, since a call with `record` infers only through constant propagation, which the joint under Mooncake does not always reach; without the asserts the joint's gradient took 2.4 times as long (EpiAware/ComposableRecurrences.jl#462).
   The health-zone renewal's read-out (forces, shares and imports after the zone split) is two plain functions with hand-written Mooncake rules, since the broadcasts they replace cost tens of times their forward pass under Mooncake; this brings the `bvd_zone` gradient back level with `main`'s.
   The split itself takes about twice as long as `main`'s hand rule for the whole kernel (EpiAware/ComposableRecurrences.jl#469).
+  `convolve_delay` takes a patch matrix row by row, so the separate `convolve_rows` is removed.
   A patch with no health zones is left out of the zone split, since `Allocate` takes non-empty groups only (EpiAware/ComposableRecurrences.jl#326).
   A delay convolution now gives `NaN` rather than leaving a day alone where an `Inf` meets a lag of exactly zero weight, since the package multiplies a zero weight as IEEE arithmetic does (EpiAware/ComposableRecurrences.jl#297).
   Only a warm-up proposal that overflows the infections reaches this, and its log density is non-finite either way.

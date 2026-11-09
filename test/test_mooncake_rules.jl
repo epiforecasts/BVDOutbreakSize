@@ -29,7 +29,7 @@
         zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
         zone_gravity_kernel, zone_import_fraction, zone_mixed_outputs,
         zone_unmixed_outputs,
-        convolve_rows, _share_out, _admission_centred_shares,
+        _share_out, _admission_centred_shares,
         _background_admission_shares, sum_to_zero_basis,
         _embedded_sum_to_zero_basis, knot_days, bin_row_increments,
         patch_rt_matrix, future_knot_days, importation_epsilon_matrix,
@@ -183,7 +183,7 @@
         convolve_delay, convolve_pmf, renewal_infections, patch_infections,
         abscond_thinned_flows, two_clock_confirmed, accumulate_occupancy,
         onset_report_cdf_table, onset_report_anchor_series,
-        zone_share_renewal_kernel, zone_pre_convolution, convolve_rows,
+        zone_share_renewal_kernel, zone_pre_convolution,
     )
 
     ## Every native rule with the argument types its call sites pass: float
@@ -243,10 +243,10 @@
         ## patch shares, capacity on cumulative admissions and background on
         ## a knot walk over the printed patches.
         Mr = rand(rng, 4, 30) .+ 0.1
-        add!("D = 8", convolve_rows, Mr, pmf(rng, 8))
-        add!("D > n", convolve_rows, Mr, pmf(rng, 40))
+        add!("D = 8", convolve_delay, Mr, pmf(rng, 8))
+        add!("D > n", convolve_delay, Mr, pmf(rng, 40))
         add!(
-            "8 × 260, D = 42", convolve_rows, rand(rng, 8, 260) .+ 0.1,
+            "8 × 260, D = 42", convolve_delay, rand(rng, 8, 260) .+ 0.1,
             pmf(rng, 42); perf = true
         )
         add!("4 × 30", _share_out, rand(rng, 4, 30) .+ 0.1, 100 .* rand(rng, 30))

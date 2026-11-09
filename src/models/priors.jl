@@ -2093,7 +2093,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     headlines = _detached(_patch_headlines, infections_matrix, g, n)
     ## 8. Per-patch onsets through the shared incubation PMF.
     inc_state ~ to_submodel(incubation(incubation_nmax))
-    onsets_matrix = convolve_rows(infections_matrix, inc_state.pmf)
+    onsets_matrix = convolve_delay(infections_matrix, inc_state.pmf)
     ## 9. Headline quantities, mirroring [`infection_model`](@ref) so a
     ##    patch chain summarises exactly like a single-patch one.
     T_total = growth_state.T + τ_obs

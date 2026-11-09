@@ -434,23 +434,14 @@ end
 Convolve a daily trajectory `x` (infections or onsets) with a delay PMF
 `delay` (indexed from lag 0), returning the expected daily counts of the
 delayed event on the same daily grid: entry `t` sums `x[t−d] · delay[d+1]`
-over lags `d` that stay in range. Maps infections to onsets, onsets to
-deaths, onsets to reports and onsets to detected exports. Type-stable and
-AD-transparent. A non-finite entry of `x` makes every day it reaches
-non-finite, including through a lag of zero weight, which gives `NaN`.
+over lags `d` that stay in range. A matrix is taken row by row, one series
+per patch. Maps infections to onsets, onsets to deaths, onsets to reports
+and onsets to detected exports. Type-stable and AD-transparent. A
+non-finite entry of `x` makes every day it reaches non-finite, including
+through a lag of zero weight, which gives `NaN`.
 """
-convolve_delay(x::AbstractVector, delay::AbstractVector) =
+convolve_delay(x::AbstractVecOrMat, delay::AbstractVector) =
     Convolution(delay)(x)
-
-"""
-    convolve_rows(M, delay)
-
-Each row of `M` through `delay`, as [`convolve_delay`](@ref) takes one
-series: `Y[p, t]` sums `M[p, t−d] · delay[d+1]` over lags `d` that stay in
-range.
-"""
-convolve_rows(M::AbstractMatrix, delay::AbstractVector) =
-    Convolution(delay)(M)
 
 """
 Discrete convolution of two delay PMFs `a` and `b` (both indexed from

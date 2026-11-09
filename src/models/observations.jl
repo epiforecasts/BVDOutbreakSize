@@ -2260,7 +2260,7 @@ function _patch_bvd_admissions(
         reports_matrix::AbstractMatrix, ::Nothing, p_iso_bvd::Real,
         p_drc::Real, adm_pmf::AbstractVector
     )
-    return (p_iso_bvd * p_drc) .* convolve_rows(reports_matrix, adm_pmf)
+    return (p_iso_bvd * p_drc) .* convolve_delay(reports_matrix, adm_pmf)
 end
 function _patch_bvd_admissions(
         reports_matrix::AbstractMatrix, asc::AbstractVector, p_iso_bvd::Real,
@@ -2271,7 +2271,7 @@ function _patch_bvd_admissions(
         eltype(reports_matrix), eltype(asc), typeof(p_iso_bvd),
         typeof(p_drc), eltype(adm_pmf)
     )
-    A_raw = (p_iso_bvd * p_drc) .* convolve_rows(reports_matrix, adm_pmf)
+    A_raw = (p_iso_bvd * p_drc) .* convolve_delay(reports_matrix, adm_pmf)
     A_bvd = Matrix{T}(undef, np, n)
     @inbounds for t in 1:n
         total = zero(T)
@@ -2310,7 +2310,7 @@ end
 function _patch_background_stock(
         A_bg::AbstractVector, w::AbstractMatrix, surv::AbstractVector
     )
-    return convolve_rows(w .* reshape(A_bg, 1, :), surv)
+    return convolve_delay(w .* reshape(A_bg, 1, :), surv)
 end
 
 """
@@ -2356,7 +2356,7 @@ function _patch_demand(
         w::AbstractVecOrMat, S_clin::AbstractVector,
         ruleout_pmf::AbstractVector, κ::Real, demand::AbstractVector
     )
-    stock = convolve_rows(A_bvd, S_clin) .+ _patch_background_stock(
+    stock = convolve_delay(A_bvd, S_clin) .+ _patch_background_stock(
         A_bg, w, _background_stay_survival(ruleout_pmf, κ)
     )
     return _share_out(stock, demand)
