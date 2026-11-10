@@ -144,6 +144,7 @@ vintage_table = let
     streams = (
         suspected_cases = bydate(obs.reported_history),
         suspected_new_daily = bydate(obs.suspected_daily_history),
+        suspected_new_daily_deaths = bydate(obs.suspected_daily_deaths_history),
         patients_isolated = bydate(obs.isolation_history),
         suspected_deaths = bydate(obs.deaths_history),
         confirmed_cases = bydate(obs.confirmed_history),
@@ -158,6 +159,7 @@ vintage_table = let
         date = dates,
         suspected_cases = at(streams.suspected_cases),
         suspected_new_daily = at(streams.suspected_new_daily),
+        suspected_new_daily_deaths = at(streams.suspected_new_daily_deaths),
         patients_isolated = at(streams.patients_isolated),
         suspected_deaths = at(streams.suspected_deaths),
         confirmed_cases = at(streams.confirmed_cases),
@@ -440,7 +442,6 @@ MarkdownTable(vintage_table) #hide
 # ```
 #
 # The traced 25 January death sits near the 87th percentile of this prior.
-# It is the earliest chain the field work reached, so the origin lies at or before it.
 #
 # ```math
 # T_{\text{cryptic}} = m\,G, \qquad
@@ -544,6 +545,7 @@ MarkdownTable(vintage_table) #hide
 # with $Q$ the fixed sum-to-zero basis of Equation (6), so the origin levels are centred on $\bar\varepsilon$ on the log scale.
 # The origin deviation $\mathbf{z}^{\varepsilon}$ is drawn independently of the reproduction number deviations and is constant in time.
 # Exports scale with $R_{q,t}$ through the origin's generated infections $G_{q,t}$ in Equation (18), and $\beta_\varepsilon$ changes the share of them exported.
+# Awareness of a local outbreak may reduce movement through travel restrictions or may increase it through care-seeking or flight, so $\beta_\varepsilon$ is two-sided.
 #
 # The log flows $\ell_{p,q} = \log K_{p,q} + W_{p,q}$, for $p \ne q$, depart from gravity by a deviation $W$ and take a multivariate normal prior centred on the log gravity kernel:
 #
@@ -752,6 +754,7 @@ MarkdownTable(vintage_table) #hide
 #
 # The onset-to-report delay runs from symptom onset to a suspected case being detected and reported into surveillance.
 # It is the onset-to-admission delay of a Bayesian reanalysis [bdbv_linelist_analysis_2026](@cite) of the 2012 Isiro Bundibugyo virus outbreak line list [rosello2015](@cite), with an implied mean of about 4 d.
+# The onset-to-admission delay is used as a proxy for onset-to-report on the assumption that a case enters surveillance when first formally seen at a health facility.
 # Its shape and scale take LogNormal priors centred on the reanalysis posterior, with the reported uncertainty carried to the log scale:
 #
 # ```math
@@ -805,7 +808,7 @@ MarkdownTable(vintage_table) #hide
 # #### Case-fatality ratio
 #
 # The US Centers for Disease Control and Prevention (CDC) summary for the two previous BVD outbreaks is $55$ deaths in $169$ cases ($\approx 33\%$; [CDC outbreak history](https://www.cdc.gov/ebola/outbreaks/index.html)), with confidence bands spanning roughly $26$-$40\%$.
-# The companion BDBV reanalysis reports a baseline of $0.47$ ($95\%$ CrI $0.31$-$0.65$) for confirmed cases who are not healthcare workers.
+# The companion BDBV reanalysis reports a baseline of $0.47$ ($95\%$ CrI $0.31$-$0.65$) for confirmed cases who are not healthcare workers; this higher estimate widens the prior spread beyond the historical confidence bands.
 # We use a prior of
 #
 # ```math
@@ -2188,7 +2191,9 @@ cfr_prior_fig #hide
 # with $p_1(\xi \mid Y_1)$ the joint model's marginal posterior over $\xi$.
 # We approximate $p_1$ by a multivariate normal fitted to the joint model's draws of the log weekly patch infections, the log intensities $\log \varepsilon_q$ of Equation (15) and the log parameters $\log \theta_k$ of the generation interval and delays.
 # A week in which a patch's mean infections sum to less than one is left out as not yet seeded.
-# With $L$ the Cholesky factor of the draws' sample covariance over the $d$ kept cells, one draw is
+# The covariance between the infection cells and the other cells is set to zero.
+# The zone data inform the delays but not a patch's level, and that covariance would carry their pull on the delays into every patch's infections.
+# With $L$ the Cholesky factor of the resulting covariance over the $d$ kept cells, one draw is
 #
 # ```math
 # \eta \sim \mathrm{Normal}(0, I_d), \qquad
@@ -2202,7 +2207,7 @@ cfr_prior_fig #hide
 # The deviation $\zeta_p(t)$ interpolates patch $p$'s weekly cells of $\zeta$ between week midpoints, and $\zeta^{\varepsilon}_q$ and $\zeta^{\theta}_k$ are the cells for origin $q$ and parameter $k$.
 # The parameters are the mean and standard deviation of the generation interval and of the incubation period, the shape and scale of the onset-to-report delay, the mean and standard deviation of the report-to-receipt delay, and the shapes and scales of the two onset-to-death components.
 # Each draw rebuilds its delay distributions from them as the joint model does.
-# Where the covariance does not factorise, as when the joint model has fewer draws than cells, it is shrunk toward its own diagonal by the least weight that factorises.
+# Where a block's covariance does not factorise, as when the joint model has fewer draws than cells, it is shrunk toward its own diagonal by the least weight that factorises.
 # $p_1$ is the only term from the joint posterior.
 #
 # #### Zone data

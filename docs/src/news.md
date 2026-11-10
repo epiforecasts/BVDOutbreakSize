@@ -11,16 +11,22 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Performance
 
+- The health-zone kernel blocks and import fractions are each built in one Mooncake rule.
+  The model does not change.
+- Fits run BLAS on one thread while the chains sample, each chain calling it on its own thread.
 - The per-patch Rt matrix and importation fractions are each built in one Mooncake rule.
   The model does not change.
 - The per-patch onsets and the onsets carried to confirmation go through the per-patch row convolution rule.
   The model does not change.
 - The per-patch treatment kernels (the patch rows through a delay, the demand share-out and the capacity and background admission shares) have hand-written Mooncake rules (#1217).
   The model does not change.
+- The censored delay PMFs (Gamma, LogNormal and Weibull) have a closed-form Mooncake rule.
+  The model does not change.
 - The treatment flow no longer re-splits each patch's BVD admissions by weights of one when the per-patch reports carry the suspected-case detection (#1212).
   The model does not change.
 - The sum-to-zero bases the patch submodels build on every evaluation pass no derivative, so Mooncake no longer tapes them (#1213).
   The model does not change.
+- The province compositions skip stick-breaking rows with no trials and no count, which score exactly zero, so the composition gradient is about 27% faster with bit-identical results (#1195).
 - A hand-written Mooncake rule bins the per-patch confirmed and death rows to the province vintages in one call, about 8x faster on that step with bit-identical results (#1200).
 - Each fit starts from a dense metric built from the last fit of the same id, held fixed while a short warm-up adapts the step size, and falls back to the full warm-up when there is no usable parent (#1211).
 - Hand-written Mooncake rules for the health-zone pre-grid convolution and vintage window weights keep the per-draw rebuild of the zone delays to about 5% of the full zone gradient, from 24% without them (local timings in #1085).
@@ -30,6 +36,8 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Model
 
+- The health-zone stage draws the weekly province infections independently of the importation intensities and the delays, so its province totals no longer fall below the joint model's (#1122).
+  The zone in-sample page compares the two by province, and fitted zone values change.
 - The onset-to-admission Gamma scale prior is `LogNormal(log(3.694), 0.32)` at the onset-to-report, onset-to-detection and onset-to-death delays, and fitted values change (#1087).
 - Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
   SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.
@@ -120,6 +128,11 @@ A minor version: every affected province is its own patch, the importation kerne
 ### Data
 
 - A `[skip_dates]` manifest block leaves listed vintages out of a loaded history while keeping them in the manifest as printed, so a report whose cumulative a later report withdraws merges into the next window rather than reading as a fall (#1194).
+- The model cut-off advances to SitRep 171, 1 November.
+  Confirmed cases rise 65 and confirmed deaths 23, both equal to the printed counts.
+  The isolation tile (961) is the sum of the provinces without Haut-Uélé, which sent no care data, and is kept.
+  `data/onset_dashboard_history.csv` adds the dashboard snapshot of 3 November.
+  Fitted values change with the new data.
 - The model cut-off advances to SitRep 170, 31 October.
   SitRep 170 drops the SitRep 169 Ituri harmonisation without comment, so its national confirmed deaths (5 103) fall 269 below SitRep 169's 5 372.
   30 October is skipped for the national, province and zone deaths and the zone cases, so their 29 to 31 October step matches the two days' printed counts (#1188).
@@ -306,6 +319,8 @@ A minor version: every affected province is its own patch, the importation kerne
 ### Infrastructure
 
 - The depot cache prune keeps a running docs build's `docs-env` cache, so the later jobs load the compiled package from `list` rather than compiling it again (#1229).
+- The zone parent extract is written beside the fit cache rather than into it, so a joint-type fit cache no longer carries an 86 MB copy nothing in the build reads (#1238).
+- The cache prune also removes superseded fit caches, and pull-request fit caches while the repository is over budget, so main's fits are not evicted (#1236).
 - The docs deploy waits on the health-zone pages, so a failed zone render skips the deploy (#1175).
 - The docs fits save their chain to the cache as soon as sampling ends, so a fit that finishes near the job's time limit is kept if the job is then cancelled, and the re-run loads it rather than refitting.
 - The docs build keeps its resolved manifest for ten days rather than three, so a re-run of failed jobs after a long fit can still pin it.

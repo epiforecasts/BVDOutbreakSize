@@ -13,6 +13,8 @@ authors:
   - family-names: Funk
     given-names: Sebastian
     orcid: "https://orcid.org/0000-0002-2842-3406"
+  - family-names: Holt
+    given-names: Charlotte
 repository-code: "https://github.com/epiforecasts/BVDOutbreakSize"
 url: "https://github.com/epiforecasts/BVDOutbreakSize"
 doi: 10.5281/zenodo.20312758

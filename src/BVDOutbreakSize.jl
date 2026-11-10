@@ -1,8 +1,8 @@
 module BVDOutbreakSize
 
 using Statistics: quantile, mean, cor, median, cov, std, var
-using LinearAlgebra: BLAS, axpy!, dot, cholesky, Symmetric, I, Diagonal, diag,
-    issuccess, mul!, LowerTriangular
+using LinearAlgebra: axpy!, dot, cholesky, Symmetric, I, Diagonal, diag,
+    issuccess, mul!, LowerTriangular, BLAS
 using TOML: TOML
 using Printf: Printf
 using DataFrames: DataFrame, rename, select, Not, nrow
@@ -209,7 +209,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
     zone_parent_scale, zone_parent_epsilon, zone_draw_mixing,
     zone_deformation, zone_meld_check,
     reconstruct_zone_shares, reconstruct_zone_rt, zone_infections,
-    zone_patch_infections,
+    zone_patch_infections, zone_patch_level_check,
     zone_forecast, zone_forecast_draws, zone_forecast_archive,
     ZONE_FORECAST_METHOD,
     zone_overview_table, zone_headline, zone_forecast_probabilities,

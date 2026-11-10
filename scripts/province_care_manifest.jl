@@ -87,6 +87,13 @@ const STALE = Dict(
     ## patients at the start of 19 October.
     (155, "bas_uele") => "word-for-word repeat of SitRep 154",
     (156, "bas_uele") => "word-for-word repeat of SitRep 154",
+    ## Ituri's and Nord-Kivu's paragraphs repeat SitRep 175's census word for
+    ## word (344 patients, "341 la veille"; 578 patients, "595 la veille",
+    ## 394/434 lits), so their "la veille" figures are SitRep 175's own
+    ## previous day rather than SitRep 175's counts; only the admission and
+    ## discharge figures changed.
+    (176, "ituri") => "SitRep 175's census repeated with SitRep 175's la veille",
+    (176, "nord_kivu") => "SitRep 175's census repeated with SitRep 175's la veille",
 )
 const MISPRINTED = Dict(
     (164, "nord_kivu", :admissions_24h) =>

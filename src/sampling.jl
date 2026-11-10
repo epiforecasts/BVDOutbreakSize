@@ -338,7 +338,8 @@ divergences) instead of waiting for the whole fit. Use
 or [`tensorboard_callback`](@ref) for a TensorBoard backend (requires
 `using TensorBoardLogger`). The callback is forwarded to `sample` only
 when non-`nothing`. Any additional `kwargs` are passed through to
-`sample`.
+`sample`. BLAS runs on one thread while the chains sample, and the
+caller's BLAS thread count is restored afterwards.
 
 `n_adapts` sets the NUTS warmup length (step-size and mass-matrix
 adaptation), run in addition to `samples` and discarded by default. It
@@ -416,19 +417,14 @@ function nuts_sample(
             max_depth, ϵ = seeded.step_size, adtype
         )
     end
-    ## A dense metric multiplies a vector by the full inverse metric every
-    ## leapfrog step. BLAS threads on top of the chains' own threads
-    ## oversubscribe the cores and make that step costlier than the
-    ## gradient, so a seeded fit runs it on one thread.
+    seeded === nothing || @info(
+        "nuts_sample: fixed dense metric",
+        dim = size(seeded.inverse_metric, 1), seeded.n_adapts
+    )
+    ## The chains run on Julia threads, and each calls BLAS on its own thread.
+    ## The caller's BLAS thread count is restored afterwards.
     blas_threads = BLAS.get_num_threads()
-    if seeded !== nothing
-        BLAS.set_num_threads(1)
-        @info(
-            "nuts_sample: fixed dense metric",
-            dim = size(seeded.inverse_metric, 1), seeded.n_adapts,
-            blas_threads = BLAS.get_num_threads()
-        )
-    end
+    BLAS.set_num_threads(1)
     chn = try
         sample(
             rng,

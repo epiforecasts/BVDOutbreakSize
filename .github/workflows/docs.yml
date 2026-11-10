@@ -350,7 +350,7 @@ jobs:
           name: fit-extras-${{ matrix.id }}
           path: |
             logs/fit_cache/*_diagnostics/
-            logs/fit_cache/*.parent.jls
+            logs/fit_extras/*.parent.jls
           if-no-files-found: ignore
           retention-days: 90
 
