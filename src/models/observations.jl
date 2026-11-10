@@ -3368,9 +3368,10 @@ end
 
 _logistic_sum(a, b) = logistic(a + b)
 
-## The survival recurrence of each onset date's delay column, the one walk
-## `onset_report_cdf_table`, `onset_report_expected_total` and the table's
-## Mooncake rule share. Column `k` is onset date `u_lo + k - 1`: `S[j + 1, k]` is the
+## The survival recurrence of each onset date's delay column, as
+## `onset_report_expected_total` walks it (`onset_report_cdf_table` takes the
+## same columns through the package). Column `k` is onset date
+## `u_lo + k - 1`: `S[j + 1, k]` is the
 ## survival product up to and including delay `j`, and, unless `H` is
 ## `nothing`, `H[j + 1, k]` is that delay's hazard.
 function _onset_columns!(
