@@ -740,8 +740,8 @@ MarkdownTable(vintage_table) #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown, Distributions
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.censored_delay_model(30;
-#md #         mean_prior = truncated(Normal(5, 1); lower = 1),
-#md #         sd_prior = truncated(Normal(3, 1); lower = 1))), "\n```"))
+#md #         mean_prior = truncated(Normal(5, 1); lower = 0),
+#md #         sd_prior = truncated(Normal(3, 1); lower = 0))), "\n```"))
 #md # ```
 
 #md # ```@raw html

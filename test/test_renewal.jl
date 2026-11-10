@@ -88,6 +88,51 @@ end
     end
 end
 
+@testitem "delay priors: finite log density and a proper PMF near zero" begin
+    using Turing.DynamicPPL: fix, logjoint
+    using BVDOutbreakSize: censored_delay_model, gamma_delay_model,
+        onset_incidence_model, patch_infection_model, lab_delay_model,
+        deaths_model, treatment_flow_defaults, recovered_model
+
+    ## Every delay prior that is truncated at zero, taken from the model
+    ## defaults that carry it. A draw near zero must have a finite log
+    ## density and give a proper PMF.
+    empty = (; days = Int[], counts = Int[])
+    lognormal = [
+        onset_incidence_model(fill(1.0, 5)).defaults.incubation(30).defaults,
+        patch_infection_model(5, 1).defaults.incubation(30).defaults,
+        lab_delay_model().defaults,
+        treatment_flow_defaults().admission_delay.defaults,
+        treatment_flow_defaults().recovery_los.defaults,
+        treatment_flow_defaults().ruleout_los.defaults,
+        recovered_model(empty, 0, fill(1.0, 5), 0.3).defaults.confirmation_to_recovery.defaults,
+    ]
+    otd = deaths_model(empty, missing, fill(1.0, 5), 0.3).defaults.onset_to_death.defaults
+    gamma = [
+        (; alpha_prior = otd.ad_alpha_prior, theta_prior = otd.ad_theta_prior),
+        treatment_flow_defaults().death_los.defaults,
+    ]
+    function check(model, draw)
+        @test isfinite(logjoint(model, draw))
+        pmf = fix(model, draw)().pmf
+        @test all(isfinite, pmf)
+        @test all(pmf .>= 0)
+        @test isapprox(sum(pmf), 1.0; atol = 1.0e-10)
+        return nothing
+    end
+    for p in lognormal
+        m = censored_delay_model(30; p.mean_prior, p.sd_prior)
+        check(m, (; delay_mean = 1.0e-6, delay_sd = 1.0e-6))
+    end
+    ## A Gamma shape or scale that underflows to exactly zero must not throw.
+    for p in gamma
+        m = gamma_delay_model(30; p.alpha_prior, p.theta_prior)
+        check(m, (; α = 1.0e-6, θ = 1.0e-6))
+        check(m, (; α = 0.0, θ = 3.9))
+        check(m, (; α = 2.15, θ = 0.0))
+    end
+end
+
 @testitem "discretise_censored: PMF contract (non-negative, sums to 1)" begin
     using BVDOutbreakSize: discretise_censored, lognormal_meansd
     using Distributions: LogNormal

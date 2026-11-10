@@ -92,8 +92,8 @@ the reported posterior uncertainty. Returns
 @model function gamma_delay_model(nmax::Integer; alpha_prior, theta_prior)
     α ~ alpha_prior
     θ ~ theta_prior
-    ## Unchecked, so a draw that underflows to zero gives a non-finite PMF
-    ## total, which `discretise_censored` maps to its uniform fallback.
+    ## Unchecked, because the priors are truncated at zero and a draw that
+    ## underflows to exactly zero must not throw.
     dist = Gamma(α, θ; check_args = false)
     return (;
         pmf = discretise_censored(dist, nmax), dist,
