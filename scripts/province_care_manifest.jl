@@ -98,6 +98,11 @@ const STALE = Dict(
 const MISPRINTED = Dict(
     (164, "nord_kivu", :admissions_24h) =>
         "495 admissions cannot close SitRep 163's 495 patients to 497",
+    ## SitRep 177's own editors' notes say these two cells are wrong.
+    (177, "ituri", :patients_isolated) =>
+        "the report's own editors' note says 363 does not close (371 by flow, 358 by split)",
+    (177, "nord_kivu", :admissions_24h) =>
+        "the report's own editors' note says the 6 + 73 split gives 79, not 81",
 )
 const ORDER = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo", "bas_uele",
