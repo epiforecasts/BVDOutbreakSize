@@ -25,6 +25,8 @@
             "Province / Zone de santé    Nombre cumulatif    Cas (n)    Décès (n)    Létalité",
             "Ituri$(sep)1260    470     37,3%",
             "Bunia$(sep)41      17      41,5%",
+            "Source: INSP 2026",
+            "Page 3",
             "Rwampara$(sep)1219    444     36,4%",
             "Nord-Kivu$(sep)164    81    49,4%",
             "Musienene$(sep)164     81      49,4%",
@@ -46,6 +48,13 @@
     @test wide[1]["sud_ubangi"]["bulu"] == (2, 1)
     @test wide[2]["sud_ubangi"] == (2, 1)
     @test wide[3] == (1426, 552)
+    @test narrow[1]["ituri"]["bunia"] == (41, 17)
+    @test narrow[1]["ituri"]["rwampara"] == (1219, 444)
+    @test narrow[2]["ituri"] == (1260, 470)
+    @test narrow[2]["sud_ubangi"] == (2, 1)
+    @test narrow[3] == (1426, 552)
+    ## A footnote or page line ending in a number adds no zone.
+    @test sort(collect(keys(narrow[1]["ituri"]))) == ["bunia", "rwampara"]
 end
 
 @testitem "no zone or province name in the manifest ends in a digit" begin
