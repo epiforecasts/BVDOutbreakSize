@@ -6,7 +6,7 @@ using LinearAlgebra: cholesky, Symmetric, I, Diagonal, diag,
 using ComposableRecurrences: ComposableRecurrences, Recurrence, Convolution,
     PerStratum, TimeVarying, Primary, Depletion, Redistribute,
     Allocate, Flow, Share, Truncate, Recent, Derived, Survival,
-    kernel_weights
+    kernel_weights, delay_masses
 ## Loaded for ComposableRecurrences' dual-number extension, which takes the
 ## local derivatives of the occupancy balance's `Derived` flows.
 using ForwardDiff: ForwardDiff

@@ -438,9 +438,12 @@ over lags `d` that stay in range. A matrix is taken row by row, one series
 per patch. Maps infections to onsets, onsets to deaths, onsets to reports
 and onsets to detected exports. An `Inf` in `x` gives `NaN` on the days it
 reaches through a lag of zero weight.
+The keywords pass to the `Convolution` call: `gain` scales the output (a
+scalar, a length-`n` vector or an `(n_patches × n)` matrix) and `add` adds to
+it, in the same pass.
 """
-convolve_delay(x::AbstractVecOrMat, delay::AbstractVector) =
-    Convolution(delay)(x)
+convolve_delay(x::AbstractVecOrMat, delay::AbstractVector; kwargs...) =
+    Convolution(delay)(x; kwargs...)
 
 """
 Discrete convolution of two delay PMFs `a` and `b` (both indexed from
@@ -454,9 +457,7 @@ streams from their component PMFs.
 function convolve_pmf(a::AbstractVector, b::AbstractVector)
     (isempty(a) || isempty(b)) &&
         return zeros(promote_type(eltype(a), eltype(b)), 0)
-    ## `b` padded with `length(a) - 1` zeros, so the causal convolution runs
-    ## to the last lag of the sum and gives the full-length product.
-    return Convolution(a)(vcat(b, zeros(eltype(b), length(a) - 1)))
+    return delay_masses((a, b), length(a) + length(b) - 1)
 end
 
 """

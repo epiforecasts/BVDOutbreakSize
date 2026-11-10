@@ -482,7 +482,9 @@ ascertainment and the background CFR for reuse by
     asc_state ~ to_submodel(ascertainment)
     CFR = cfr_state.CFR
     p_death = asc_state.p_death
-    bvd_deaths_daily = convolve_delay(onsets, (p_death * CFR) .* od_state.pmf)
+    bvd_deaths_daily = convolve_delay(
+        onsets, od_state.pmf; gain = p_death * CFR
+    )
 
     n = length(bvd_deaths_daily)
     nc = something(cutoff, n)
@@ -492,7 +494,9 @@ ascertainment and the background CFR for reuse by
     if case_bg_daily !== nothing
         bgcfr_state ~ to_submodel(background_cfr)
         cfr_bg = bgcfr_state.cfr_bg
-        bg_death_daily = convolve_delay(case_bg_daily, cfr_bg .* od_state.pmf)
+        bg_death_daily = convolve_delay(
+            case_bg_daily, od_state.pmf; gain = cfr_bg
+        )
         λ_bg_death = sum(upto(bg_death_daily, nc)) / nc
         bg_death_sigma = zero(CFR)
     else
@@ -1541,7 +1545,7 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
     fd_pmf = convolve_pmf(incubation_pmf, od_pmf)
     ## Per-day expected export-death increment. Its running sum is the
     ## cumulative export-death intensity `Λ_d`.
-    death_daily = convolve_delay(travelled_prevalence, CFR .* fd_pmf)
+    death_daily = convolve_delay(travelled_prevalence, fd_pmf; gain = CFR)
 
     if isempty(export_death_days)
         ## No dated series: cumulative single-total Poisson at the cut-off.
@@ -2260,7 +2264,7 @@ function _patch_bvd_admissions(
         reports_matrix::AbstractMatrix, ::Nothing, p_iso_bvd::Real,
         p_drc::Real, adm_pmf::AbstractVector
     )
-    return (p_iso_bvd * p_drc) .* convolve_delay(reports_matrix, adm_pmf)
+    return convolve_delay(reports_matrix, adm_pmf; gain = p_iso_bvd * p_drc)
 end
 function _patch_bvd_admissions(
         reports_matrix::AbstractMatrix, asc::AbstractVector, p_iso_bvd::Real,
@@ -2271,7 +2275,7 @@ function _patch_bvd_admissions(
         eltype(reports_matrix), eltype(asc), typeof(p_iso_bvd),
         typeof(p_drc), eltype(adm_pmf)
     )
-    A_raw = (p_iso_bvd * p_drc) .* convolve_delay(reports_matrix, adm_pmf)
+    A_raw = convolve_delay(reports_matrix, adm_pmf; gain = p_iso_bvd * p_drc)
     A_bvd = Matrix{T}(undef, np, n)
     @inbounds for t in 1:n
         total = zero(T)
@@ -2356,8 +2360,10 @@ function _patch_demand(
         w::AbstractVecOrMat, S_clin::AbstractVector,
         ruleout_pmf::AbstractVector, κ::Real, demand::AbstractVector
     )
-    stock = convolve_delay(A_bvd, S_clin) .+ _patch_background_stock(
-        A_bg, w, _background_stay_survival(ruleout_pmf, κ)
+    stock = convolve_delay(
+        A_bvd, S_clin; add = _patch_background_stock(
+            A_bg, w, _background_stay_survival(ruleout_pmf, κ)
+        )
     )
     return _share_out(stock, demand)
 end
@@ -2642,10 +2648,9 @@ in-care fraction and the daily series for forecasting and replication.
     ## true-case (`p_iso_bvd`) and non-BVD (`p_iso`) inflows. Uncapped latent
     ## demand. Capacity enters only as a censoring bound below.
     A_bvd = convolve_delay(
-        p_iso_bvd .* p_drc .* bvd_reports_daily,
-        adm_delay_state.pmf
+        bvd_reports_daily, adm_delay_state.pmf; gain = p_iso_bvd * p_drc
     )
-    A_bg = convolve_delay(p_iso .* bg_daily, adm_delay_state.pmf)
+    A_bg = convolve_delay(bg_daily, adm_delay_state.pmf; gain = p_iso)
     if eltype(A_bvd) === Any
         A_bvd = convert(Vector{eltype(C)}, A_bvd)
         A_bg = convert(Vector{eltype(C)}, A_bg)
@@ -3118,8 +3123,7 @@ the daily recovered series and the cut-off total.
     ## Survivors among confirmed cases, lagged by the confirmation-to-recovery
     ## delay.
     recovered_daily = convolve_delay(
-        confirmed_daily,
-        p_recover .* delay_state.pmf
+        confirmed_daily, delay_state.pmf; gain = p_recover
     )
 
     n = something(cutoff, length(confirmed_daily))
