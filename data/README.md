@@ -268,6 +268,7 @@ Hyphen, space and accent differences need no entry.
 The scanner prints every zone key per province with the spellings behind it, so a new variant shows up as a second key rather than a silent second series.
 Tshopo province has a health zone named Tshopo (from SitRep 091); the scanner reads a province name met again inside its own section as that zone.
 SitRep 140 prints the Ituri `A ventiler` cases cell as `AN`, which the scanner reads as `NA`.
+SitRep 177's text layer sets some names one space from their cases cell (`Rwampara 1219`), and the scanner splits the count off.
 
 Validation admits a vintage only when, in every province, the zone rows plus the unallocated row sum exactly to the committed `province_confirmed_history` and `province_death_history` value, and the provinces to the national totals.
 On the 14 dates the province blocks do not carry (SitReps 018 to 031, before Tableau 1 existed, and SitRep 073, whose Tableau 1 contradicts itself) the check is against the printed province rows and the national totals instead.
@@ -680,10 +681,7 @@ No script tracks mirror-sourced values, so this check is manual.
 - **SitRep 177 (7 November)**: the report was published with the editors' review notes still in the text, six `(À l'équipe : ...)` notes; searched every cached report for `quipe :`, and SitRep 177 is the only hit.
   Two of them say a printed figure is wrong, so those cells are listed in `MISPRINTED` in `scripts/province_care_manifest.jl`: Ituri's `363 patients (130 confirmés et 228 suspects) ... (363 la veille)`, noted as `363 la veille + 79 admissions − 71 sorties = 371 et non 363 ; 130 confirmés + 228 suspects = 358`, and Nord-Kivu's `81 nouvelles admissions (6 confirmés et 73 suspects)`, noted as `6 + 73 = 79 et non 81`.
   A third sits on the page-1 samples analysed (`423 (À l'équipe : Q2)`); the laboratory bullets sum to 584 (Ituri 279, Nord-Kivu 276, Tshopo 10, Haut-Uélé 19, no Bas-Uélé bullet), which enters `tests_analysed_daily_history` as at SitReps 162 and 176.
-  The isolation tile (1010) cannot be decomposed, since only Ituri and Nord-Kivu print a count, and it is kept as printed; it is not a repeat (1016 the day before), but it probably includes Ituri's flagged 363, so an Ituri count corrected by a later report or a re-issued PDF would move it by up to 13.
-  Cases and deaths rise by exactly the printed 41 and 21, with no harmonisation note.
-  Its text layer sets several Tableau 2 names one space from their cases cell (`Rwampara 1219`, `Sud Ubangi 2`), which `scripts/scan_zone_tableau2.jl` now splits off; every earlier vintage scans unchanged.
-  The onset figure is SitRep 170's image byte for byte and is not digitised.
+  The isolation tile (1010) is kept as printed.
 - **Laboratory, SitRep 157 (18 October)**: the Bas-Uélé bullet reads `12 nouveaux échantillons reçus au laboratoire de Buta dont 4 nouveaux échantillons ont été envoyés au laboratoire Isiro tous sont revenus négatifs`, and 12 is the count that closes the provinces to the page-1 500.
 - **`candidate_signals.csv` gap at SitRep 128**: the run that added SitRep 128 recorded only `poe_*`, `eds_*`, `vaccination_*`, `smsps_confirmed_coverage` and `psea_zs_signalement_awareness` for that vintage, silently dropping `alerts_total_day`, `alerts_validated_alive`, `alerts_validated_dead_community`, `alerts_investigated`, `alert_investigation_rate`, `contacts_seen`, `contacts_under_follow_up` and `contact_tracing_coverage`, all of which had been recorded continuously through SitRep 127 and are still printed at 128 (Tableau 3 and the section 2.1.1 contact-tracing prose). This run resumes all of them from SitRep 129 onward without backfilling 128's own single-day gap; a future update could close it directly from the already-cached `SitRep_MVE_128_2026.pdf`.
 

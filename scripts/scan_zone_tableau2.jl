@@ -306,9 +306,9 @@ function scan_tableau2(text::AbstractString)
         consumed[i] && continue
         isempty(strip(line)) && continue
         parts = split(strip(line), r"\s{2,}")
-        ## SitRep 177's text layer sets some names one space from their
-        ## cases cell ("Rwampara 1219", "Sud Ubangi 2"); no zone or
-        ## province name ends in a digit, so split the count off.
+        ## A name can sit one space from its cases cell ("Rwampara
+        ## 1219"); no zone or province name ends in a digit, so split
+        ## the count off.
         m = match(r"^(.*[^0-9\s])\s([0-9]+)$", parts[1])
         if m !== nothing && occursin(r"[a-z]", fold(m[1]))
             parts = vcat(SubString{String}[m[1], m[2]], parts[2:end])
