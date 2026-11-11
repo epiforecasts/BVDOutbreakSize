@@ -51,8 +51,7 @@ A province paragraph that repeats an earlier report's word for word, or says it 
 List its (SitRep, province) in `STALE` in `scripts/province_care_manifest.jl`, with its reason, so the manifest leaves it out of both blocks; the CSVs keep the printed values.
 The list holds Haut-Uélé on SitReps 152, 159 and 163, Bas-Uélé on SitReps 155 and 156, and Ituri and Nord-Kivu on SitRep 176 (see the notes below).
 `scripts/scan_province_care.jl` reads no paragraph of SitReps 178 and 179, so their cells come from the blind read alone.
-SitRep 178 opens every province paragraph with a short census (`Ituri : 347 patients aux lits (127 confirmés, 220 suspects), 56 admissions, 70 sorties`), and SitRep 179 does so for Ituri and Tshopo.
-A single printed figure that cannot be right is listed in `MISPRINTED` by (SitRep, province, CSV column), and only that cell is left out of its block; the list holds SitRep 164 Nord-Kivu admissions.
+A single printed figure that cannot be right is listed in `MISPRINTED` by (SitRep, province, CSV column), and only that cell is left out of its block; the list holds SitRep 164 Nord-Kivu admissions, SitRep 177 Ituri patients and Nord-Kivu admissions, and SitRep 179 Nord-Kivu patients.
 A province occupancy dated after the last day of the national `isolation_history` is left out of `[province_isolation_history]`, since the province counts are fitted as splits inside the national window, and it enters once a later tile is printed (SitRep 164's four counts entered with SitRep 165's tile).
 The script reads that date from `observations.toml`, so advance the national `isolation_history` before step 3.
 Table-era bed counts (to SitRep 080) are taken from the scan's `Nombre de lits` row alone, because the blind read's table-era bed figures are implied from the printed rate, which the national `bed_capacity_history` already carries.
