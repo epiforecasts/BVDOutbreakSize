@@ -50,7 +50,8 @@ To advance the two blocks when new reports land, after `download_sitreps.jl`:
 A province paragraph that repeats an earlier report's word for word, or says it carries the day before forward, is a stale carry-forward.
 List its (SitRep, province) in `STALE` in `scripts/province_care_manifest.jl`, with its reason, so the manifest leaves it out of both blocks; the CSVs keep the printed values.
 The list holds Haut-Uélé on SitReps 152, 159 and 163, Bas-Uélé on SitReps 155 and 156, and Ituri and Nord-Kivu on SitRep 176 (see the notes below).
-SitReps 178 and 179 open each province's paragraph with a short census (`Ituri : 347 patients aux lits (127 confirmés, 220 suspects), 56 admissions, 70 sorties`), which `scripts/scan_province_care.jl` does not read, so their cells enter from the blind read alone; the rescan of the current archive also loses SitReps 023 and 046, whose PDFs insp.cd no longer serves, so `province_care_scanned.csv` is kept as committed.
+`scripts/scan_province_care.jl` reads no paragraph of SitReps 178 and 179, so their cells come from the blind read alone.
+SitRep 178 opens every province paragraph with a short census (`Ituri : 347 patients aux lits (127 confirmés, 220 suspects), 56 admissions, 70 sorties`), and SitRep 179 does so for Ituri and Tshopo.
 A single printed figure that cannot be right is listed in `MISPRINTED` by (SitRep, province, CSV column), and only that cell is left out of its block; the list holds SitRep 164 Nord-Kivu admissions.
 A province occupancy dated after the last day of the national `isolation_history` is left out of `[province_isolation_history]`, since the province counts are fitted as splits inside the national window, and it enters once a later tile is printed (SitRep 164's four counts entered with SitRep 165's tile).
 The script reads that date from `observations.toml`, so advance the national `isolation_history` before step 3.
@@ -240,6 +241,7 @@ The table itself is unchanged, so the scanner matches the caption as far as `par
 The series run to SitRep 179 (9 November), with SitRep 169 (30 October) listed in `[skip_dates]` (see the SitRep 170 note below); SitReps 142 (3 October) and 172 (2 November) are not published on insp.cd.
 From SitRep 147 Dakwa (Bas-Uélé) is carried in the Bas-Uélé unallocated row, because it has no polygon in the health-zone map (see the inclusion rules below).
 SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
+On 11 November `download_sitreps.jl` did not fetch SitReps 023 and 046 into a fresh archive, and its log does not name them, so a rescan from that archive loses their rows in `province_care_scanned.csv`, which is kept as committed rather than regenerated.
 SitRep 048 (1 July) is filled from the INRB-UMIE mirror under the fallback order below, since its zones sum to the national totals; SitRep 057 (10 July) is not, since the mirror's zones sum to 1 878 cases against the national 1 873.
 The province blocks carry 1 July from the same mirror zones and 26 July (SitRep 073, whose Tableau 1 contradicts itself) from the committed Tableau 2 zone column.
 A paste of the scanner's output drops 1 July, so append new vintages instead.
