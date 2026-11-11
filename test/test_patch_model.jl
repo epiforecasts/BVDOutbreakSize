@@ -2225,3 +2225,55 @@ end
     @test destination_weighted_kernel(K, η)[:, 1] ≈
         destination_weighted_kernel(K, [0.0, 0.0, 0.1, -0.1])[:, 1]
 end
+
+@testitem "patch_infections: matches the renewal written as a loop" begin
+    using BVDOutbreakSize: patch_infections
+    using Random: Xoshiro
+
+    ## The renewal with importation and depletion written out day by day,
+    ## with an importation intensity that varies by origin and day, a pool
+    ## that binds in one patch and a generation interval longer than the
+    ## grid.
+    rng = Xoshiro(20261109)
+    np, n, L = 3, 30, 4
+    R = 1.5 .+ 1.5 .* rand(rng, np, n)
+    g = rand(rng, 40)
+    g ./= sum(g)
+    seeds = 1 .+ 5 .* rand(rng, np, L)
+    K = 0.3 .* rand(rng, np, np)
+    for p in 1:np
+        K[p, p] = 0.0
+    end
+    ε = 0.2 .+ 0.5 .* rand(rng, np, n)
+    N = [25.0, 800.0, 5000.0]
+    st = patch_infections(R, g, seeds, K, ε, N)
+
+    I = zeros(np, n)
+    arrivals = zeros(np, n)
+    I[:, 1:L] .= seeds
+    S = [max(N[p] - sum(seeds[p, :]), 0.0) for p in 1:np]
+    for t in (L + 1):n
+        G = [
+            R[p, t] * sum(I[p, t - s] * g[s] for s in 1:(t - 1)) for p in 1:np
+        ]
+        for p in 1:np
+            out = sum(K[q, p] for q in 1:np if q != p)
+            arrivals[p, t] = sum(
+                ε[q, t] * K[p, q] * G[q] for q in 1:np if q != p
+            )
+            y = (1 - ε[p, t] * out) * G[p] + arrivals[p, t]
+            I[p, t] = S[p] * (1 - exp(-y / N[p]))
+            S[p] *= exp(-y / N[p])
+        end
+    end
+    @test st.infections ≈ I rtol = 1.0e-12
+    @test st.importation ≈ arrivals rtol = 1.0e-12
+    ## The smallest pool is more than half used, so the depletion binds.
+    @test S[1] < 0.5 * (N[1] - sum(seeds[1, :]))
+
+    ## A seed that covers the grid is the whole trajectory, with nothing
+    ## imported.
+    long = patch_infections(R[:, 1:3], g, seeds, K, ε[:, 1:3], N)
+    @test long.infections == seeds[:, 1:3]
+    @test all(iszero, long.importation)
+end

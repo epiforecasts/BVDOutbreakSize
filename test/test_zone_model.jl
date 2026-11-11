@@ -2618,3 +2618,58 @@ end
     @test nrow(mc.table) == length(inputs.meld.cells_patch)
     @test mc.dimension == inputs.meld.d
 end
+
+@testitem "zone_pre_convolution: the pre-t0 part of the sum" begin
+    using BVDOutbreakSize: zone_pre_convolution
+    I = [1.0 2.0 4.0 8.0 16.0 32.0 64.0; 3.0 1.0 4.0 1.0 5.0 9.0 2.0]
+    w = [0.5, 0.3, 0.2]
+    for first_lag in (0, 1), t0 in (1, 4, 8)
+        ## `w[i]` weighs lag `s = i - 1 + first_lag`, and only days
+        ## `1 ≤ t - s < t0` count.
+        ref = [
+            sum(
+                (
+                    w[i] * I[p, t - (i - 1 + first_lag)]
+                        for i in eachindex(w)
+                        if 1 <= t - (i - 1 + first_lag) < t0
+                );
+                init = 0.0
+            )
+                for p in 1:2, t in 1:7
+        ]
+        @test zone_pre_convolution(I, w, t0, first_lag) ≈ ref
+    end
+end
+
+@testitem "zone share renewal: arrivals with no infected senders" begin
+    using BVDOutbreakSize: zone_share_renewal
+    ## Two patches of two zones; the second patch has no infections, so
+    ## nothing reaches the first patch's import pattern.
+    ranges = [1:2, 3:4]
+    n, t0 = 10, 3
+    nd = n - t0 + 1
+    I_bar = vcat(fill(5.0, 1, n), zeros(1, n))
+    force_pre = vcat(fill(2.0, 1, n), zeros(1, n))
+    within = [
+        0.0 1.0 0.0 0.0; 1.0 0.0 0.0 0.0; 0.0 0.0 0.0 1.0;
+        0.0 0.0 1.0 0.0
+    ]
+    between = [
+        0.0 0.0 0.5 0.5; 0.0 0.0 0.5 0.5; 0.5 0.5 0.0 0.0;
+        0.5 0.5 0.0 0.0
+    ]
+    mix = (;
+        within, between, origin_weight = fill(1.0, 4),
+        import_fraction = fill(0.2, 2, n), patch_of_zone = [1, 1, 2, 2],
+    )
+    st = zone_share_renewal(
+        I_bar, [0.6, 0.4], 0.1 .* randn(nd, 4), [0.3, 0.7, 0.5, 0.5],
+        ranges, t0, force_pre; mix, ε = fill(0.05, 4)
+    )
+    for j in 1:nd
+        ## The first patch's arrivals still land, by its own force.
+        @test sum(st.imports[j, 1:2]) ≈ 0.2 * 5.0 rtol = 1.0e-12
+        @test sum(st.infections[j, 1:2]) ≈ 5.0 rtol = 1.0e-12
+        @test all(st.imports[j, 1:2] .> 0)
+    end
+end

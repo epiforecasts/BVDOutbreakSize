@@ -1010,7 +1010,7 @@ the onsets through the onset-to-confirmation kernel, so [`bvd_joint`](@ref)
 carries them once and hands the matrix to both.
 """
 function _patch_carried(onsets_matrix::AbstractMatrix, kernel::AbstractVector)
-    return convolve_rows(onsets_matrix, kernel)
+    return convolve_delay(onsets_matrix, kernel)
 end
 
 ## A positive vector over its geometric mean, so its logs sum to zero.
@@ -1025,7 +1025,7 @@ onset-to-report delay, the rows summing to the national `bvd_reports_daily`
 of [`reported_cases_model`](@ref). Returns an `(n_patches × n)` matrix.
 """
 function _patch_reports(onsets_matrix::AbstractMatrix, report_pmf::AbstractVector)
-    return convolve_rows(onsets_matrix, report_pmf)
+    return convolve_delay(onsets_matrix, report_pmf)
 end
 
 """

@@ -221,12 +221,16 @@ end
     SumToZeroReference,
 ] begin
     using Mooncake: Mooncake
+    using LinearAlgebra: LowerTriangular
     ## No hand-written rule: this checks the rule Mooncake derives for each
     ## helper against finite differences.
     rng = Xoshiro(4)
     Q = sum_to_zero_basis(4)
     s = [0.05, 0.03, 0.08]
-    L = rand(rng, LKJCholesky(3, 2.0)).L
+    ## The LKJ draw leaves the factor's upper triangle uninitialised, and
+    ## the finite-difference check reads the whole parent matrix, so a NaN
+    ## or huge value left there fails it at random. A copy zeroes it.
+    L = LowerTriangular(Matrix(rand(rng, LKJCholesky(3, 2.0)).L))
     F = sum_to_zero_factor(Q, s, L)
     Mooncake.TestUtils.test_rule(
         rng, sum_to_zero_factor, Q, s, L; is_primitive = false
@@ -465,7 +469,7 @@ end
 end
 
 @testitem "sum_to_zero_knots: the AR(1) recursion by hand" begin
-    using BVDOutbreakSize: sum_to_zero_knots, sum_to_zero_ar1!
+    using BVDOutbreakSize: sum_to_zero_knots, sum_to_zero_ar1
 
     F_level = [1.0 0.0; -0.5 0.5; -0.5 -0.5]
     F_drift = [0.2 0.1; 0.0 -0.3; -0.2 0.2]
@@ -485,10 +489,10 @@ end
     ## No drift directions: the level decays.
     @test sum_to_zero_knots(F_level, zeros(3, 0), z_level, zeros(0, 2), φ) ≈
         hcat(δ1, φ .* δ1, φ^2 .* δ1)
-    ## Continuing from knot `k0 > 1` leaves the earlier knots alone.
-    knots = hcat(δ1, δ2, zeros(3))
-    sum_to_zero_ar1!(knots, F_drift, Z[:, 2:2], φ, 2)
-    @test knots ≈ hcat(δ1, δ2, δ3)
+    ## Continuing from a later knot takes that knot as the start.
+    @test sum_to_zero_ar1(δ2, F_drift, Z[:, 2:2], φ) ≈ reshape(δ3, 3, 1)
+    @test sum_to_zero_ar1(δ2, F_drift, zeros(size(F_drift, 2), 0), φ) ==
+        zeros(3, 0)
 end
 
 @testitem "relative_multiplier: identified contrasts within each group" begin
