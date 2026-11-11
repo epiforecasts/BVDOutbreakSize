@@ -306,6 +306,13 @@ function scan_tableau2(text::AbstractString)
         consumed[i] && continue
         isempty(strip(line)) && continue
         parts = split(strip(line), r"\s{2,}")
+        ## A name can sit one space from its cases cell ("Rwampara
+        ## 1219"); split the count off (test_zone_tableau2_parser.jl
+        ## checks that no name ends in a digit).
+        m = match(r"^(.*[^0-9\s])\s([0-9]+)$", parts[1])
+        if m !== nothing && occursin(r"[a-z]", fold(m[1]))
+            parts = vcat(SubString{String}[m[1], m[2]], parts[2:end])
+        end
         name = parts[1]
         start = 2
         if !occursin(r"[a-z]", fold(name))

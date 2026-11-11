@@ -87,10 +87,22 @@ const STALE = Dict(
     ## patients at the start of 19 October.
     (155, "bas_uele") => "word-for-word repeat of SitRep 154",
     (156, "bas_uele") => "word-for-word repeat of SitRep 154",
+    ## Ituri's and Nord-Kivu's paragraphs repeat SitRep 175's census word for
+    ## word (344 patients, "341 la veille"; 578 patients, "595 la veille",
+    ## 394/434 lits), so their "la veille" figures are SitRep 175's own
+    ## previous day rather than SitRep 175's counts; only the admission and
+    ## discharge figures changed.
+    (176, "ituri") => "SitRep 175's census repeated with SitRep 175's la veille",
+    (176, "nord_kivu") => "SitRep 175's census repeated with SitRep 175's la veille",
 )
 const MISPRINTED = Dict(
     (164, "nord_kivu", :admissions_24h) =>
         "495 admissions cannot close SitRep 163's 495 patients to 497",
+    ## SitRep 177's own editors' notes say these two cells are wrong.
+    (177, "ituri", :patients_isolated) =>
+        "the report's own editors' note says 363 does not close (371 by flow, 358 by split)",
+    (177, "nord_kivu", :admissions_24h) =>
+        "the report's own editors' note says the 6 + 73 split gives 79, not 81",
 )
 const ORDER = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo", "bas_uele",
