@@ -697,11 +697,9 @@ MarkdownTable(vintage_table) #hide
 # The source reports no interval on the spread, so the SD prior is our own choice:
 #
 # ```math
-# \mu_{\text{inc}} \sim \mathrm{Normal}(6.3,\ 0.54), \qquad
-# \sigma_{\text{inc}} \sim \mathrm{Normal}(3.5,\ 0.8), \tag{21}
+# \mu_{\text{inc}} \sim \mathrm{Normal}^{+}(6.3,\ 0.54), \qquad
+# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(3.5,\ 0.8). \tag{21}
 # ```
-#
-# both truncated below at one day.
 #
 # Every delay is discretised to a daily PMF over lags $0,\dots,n_{\max}$ by double interval censoring [charniga2024](@cite).
 # The line-list reanalysis gives the onset-to-admission delay, used for both suspected-case reporting and export detection, and the two onset-to-death components.
@@ -742,8 +740,8 @@ MarkdownTable(vintage_table) #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown, Distributions
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.censored_delay_model(30;
-#md #         mean_prior = truncated(Normal(5, 1); lower = 1),
-#md #         sd_prior = truncated(Normal(3, 1); lower = 1))), "\n```"))
+#md #         mean_prior = truncated(Normal(5, 1); lower = 0),
+#md #         sd_prior = truncated(Normal(3, 1); lower = 0))), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -771,11 +769,10 @@ MarkdownTable(vintage_table) #hide
 # ```math
 # \alpha_{\text{oa}} \sim \mathrm{LogNormal}(\log 1.18,\ 0.25), \quad
 # \theta_{\text{oa}} \sim \mathrm{LogNormal}(\log 3.69,\ 0.32), \\
-# \alpha_{\text{ad}} \sim \mathrm{Normal}(2.15,\ 0.60), \quad
-# \theta_{\text{ad}} \sim \mathrm{Normal}(3.91,\ 1.38). \tag{24}
+# \alpha_{\text{ad}} \sim \mathrm{Normal}^{+}(2.15,\ 0.60), \quad
+# \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38). \tag{24}
 # ```
 #
-# The admission-to-death shape is truncated below at 0.01 and its scale at 0.1.
 # The onset-to-death PMF is the convolution of the two discretised components (implied mean about 13 d).
 # Its source is shown with the deaths submodel.
 #
@@ -796,11 +793,10 @@ MarkdownTable(vintage_table) #hide
 # Its prior is our own choice, a short turnaround with a heavy right tail for shipment to a confirmatory laboratory and the analysis queue:
 #
 # ```math
-# \mu_{\text{rec}} \sim \mathrm{Normal}(4.5,\ 1.0), \qquad
-# \sigma_{\text{rec}} \sim \mathrm{Normal}(4.0,\ 0.75), \tag{26}
+# \mu_{\text{rec}} \sim \mathrm{Normal}^{+}(4.5,\ 1.0), \qquad
+# \sigma_{\text{rec}} \sim \mathrm{Normal}^{+}(4.0,\ 0.75). \tag{26}
 # ```
 #
-# both truncated below at one day.
 # It drives the laboratory analysed-specimen volume, the confirmed cases and the confirmed deaths, and its source is shown with the laboratory submodel.
 # The onset-to-sample cohort of [akilimali2026](@cite) grounds the sum of the onset-to-report and report-to-analysed delays.
 # Its reported mean (7.4 d, 95% CrI 5.3 to 13.5) and median (4.8 d, 3.46 to 7.84) enter as Normal terms on the mean and median of the summed delay, each with SD the CrI half-width over 1.96.
@@ -1191,7 +1187,7 @@ cfr_prior_fig #hide
 # A BVD true case leaves by dying at the in-care case-fatality ratio $\text{CFR}_{\text{iso}}$ over the admission-to-death stay, or by recovering over the longer admission-to-recovery stay.
 # A non-case leaves by a negative test over the rule-out stay, or absconds.
 # The death-stay prior is the admission-to-death delay from the line-list reanalysis [bdbv_linelist_analysis_2026](@cite), and the non-BVD rule-out stay is its own delay, centred on the report-to-receipt laboratory turnaround with wider priors.
-# The stays are discretised delays with priors on the admission delay mean $\mathrm{Normal}(2,\ 1)$ and SD $\mathrm{Normal}(1.5,\ 1)$, the death-stay Gamma shape $\mathrm{Normal}(2.15,\ 0.60)$ and scale $\mathrm{Normal}(3.91,\ 1.38)$, the recovery-stay mean $\mathrm{Normal}(14,\ 5)$ and SD $\mathrm{Normal}(8,\ 4)$, and the rule-out-stay mean $\mathrm{Normal}(4.5,\ 2)$ and SD $\mathrm{Normal}(4,\ 1.5)$, each truncated below.
+# The stays are discretised delays with priors on the admission delay mean $\mathrm{Normal}^{+}(2,\ 1)$ and SD $\mathrm{Normal}^{+}(1.5,\ 1)$, the death-stay Gamma shape $\mathrm{Normal}^{+}(2.15,\ 0.60)$ and scale $\mathrm{Normal}^{+}(3.91,\ 1.38)$, the recovery-stay mean $\mathrm{Normal}^{+}(14,\ 5)$ and SD $\mathrm{Normal}^{+}(8,\ 4)$, and the rule-out-stay mean $\mathrm{Normal}^{+}(4.5,\ 2)$ and SD $\mathrm{Normal}^{+}(4,\ 1.5)$.
 #
 # Each day's occupancy is the previous day's bed stock plus the day's admissions, less its deaths, recoveries, rule-outs and absconds.
 # The abscond outflow drains the suspected pool at a small daily fraction $\kappa$ of the previous day's suspected occupancy,
@@ -1626,7 +1622,7 @@ cfr_prior_fig #hide
 #     \text{confirmed}_{t-s}\, f_{\text{cr},s}.
 # ```
 #
-# $f_{\text{cr}}$ is a discretised LogNormal with mean $\sim \mathrm{Normal}(14,\ 5)$ and SD $\sim \mathrm{Normal}(8,\ 4)$, both truncated below at one day.
+# $f_{\text{cr}}$ is a discretised LogNormal with mean $\sim \mathrm{Normal}^{+}(14,\ 5)$ and SD $\sim \mathrm{Normal}^{+}(8,\ 4)$.
 # The recovery proportion is $1 - \mathrm{CFR}$ shifted on the log-odds scale by a sampled offset $\delta_{\text{rec}} \sim \mathrm{Normal}(0, 0.5)$ for the confirmed cases' departure from the population the CFR is defined over,
 #
 # ```math
