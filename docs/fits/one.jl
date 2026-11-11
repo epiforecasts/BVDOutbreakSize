@@ -13,6 +13,10 @@
 # loads its parent strictly from the same cache: fit `joint` or
 # `frozen_validation` first.
 #
+# A base fit starts from the warm-start state the last fit of its id left in
+# `BVD_WARMSTART_PARENT` (default `logs/warmstart_parent`), and writes its own
+# to `BVD_WARMSTART_OUT` (default `logs/warmstart`); see `warmstart.jl`.
+#
 # The fit's convergence diagnostics and headline posteriors are printed, and
 # appended to the GitHub Actions job summary when `GITHUB_STEP_SUMMARY` is set.
 # A diagnostics bundle (`<key>_diagnostics/*.csv`) is written next to the
@@ -24,6 +28,7 @@ Pkg.instantiate()
 using BVDOutbreakSize
 include(joinpath(@__DIR__, "registry.jl"))
 include(joinpath(@__DIR__, "summary.jl"))
+include(joinpath(@__DIR__, "convergence.jl"))
 
 const ID = strip(get(ENV, "BVD_FIT_ID", ""))
 const CACHE = fit_cache_dir()
@@ -51,7 +56,14 @@ key = fit_key(ID)
 if DRYRUN
     println(key)
 else
-    result = fit_or_load(key, specs[i].thunk; cache_dir = CACHE, refit = REFIT)
+    ## The parent state is read only on a miss, inside the thunk's sampler.
+    warm_start = fit_warm_start(ID, key)
+    CURRENT_WARM_START[] = warm_start
+    result = try
+        fit_or_load(key, specs[i].thunk; cache_dir = CACHE, refit = REFIT)
+    finally
+        CURRENT_WARM_START[] = nothing
+    end
     @info "cached" id = ID key = key
     ## Keys are rebuilt before the diagnostics read them: a chain that came
     ## back from the cache was serialised by another FlexiChains version.
