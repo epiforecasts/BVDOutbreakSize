@@ -125,11 +125,16 @@ end
         check(m, (; delay_mean = 1.0e-6, delay_sd = 1.0e-6))
     end
     ## A Gamma shape or scale that underflows to exactly zero must not throw.
+    ## A zero shape gives the point mass at lag 0. A zero scale gives
+    ## a degenerate mass total, so it takes the uniform fallback of
+    ## `discretise_censored`.
     for p in gamma
         m = gamma_delay_model(30; p.alpha_prior, p.theta_prior)
         check(m, (; α = 1.0e-6, θ = 1.0e-6))
         check(m, (; α = 0.0, θ = 3.9))
+        @test fix(m, (; α = 0.0, θ = 3.9))().pmf[1] ≈ 1.0
         check(m, (; α = 2.15, θ = 0.0))
+        @test all(fix(m, (; α = 2.15, θ = 0.0))().pmf .≈ 1 / 31)
     end
 end
 

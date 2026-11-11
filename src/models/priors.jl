@@ -86,14 +86,16 @@ to a daily PMF over lags `0 … nmax` by double interval censoring
 ([`discretise_censored`](@ref)), keeping the lag-0 bin, since an
 onset-to-event delay can be same-day unlike the generation interval. This
 carries a line-list delay reanalysis through on its natural parameters with
-the reported posterior uncertainty. Returns
+the reported posterior uncertainty. Both priors must be positive-supported,
+since the Gamma is built without its argument check. Returns
 `(; pmf, dist, mean, sd, alpha, theta)`.
 """
 @model function gamma_delay_model(nmax::Integer; alpha_prior, theta_prior)
     α ~ alpha_prior
     θ ~ theta_prior
-    ## Unchecked, because the priors are truncated at zero and a draw that
-    ## underflows to exactly zero must not throw.
+    ## Unchecked, so a draw that underflows to zero does not throw: a zero
+    ## shape gives the point mass at lag 0 and a zero scale the uniform
+    ## fallback of `discretise_censored`.
     dist = Gamma(α, θ; check_args = false)
     return (;
         pmf = discretise_censored(dist, nmax), dist,
