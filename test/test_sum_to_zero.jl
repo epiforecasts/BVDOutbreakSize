@@ -221,12 +221,16 @@ end
     SumToZeroReference,
 ] begin
     using Mooncake: Mooncake
+    using LinearAlgebra: LowerTriangular
     ## No hand-written rule: this checks the rule Mooncake derives for each
     ## helper against finite differences.
     rng = Xoshiro(4)
     Q = sum_to_zero_basis(4)
     s = [0.05, 0.03, 0.08]
-    L = rand(rng, LKJCholesky(3, 2.0)).L
+    ## The LKJ draw leaves the factor's upper triangle uninitialised, and
+    ## the finite-difference check reads the whole parent matrix, so a NaN
+    ## or huge value left there fails it at random. A copy zeroes it.
+    L = LowerTriangular(Matrix(rand(rng, LKJCholesky(3, 2.0)).L))
     F = sum_to_zero_factor(Q, s, L)
     Mooncake.TestUtils.test_rule(
         rng, sum_to_zero_factor, Q, s, L; is_primitive = false
