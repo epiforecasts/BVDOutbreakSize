@@ -30,27 +30,27 @@ end
     M = rand(rng, 3, 40)
     @test convolve_delay(view(M, 2, :), w) ≈ convolve_delay(M[2, :], w)
     ## A zero weight multiplies, so an `Inf` on day 2 makes day 3 `NaN`
-    ## through lag 1 (EpiAware/ComposableRecurrences.jl#297).
+    ## through lag 1.
     @test isequal(
         convolve_delay([1.0, Inf, 2.0, 3.0], [0.5, 0.0, 0.5]),
         [0.5, Inf, NaN, Inf]
     )
 end
 
-@testitem "convolve_delay: a matrix row by row" setup = [
+@testitem "convolve_rows: each row as convolve_delay" setup = [
     KernelProperties,
 ] begin
-    using BVDOutbreakSize: convolve_delay
+    using BVDOutbreakSize: convolve_rows, convolve_delay
     rng = Xoshiro(2)
     M = rand(rng, 5, 40)
     for w in (pmf(rng, 8), pmf(rng, 60), [1.0], [0.3, 0.0, 0.7])
-        Y = convolve_delay(M, w)
+        Y = convolve_rows(M, w)
         @test size(Y) == size(M)
         for p in 1:5
             @test Y[p, :] ≈ convolve_delay(M[p, :], w) rtol = 1.0e-14
         end
     end
-    @test size(convolve_delay(zeros(3, 0), pmf(rng, 4))) == (3, 0)
+    @test size(convolve_rows(zeros(3, 0), pmf(rng, 4))) == (3, 0)
 end
 
 @testitem "_share_out: each day's demand split on the stocks" setup = [

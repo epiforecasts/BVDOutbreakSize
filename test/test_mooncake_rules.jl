@@ -7,8 +7,8 @@
 ## lists every rule with the argument types its call sites pass and the
 ## edge cases its guards take. Mooncake's `test_rule` checks each case
 ## against finite differences with `is_primitive = true`, which also proves
-## the rule fires for that signature. The ComposableRecurrences kernels are
-## listed the same way and checked as derived. The speed item times one
+## the rule fires for that signature. The kernels ComposableRecurrences
+## builds are checked the same way as derived rules. The speed item times one
 ## production-sized case per rule against a process that loads the package
 ## with the `mooncake_rules` preference off, and the joint item compares
 ## the production joint's gradient with that process.
@@ -27,9 +27,8 @@
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
         zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
-        zone_gravity_kernel, zone_import_fraction, zone_mixed_outputs,
-        zone_unmixed_outputs, zone_split_inputs,
-        _share_out, _admission_centred_shares,
+        zone_gravity_kernel, zone_import_fraction,
+        convolve_rows, _share_out, _admission_centred_shares,
         _background_admission_shares, sum_to_zero_basis,
         _embedded_sum_to_zero_basis, knot_days, bin_row_increments,
         patch_rt_matrix, future_knot_days, importation_epsilon_matrix,
@@ -179,12 +178,7 @@
     ## The kernels ComposableRecurrences builds, whose rules come from the
     ## package rather than from `src/mooncake_rules.jl`. Their cases are
     ## derived rather than primitive, and the speed item leaves them out.
-    const PACKAGE_KERNELS = (
-        convolve_delay, convolve_pmf, renewal_infections, patch_infections,
-        abscond_thinned_flows, two_clock_confirmed, accumulate_occupancy,
-        onset_report_cdf_table, onset_report_anchor_series,
-        zone_share_renewal_kernel, zone_pre_convolution,
-    )
+    const PACKAGE_KERNELS = (convolve_delay, convolve_pmf, renewal_infections)
 
     ## Every native rule with the argument types its call sites pass: float
     ## arrays, matrix-row views, integer observations and scalar κ, cfr, k,
@@ -243,10 +237,10 @@
         ## patch shares, capacity on cumulative admissions and background on
         ## a knot walk over the printed patches.
         Mr = rand(rng, 4, 30) .+ 0.1
-        add!("D = 8", convolve_delay, Mr, pmf(rng, 8))
-        add!("D > n", convolve_delay, Mr, pmf(rng, 40))
+        add!("D = 8", convolve_rows, Mr, pmf(rng, 8))
+        add!("D > n", convolve_rows, Mr, pmf(rng, 40))
         add!(
-            "8 × 260, D = 42", convolve_delay, rand(rng, 8, 260) .+ 0.1,
+            "8 × 260, D = 42", convolve_rows, rand(rng, 8, 260) .+ 0.1,
             pmf(rng, 42); perf = true
         )
         add!("4 × 30", _share_out, rand(rng, 4, 30) .+ 0.1, 100 .* rand(rng, 30))
@@ -572,59 +566,6 @@
             perf = true
         )
 
-        ## The read-out after the zone renewal, from the zones' infections
-        ## and the split's trace: a patch with no zones, a patch whose
-        ## import pattern is empty on some days (so the arrivals split on
-        ## the spilled force, with no other zone's pattern to perturb into
-        ## it), and the unmixed shares on the forces.
-        function readout_args(rng, sizes; nd = 12, t0 = 4, L = 4)
-            I_bar, g, δ, w0, ranges, t0_, fp, mix, ε = zone_args(
-                rng, sizes; nd, t0, L
-            )
-            nz = size(δ, 2)
-            tr = rand(rng, 2nz, nd) .+ 0.1
-            return (
-                mixed = (
-                    rand(rng, nz, nd) .+ 0.1, tr, g, rand(rng, nz, nd), I_bar,
-                    mix.import_fraction, ranges, t0_,
-                ),
-                unmixed = (
-                    rand(rng, nz, nd) .+ 0.1, exp.(0.3 .* randn(rng, nz, nd)),
-                    g, rand(rng, nz, nd), ranges,
-                ),
-            )
-        end
-        ## The split's inputs from the daily deviations, the initial shares
-        ## and the pre-grid patch forces, with a patch that has no zones.
-        for sizes in ([3, 2], [3, 0, 2])
-            I_bar, g, δ, w0, ranges, t0_, fp = zone_args(zrng, sizes)
-            add!(
-                "$(length(sizes)) patches", zone_split_inputs, δ, w0, fp,
-                ranges, t0_
-            )
-        end
-        I_bar, g, δ, w0, ranges, t0_, fp = zone_args(
-            zrng, [21, 21, 20]; nd = 220, t0 = 30, L = 12
-        )
-        add!(
-            "62 zones, n = 220", zone_split_inputs, δ, w0, fp, ranges, t0_;
-            perf = true
-        )
-        ra = readout_args(zrng, [3, 2])
-        add!("2 patches", zone_mixed_outputs, ra.mixed...)
-        add!("2 patches", zone_unmixed_outputs, ra.unmixed...)
-        ra = readout_args(zrng, [3, 0, 2]; nd = 3, L = 6)
-        add!("patch with no zones, G > n", zone_mixed_outputs, ra.mixed...)
-        add!(
-            "patch with no zones, G > n", zone_unmixed_outputs, ra.unmixed...
-        )
-        ra = readout_args(zrng, [21, 21, 20]; nd = 220, t0 = 30, L = 12)
-        add!("62 zones, n = 220", zone_mixed_outputs, ra.mixed...; perf = true)
-        add!(
-            "62 zones, n = 220", zone_unmixed_outputs, ra.unmixed...;
-            perf = true
-        )
-
         ## The health-zone delay terms the model rebuilds on every draw: the
         ## part of a convolution that reaches back before the grid start,
         ## for a generation interval (lag 1) and a delay (lag 0) longer than
@@ -800,8 +741,8 @@ end
         @testset "$(c.name)" begin
             test_rule(
                 Xoshiro(hash(c.name)), c.f, c.args...;
-                is_primitive = c.primitive,
-                mode = ReverseMode, c.rtol, atol = 1.0e-8
+                is_primitive = c.primitive, mode = ReverseMode, c.rtol,
+                atol = 1.0e-8
             )
         end
     end
@@ -982,6 +923,46 @@ end
     @test rules_loaded()
     @test !off.rules_loaded
     @test agrees(only(on).result, only(off.result).result; rtol = 1.0e-8)
+end
+
+@testitem "Mooncake rules: pullbacks leave the output tangent as given" tags = [
+    :ad,
+] setup = [ADRuleCases] begin
+    using Mooncake: Mooncake, NoRData, tangent, zero_fcodual
+    using BVDOutbreakSize: patch_infections
+
+    ## The patch renewal pullback walks the recursion backwards through a
+    ## working copy of the output tangent rather than consuming it in place.
+    rng = Xoshiro(20260923)
+    np, n = 3, 40
+    K = rand(rng, np, np) .* 0.2
+    K[[1, 5, 9]] .= 0
+    args = (
+        rand(rng, np, n) .+ 1, rand(rng, 12), rand(rng, np, 7) .+ 1, K,
+        rand(rng, np, n) .* 0.5, fill(300.0, np),
+    )
+    out, pb = Mooncake.rrule!!(
+        zero_fcodual(patch_infections), map(zero_fcodual, args)...
+    )
+    Ī = randn(rng, np, n)
+    tangent(out).infections .= Ī
+    pb(NoRData())
+    @test tangent(out).infections == Ī
+
+    ## The zone pullback walks its days backwards through a copy of the
+    ## infection tangent and reads the other three outputs.
+    args = zone_args(rng, [3, 2])
+    out, pb = Mooncake.rrule!!(
+        zero_fcodual(zone_share_renewal_kernel), map(zero_fcodual, args)...
+    )
+    ks = (:shares, :forces, :infections, :imports)
+    ȳ = tangent(out)
+    for k in ks
+        getproperty(ȳ, k) .= randn(rng, size(args[3]))
+    end
+    given = map(k -> copy(getproperty(ȳ, k)), ks)
+    pb(NoRData())
+    @test all(map((k, v) -> getproperty(ȳ, k) == v, ks, given))
 end
 
 @testitem "Mooncake rules: the import fraction matches its formula with no arrivals" tags = [
@@ -1247,6 +1228,23 @@ end
         ),
         mgrad(split_terms, p, 0.05, 8.3, μs)
     )
+end
+
+@testitem "Mooncake rules: the occupancy rule records the model's balance" tags = [
+    :ad,
+] setup = [ADRuleCases] begin
+    using BVDOutbreakSize: _accumulate_occupancy, _OCC_CONF_HI
+
+    ## The recording forward pass the rule runs gives the model's outputs
+    ## bit for bit, and the clamp scenario reaches the confirmed cap.
+    rng = Xoshiro(20260923)
+    for kw in ((;), (; dmult = 1.6, κ = 0.08), (; stop = 59, hflat = 0.9))
+        args = occupancy_args(rng, 60; kw...)
+        y = accumulate_occupancy(args...)
+        ỹ, _, flags = _accumulate_occupancy(Val(true), args...)
+        @test all(k -> getfield(y, k) == getfield(ỹ, k), keys(y))
+        haskey(kw, :hflat) && @test any(f -> f & _OCC_CONF_HI != 0, flags)
+    end
 end
 
 @testitem "Mooncake rules: the census rule records the model's census" tags = [
