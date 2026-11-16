@@ -416,6 +416,7 @@ end
 @testitem "province care blocks: stale carry-forwards have no entry" begin
     using BVDOutbreakSize
     using Dates
+    using TOML
 
     obs = load_observations()
     iso = obs.province_isolation_history
@@ -425,12 +426,32 @@ end
     for (prov, d) in (
             ("haut_uele", "2026-10-13"), ("haut_uele", "2026-10-20"),
             ("haut_uele", "2026-10-24"), ("bas_uele", "2026-10-16"),
-            ("bas_uele", "2026-10-17"),
+            ("bas_uele", "2026-10-17"), ("nord_ubangi", "2026-11-11"),
+            ("haut_uele", "2026-11-13"), ("nord_ubangi", "2026-11-13"),
+            ("sud_ubangi", "2026-11-13"),
         )
         @test !(day(d) in iso[prov].days)
     end
     ## The report they repeat keeps its entry.
     @test day("2026-10-15") in iso["bas_uele"].days
+    @test day("2026-11-10") in iso["nord_ubangi"].days
+    @test day("2026-11-12") in iso["haut_uele"].days
+    ## STALE drops the cell from every care block, not only occupancy:
+    ## SitRep 181 is 2026-11-11 and SitRep 183 is 2026-11-13.
+    manifest = TOML.parsefile(
+        joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    )
+    for block in (
+                "province_isolation_history", "province_bed_capacity_history",
+                "province_admissions_history",
+            ),
+            (prov, d) in (
+                ("nord_ubangi", "2026-11-11"), ("haut_uele", "2026-11-13"),
+                ("nord_ubangi", "2026-11-13"), ("sud_ubangi", "2026-11-13"),
+            )
+        dates = get(manifest[block], prov, Dict("dates" => String[]))["dates"]
+        @test !(d in string.(dates))
+    end
 end
 
 @testitem "province_care_observations: weekly and change-day thinning" begin
@@ -853,7 +874,9 @@ end
     for prov in provinces
         @test all(<=(last_tile), string.(manifest["province_isolation_history"][prov]["dates"]))
     end
-    ## MISPRINTED holds SitRep 164 Nord-Kivu's admissions out of the block.
+    ## MISPRINTED holds SitRep 164's and SitRep 181's Nord-Kivu admissions
+    ## out of the block.
     adm = manifest["province_admissions_history"]["nord_kivu"]
     @test !("2026-10-25" in string.(adm["dates"]))
+    @test !("2026-11-11" in string.(adm["dates"]))
 end
