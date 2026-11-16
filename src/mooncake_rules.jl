@@ -818,15 +818,12 @@ function Mooncake.rrule!!(
     return CoDual(y, ȳ), incare_census_pullback!!
 end
 
-# Per-patch treatment kernels: the patch rows through a delay, the national
-# demand shared on the patch stocks, and the two daily share matrices.
+# Per-patch treatment kernels: the national demand shared on the patch
+# stocks, and the two daily share matrices.
 
 const _FloatMat = Matrix{<:Mooncake.IEEEFloat}
 const _FloatVector = Vector{<:Mooncake.IEEEFloat}
 
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx, Tuple{typeof(convolve_rows), _FloatMat, _FloatVector}
-)
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx, Tuple{typeof(_share_out), _FloatMat, _FloatVector}
 )
@@ -844,32 +841,6 @@ Mooncake.@is_primitive(
         _FloatVector, _FloatVector, Vector{<:Integer}, Integer,
     }
 )
-
-## Each lag adds `w[d] · M[:, 1:n−d+1]` to `Y[:, d:n]`, so the pullback is
-##
-##     M̄[:, 1:n−d+1] += w[d] · Ȳ[:, d:n],    w̄[d] += Ȳ[:, d:n] · M[:, 1:n−d+1]
-##
-## with each block contiguous.
-function Mooncake.rrule!!(
-        ::CoDual{typeof(convolve_rows)}, M::CoDual{<:_FloatMat},
-        delay::CoDual{<:_FloatVector}
-    )
-    Mp, dp = primal(M), primal(delay)
-    M̄, d̄ = tangent(M), tangent(delay)
-    Y = convolve_rows(Mp, dp)
-    Ȳ = zero(Y)
-    function convolve_rows_pullback!!(::NoRData)
-        n = size(Mp, 2)
-        for d in 1:min(length(dp), n)
-            Ȳd = view(Ȳ, :, d:n)
-            Md = view(Mp, :, 1:(n - d + 1))
-            axpy!(dp[d], Ȳd, view(M̄, :, 1:(n - d + 1)))
-            d̄[d] += dot(Ȳd, Md)
-        end
-        return NoRData(), NoRData(), NoRData()
-    end
-    return CoDual(Y, Ȳ), convolve_rows_pullback!!
-end
 
 ## Per day, with `tot = Σ_p s_p > 0` and `m = Σ_p ȳ_p s_p / tot`,
 ##
@@ -1538,16 +1509,8 @@ function Mooncake.rrule!!(
     return CoDual(s, NoFData()), betabinomial_vector_pullback!!
 end
 
-## The health-zone delay terms the model rebuilds on every draw's
-## generation interval and delays: the pre-`t0` part of a convolution, and
-## the window weights from the cumulative PMF.
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(zone_pre_convolution), Matrix{<:Mooncake.IEEEFloat},
-        Vector{<:Mooncake.IEEEFloat}, Integer, Integer,
-    },
-)
+## The health-zone window weights the model rebuilds on every draw's delays,
+## from the cumulative PMF.
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
@@ -1555,39 +1518,6 @@ Mooncake.@is_primitive(
         Vector{<:Integer}, Vector{<:Integer}, Integer,
     },
 )
-
-function Mooncake.rrule!!(
-        ::CoDual{typeof(zone_pre_convolution)},
-        I_bar::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
-        w::CoDual{<:Vector{<:Mooncake.IEEEFloat}},
-        t0::CoDual{<:Integer}, first_lag::CoDual{<:Integer}
-    )
-    Ip, wp = primal(I_bar), primal(w)
-    t0p, lag = primal(t0), primal(first_lag)
-    Ī, w̄ = tangent(I_bar), tangent(w)
-    y = zone_pre_convolution(Ip, wp, t0p, lag)
-    ȳ = zero(y)
-    function zone_pre_convolution_pullback!!(::NoRData)
-        ## `y[p, t] += w[i] · I[p, t − s]` for each valid lag, so
-        ##
-        ##     w̄[i]          += ȳ[p, t] · I[p, t − s]
-        ##     Ī[p, t − s]   += ȳ[p, t] · w[i]
-        np, n = size(Ip)
-        L = length(wp)
-        @inbounds for t in 1:n
-            lo = max(lag, t - t0p + 1)
-            hi = min(L - 1 + lag, t - 1)
-            for s in lo:hi, p in 1:np
-
-                i = s - lag + 1
-                w̄[i] += ȳ[p, t] * Ip[p, t - s]
-                Ī[p, t - s] += ȳ[p, t] * wp[i]
-            end
-        end
-        return NoRData(), NoRData(), NoRData(), NoRData(), NoRData()
-    end
-    return CoDual(y, ȳ), zone_pre_convolution_pullback!!
-end
 
 function Mooncake.rrule!!(
         ::CoDual{typeof(zone_window_weights)},

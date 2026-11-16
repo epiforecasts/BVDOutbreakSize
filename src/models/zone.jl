@@ -225,32 +225,19 @@ The part of the convolution of each patch's infections `I_bar`
 `t0`: `out[p, t] = Σ_s w_s Ī_p(t − s)` over the lags `s` with
 `1 ≤ t − s < t0`, where `w[i]` is the weight of lag `s = i − 1 +
 first_lag`. `first_lag` is 1 for the generation interval and 0 for a
-delay. A plain loop with its own reverse rule, since the model rebuilds it
-on every draw's delays.
+delay.
 """
 function zone_pre_convolution(
         I_bar::AbstractMatrix, w::AbstractVector, t0::Integer,
         first_lag::Integer
     )
-    np, n = size(I_bar)
-    out = zeros(promote_type(eltype(I_bar), eltype(w)), np, n)
-    _zone_pre_convolution!(out, I_bar, w, t0, first_lag)
-    return out
-end
-
-## Only the lags reaching back before `t0` contribute, `s > t − t0`.
-function _zone_pre_convolution!(out, I_bar, w, t0, first_lag)
-    np, n = size(I_bar)
-    L = length(w)
-    @inbounds for t in 1:n
-        lo = max(first_lag, t - t0 + 1)
-        hi = min(L - 1 + first_lag, t - 1)
-        for s in lo:hi, p in 1:np
-
-            out[p, t] += w[s - first_lag + 1] * I_bar[p, t - s]
-        end
-    end
-    return out
+    ## The days from `t0` on are zeroed in a copy, and the lags before
+    ## `first_lag` are zero weights in front of `w`.
+    before = copy(I_bar)
+    before[:, max(t0, 1):end] .= zero(eltype(before))
+    kernel = zeros(eltype(w), length(w) + first_lag)
+    kernel[(first_lag + 1):end] .= w
+    return Convolution(kernel)(before)
 end
 
 ## --- The shared quantity -------------------------------------------------

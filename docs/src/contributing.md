@@ -56,7 +56,7 @@ The [Methods](methods.md) page describes the model and the [API reference](lib/a
 - Keep the NaN and Inf safe clamps (`safe_nbinomial`, `eps`-flooring of expected counts) when editing a likelihood.
   They guard against extreme NUTS warmup proposals.
 - The AD backend is Mooncake reverse mode.
-  The single-series renewal (`renewal_infections`), the single-series delay convolution (`convolve_delay`), the PMF convolution (`convolve_pmf`) and the onset-reporting anchor series (`onset_report_anchor_series`) are [ComposableRecurrences](https://github.com/EpiAware/ComposableRecurrences.jl) operators, which bring their own rules.
+  The single-series renewal (`renewal_infections`), the single-series delay convolution (`convolve_delay`), the patch-row delay convolution (`convolve_rows`), the PMF convolution (`convolve_pmf`), the health-zone pre-grid convolution (`zone_pre_convolution`) and the onset-reporting anchor series (`onset_report_anchor_series`) are [ComposableRecurrences](https://github.com/EpiAware/ComposableRecurrences.jl) operators, which bring their own rules.
   The anchor series keeps two small hand-ruled steps either side of the operator.
   The other kernels keep hand-written code and rules until that package is at parity or faster for them.
   The hand-written rules in `src/mooncake_rules.jl` are timed against the backend's own by `task benchmark-rules`.

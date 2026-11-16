@@ -180,7 +180,7 @@
     ## derived rather than primitive, and the speed item leaves them out.
     const PACKAGE_KERNELS = (
         convolve_delay, convolve_pmf, renewal_infections,
-        onset_report_anchor_series,
+        onset_report_anchor_series, convolve_rows, zone_pre_convolution,
     )
 
     ## Every native rule with the argument types its call sites pass: float
