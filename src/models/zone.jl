@@ -1047,10 +1047,10 @@ function zone_share_renewal_kernel(
         Allocate(patch_ranges, totals)
     renewal = Recurrence(g; modifiers = (split,))
     h0 = zeros(eltype(gain), nz, 1)
-    run = renewal(gain; history = h0, add, record = (:trace,))
-    ## The run's return type infers only through constant propagation of
-    ## `record`, which a caller under Mooncake does not always reach, so the
-    ## asserts keep it typed.
+    ## `record` as a `Val` lets the return type infer from the argument
+    ## types alone, which cuts the call's allocations under Mooncake; the
+    ## asserts keep the result typed for the read-out.
+    run = renewal(gain; history = h0, add, record = Val((:trace,)))
     T = promote_type(
         eltype(gain), eltype(pre), eltype(g), eltype(I_bar),
         on ? promote_type(

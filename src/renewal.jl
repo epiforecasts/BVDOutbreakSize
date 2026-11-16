@@ -416,12 +416,13 @@ function patch_infections(
         Depletion(PerStratum(N); pools = (S = PerStratum(pool0),)),
     )
     renewal = Recurrence(g; modifiers)
+    ## `record` as a `Val` lets the return type infer from the argument
+    ## types alone, which under Mooncake halves the call's allocations; the
+    ## asserts keep the result typed for the read-out.
     (; y, trace) = renewal(
-        Rt_matrix; history = seeds_matrix, start = L + 1, record = (:trace,)
+        Rt_matrix; history = seeds_matrix, start = L + 1,
+        record = Val((:trace,))
     )
-    ## The call's return type infers only through constant propagation of
-    ## `record`, which a caller several frames up (the joint, under
-    ## Mooncake) does not always reach; the asserts keep the result typed.
     run = convert(Matrix{Tp}, y)::Matrix{Tp}
     arrivals = convert(Matrix{Tp}, first(trace.modifiers))::Matrix{Tp}
     return patch_outputs(seeds_matrix, run, arrivals)
