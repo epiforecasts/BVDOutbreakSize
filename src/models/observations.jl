@@ -2074,9 +2074,7 @@ function accumulate_occupancy(
             form = Truncate()
         ),
         Flow(:bg => 0, TimeVarying(ruleout); form = Truncate());
-        ## The pools as a `NamedTuple` rather than a tuple of symbols, whose
-        ## names Mooncake cannot fold into constants.
-        pools = (unconf = nothing, conf = nothing, bg = nothing)
+        pools = (:unconf, :conf, :bg)
     )
     ## The stocks start empty and every inflow is a flow, so the call takes
     ## no gain and `stop` sets the number of days. The clamp floors the
