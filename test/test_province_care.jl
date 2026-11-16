@@ -449,8 +449,8 @@ end
                 ("nord_ubangi", "2026-11-11"), ("haut_uele", "2026-11-13"),
                 ("nord_ubangi", "2026-11-13"), ("sud_ubangi", "2026-11-13"),
             )
-        haskey(manifest[block], prov) || continue
-        @test !(d in string.(manifest[block][prov]["dates"]))
+        dates = get(manifest[block], prov, Dict("dates" => String[]))["dates"]
+        @test !(d in string.(dates))
     end
 end
 
