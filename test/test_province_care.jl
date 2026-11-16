@@ -416,6 +416,7 @@ end
 @testitem "province care blocks: stale carry-forwards have no entry" begin
     using BVDOutbreakSize
     using Dates
+    using TOML
 
     obs = load_observations()
     iso = obs.province_isolation_history
@@ -435,6 +436,22 @@ end
     @test day("2026-10-15") in iso["bas_uele"].days
     @test day("2026-11-10") in iso["nord_ubangi"].days
     @test day("2026-11-12") in iso["haut_uele"].days
+    ## STALE drops the cell from every care block, not only occupancy:
+    ## SitRep 181 is 2026-11-11 and SitRep 183 is 2026-11-13.
+    manifest = TOML.parsefile(
+        joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    )
+    for block in (
+                "province_isolation_history", "province_bed_capacity_history",
+                "province_admissions_history",
+            ),
+            (prov, d) in (
+                ("nord_ubangi", "2026-11-11"), ("haut_uele", "2026-11-13"),
+                ("nord_ubangi", "2026-11-13"), ("sud_ubangi", "2026-11-13"),
+            )
+        haskey(manifest[block], prov) || continue
+        @test !(d in string.(manifest[block][prov]["dates"]))
+    end
 end
 
 @testitem "province_care_observations: weekly and change-day thinning" begin
