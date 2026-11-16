@@ -1004,37 +1004,15 @@ function zone_share_renewal(
     )
 end
 
-## `zone_share_renewal` with `mix` and `ε` positional, the form the reverse
-## rule in `mooncake_rules.jl` is written against.
+## `zone_share_renewal` with `mix` and `ε` positional.
 function zone_share_renewal_kernel(
         I_bar::AbstractMatrix, g::AbstractVector,
         δ_daily::AbstractMatrix, w0::AbstractVector,
         patch_ranges::AbstractVector{<:UnitRange}, t0::Integer,
         force_pre::AbstractMatrix, mix, ε
     )
-    st = zone_share_renewal_with_state(
-        I_bar, g, δ_daily, w0, patch_ranges, t0, force_pre, mix, ε
-    )
-    return (; st.shares, st.forces, st.infections, st.imports)
-end
-
-## `zone_share_renewal` keeping the per-day intermediates its adjoint reads:
-## each zone's own force `u`, the mixed force `v`, the import pattern `h`,
-## and per patch and day the unclamped denominators `patch_total` (the sum
-## of `u` unmixed, of `v` mixed) and `share_total` (the sum of `h`). The
-## rule calls this so the recursion is defined once.
-function zone_share_renewal_with_state(
-        I_bar::AbstractMatrix, g::AbstractVector,
-        δ_daily::AbstractMatrix, w0::AbstractVector,
-        patch_ranges::AbstractVector{<:UnitRange}, t0::Integer,
-        force_pre::AbstractMatrix, mix, ε
-    )
     nd, nz = size(δ_daily)
-    np = length(patch_ranges)
     on = mix !== nothing && ε !== nothing
-    ## The loop reads the per-day terms by absolute day under `@inbounds`,
-    ## so one that stops short of the last day is read past its end rather
-    ## than raising. Checked once per call, not per day.
     last_day = t0 + nd - 1
     size(I_bar, 2) >= last_day && size(force_pre, 2) >= last_day || throw(
         DimensionMismatch(
@@ -1052,112 +1030,192 @@ function zone_share_renewal_with_state(
             )
         )
     end
-    Tp = promote_type(
-        eltype(I_bar), eltype(g), eltype(δ_daily),
-        eltype(w0), eltype(force_pre),
-        ε === nothing ? Float64 : eltype(ε),
-        on ? eltype(mix.within) : Float64,
-        on ? eltype(mix.import_fraction) : Float64,
-        on ? eltype(mix.origin_weight) : Float64
+    days = t0:last_day
+    (; gain, pre, add) = zone_split_inputs(
+        δ_daily, w0, force_pre, patch_ranges, t0
     )
-    I = zeros(Tp, nd, nz)
-    Λ = zeros(Tp, nd, nz)
-    W = zeros(Tp, nd, nz)
-    imports = zeros(Tp, nd, nz)
-    U = zeros(Tp, nd, nz)
-    V = zeros(Tp, nd, nz)
-    H = zeros(Tp, nd, nz)
-    patch_total = zeros(Tp, np, nd)
-    share_total = zeros(Tp, np, nd)
-    u = zeros(Tp, nz)
-    eu = zeros(Tp, nz)
-    wu = zeros(Tp, nz)
-    spill = zeros(Tp, nz)
-    h = zeros(Tp, nz)
-    L = length(g)
-    floor_ = eps(Tp)
-    @inbounds for j in 1:nd
+    totals = TimeVarying(PerStratum(view(I_bar, :, days)))
+    split = on ?
+        Allocate(
+            patch_ranges, totals;
+            imports = (
+                TimeVarying(PerStratum(view(mix.import_fraction, :, days))),
+                zone_import_coupling(mix.between, mix.origin_weight),
+            ),
+            spill = Redistribute(mix.within, ε)
+        ) :
+        Allocate(patch_ranges, totals)
+    renewal = Recurrence(g; modifiers = (split,))
+    h0 = zeros(eltype(gain), nz, 1)
+    run = renewal(gain; history = h0, add, record = (:trace,))
+    ## The run's return type infers only through constant propagation of
+    ## `record`, which a caller under Mooncake does not always reach, so the
+    ## asserts keep it typed.
+    T = promote_type(
+        eltype(gain), eltype(pre), eltype(g), eltype(I_bar),
+        on ? promote_type(
+                eltype(mix.within), eltype(mix.between),
+                eltype(mix.origin_weight), eltype(mix.import_fraction),
+                eltype(ε)
+            ) : Bool
+    )
+    Iz = convert(Matrix{T}, run.y)::Matrix{T}
+    ## The recurrence's own pressure is the zones' force from the grid.
+    q = convert(Matrix{T}, run.trace.pressure)::Matrix{T}
+    on || return zone_unmixed_outputs(Iz, q, pre, I_bar, patch_ranges, t0)
+    tr = convert(Matrix{T}, first(run.trace.modifiers))::Matrix{T}
+    return zone_mixed_outputs(
+        Iz, tr, q, pre, I_bar, mix.import_fraction, patch_ranges, t0
+    )
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The import coupling of the zone split in [`zone_share_renewal`](@ref):
+`between[i, j] * origin_weight[j]`, the weight with which zone `j`'s
+infections reach zone `i`. A plain loop with its own reverse rule, as
+the derived rule of the broadcast costs tens of times its forward pass.
+"""
+function zone_import_coupling(
+        between::AbstractMatrix, origin_weight::AbstractVector
+    )
+    T = promote_type(eltype(between), eltype(origin_weight))
+    C = similar(between, T)
+    @inbounds for j in axes(between, 2)
+        w = origin_weight[j]
+        for i in axes(between, 1)
+            C[i, j] = between[i, j] * w
+        end
+    end
+    return C
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The inputs of the zone split in [`zone_share_renewal`](@ref), each
+`(n_zones × n_days)` over the grid days from `t0`: the daily gain
+`exp(δ_daily)`, each zone's force from before the grid (its initial share
+`w0` times its patch's row of `force_pre`) and their product, the split's
+additive input. A plain loop with its own reverse rule, as
+[`zone_mixed_outputs`](@ref) is.
+"""
+function zone_split_inputs(
+        δ_daily::AbstractMatrix, w0::AbstractVector,
+        force_pre::AbstractMatrix,
+        patch_ranges::AbstractVector{<:UnitRange}, t0::Integer
+    )
+    nd, nz = size(δ_daily)
+    T = promote_type(eltype(δ_daily), eltype(w0), eltype(force_pre))
+    gain = zeros(T, nz, nd)
+    pre = zeros(T, nz, nd)
+    add = zeros(T, nz, nd)
+    @inbounds for j in 1:nd, (p, zs) in enumerate(patch_ranges), z in zs
+        gain[z, j] = exp(δ_daily[j, z])
+        pre[z, j] = w0[z] * force_pre[p, t0 + j - 1]
+        add[z, j] = gain[z, j] * pre[z, j]
+    end
+    return (; gain, pre, add)
+end
+
+## The forces of [`zone_share_renewal`](@ref) as `(n_days × n_zones)`: the
+## recurrence's recorded pressure `q`, each zone's own infections through
+## the generation interval, plus its force from before the grid `pre`, both
+## `(n_zones × n_days)`.
+function _zone_forces_from(
+        q::AbstractMatrix, pre::AbstractMatrix, ::Type{T}
+    ) where {T}
+    nz, nd = size(q)
+    forces = Matrix{T}(undef, nd, nz)
+    @inbounds for z in 1:nz, j in 1:nd
+        forces[j, z] = pre[z, j] + q[z, j]
+    end
+    return forces
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The outputs of [`zone_share_renewal`](@ref) with mixing, each
+`(n_days × n_zones)`, from the zones' infections `Iz` `(n_zones × n_days)`,
+the split's recorded trace `tr` (the spilled forces in its first `n_zones`
+rows and the import pattern after them) and the recurrence's recorded
+pressure `q`, which with the force from before the grid `pre` is each
+zone's force.
+A zone's share is its infections over its patch's, and its imports are its
+patch's arrivals split by the import pattern. A patch whose pattern sums to
+zero, with no infected zones elsewhere to send to it, splits its arrivals
+by its own spilled force. Plain loops with their own reverse rule, which
+replace broadcasts whose derived rules cost far more than their forward
+pass.
+"""
+function zone_mixed_outputs(
+        Iz::AbstractMatrix, tr::AbstractMatrix, q::AbstractMatrix,
+        pre::AbstractMatrix, I_bar::AbstractMatrix,
+        import_fraction::AbstractMatrix,
+        patch_ranges::AbstractVector{<:UnitRange}, t0::Integer
+    )
+    nz, nd = size(Iz)
+    T = promote_type(
+        eltype(Iz), eltype(tr), eltype(q), eltype(pre), eltype(I_bar),
+        eltype(import_fraction)
+    )
+    forces = _zone_forces_from(q, pre, T)
+    shares = zeros(T, nd, nz)
+    imports = zeros(T, nd, nz)
+    floor_ = eps(T)
+    @inbounds for j in 1:nd, (p, zs) in enumerate(patch_ranges)
+        isempty(zs) && continue
         t = t0 + j - 1
-        smax = min(L, j - 1)
-        ## Every zone's own force first, since the between-patch pattern
-        ## reads the zones of the other patches on the same day.
-        for p in eachindex(patch_ranges)
-            zs = patch_ranges[p]
-            fp = force_pre[p, t]
-            for z in zs
-                acc = w0[z] * fp
-                @simd for s in 1:smax
-                    acc = muladd(g[s], I[j - s, z], acc)
-                end
-                Λ[j, z] = acc
-                u[z] = exp(δ_daily[j, z]) * acc
-                U[j, z] = u[z]
-            end
+        Ip = I_bar[p, t]
+        d = max(Ip, floor_)
+        arrivals = import_fraction[p, t] * Ip
+        sv = zero(T)
+        sh = zero(T)
+        for z in zs
+            sv += tr[z, j]
+            sh += tr[nz + z, j]
         end
-        if !on
-            for p in eachindex(patch_ranges)
-                zs = patch_ranges[p]
-                isempty(zs) && continue
-                tot = zero(Tp)
-                for z in zs
-                    tot += u[z]
-                end
-                patch_total[p, j] = tot
-                tot = max(tot, floor_)
-                Ip = I_bar[p, t]
-                for z in zs
-                    W[j, z] = u[z] / tot
-                    I[j, z] = Ip * W[j, z]
-                end
-            end
-            continue
-        end
-        ## Within-patch spill, per origin as the province model exports:
-        ## zone `q` sends `ε_q` of its force through the within block and
-        ## keeps the rest, so the patch total is conserved exactly. The
-        ## pattern the parent's arrivals land in comes from the zones of the
-        ## other patches, weighted by the province model's own per-origin
-        ## intensity.
-        ##
-        ## The within block is zero on the diagonal and across patches and
-        ## the between block is zero within a patch, so each full product is
-        ## exactly the restricted sum.
-        for z in 1:nz
-            eu[z] = ε[z] * u[z]
-            wu[z] = mix.origin_weight[z] * u[z]
-        end
-        mul!(spill, mix.within, eu)
-        mul!(h, mix.between, wu)
-        for z in 1:nz
-            V[j, z] = (one(Tp) - ε[z]) * u[z] + spill[z]
-            H[j, z] = h[z]
-        end
-        for p in eachindex(patch_ranges)
-            zs = patch_ranges[p]
-            isempty(zs) && continue
-            Ip = I_bar[p, t]
-            Mp = mix.import_fraction[p, t] * Ip
-            sv = zero(Tp)
-            sh = zero(Tp)
-            for z in zs
-                sv += V[j, z]
-                sh += H[j, z]
-            end
-            patch_total[p, j] = sv
-            share_total[p, j] = sh
-            sv = max(sv, floor_)
-            cp = (Ip - Mp) / sv
-            for z in zs
-                share_h = sh > floor_ ? H[j, z] / sh : V[j, z] / sv
-                imports[j, z] = Mp * share_h
-                I[j, z] = cp * V[j, z] + imports[j, z]
-                W[j, z] = I[j, z] / max(Ip, floor_)
-            end
+        for z in zs
+            shares[j, z] = Iz[z, j] / d
+            w = sh > floor_ ? tr[nz + z, j] / sh :
+                tr[z, j] / max(sv, floor_)
+            imports[j, z] = arrivals * w
         end
     end
     return (;
-        shares = W, forces = Λ, infections = I, imports,
-        u = U, v = V, h = H, patch_total, share_total,
+        shares, forces, infections = Matrix{T}(permutedims(Iz)), imports,
+    )
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The outputs of [`zone_share_renewal`](@ref) without mixing, as
+[`zone_mixed_outputs`](@ref) gives them with it. The split hands each
+patch's infections to its zones whole, so a zone's share is its infections
+over its patch's, and the imports are zero.
+"""
+function zone_unmixed_outputs(
+        Iz::AbstractMatrix, q::AbstractMatrix, pre::AbstractMatrix,
+        I_bar::AbstractMatrix, patch_ranges::AbstractVector{<:UnitRange},
+        t0::Integer
+    )
+    nz, nd = size(Iz)
+    T = promote_type(eltype(Iz), eltype(q), eltype(pre), eltype(I_bar))
+    forces = _zone_forces_from(q, pre, T)
+    shares = zeros(T, nd, nz)
+    floor_ = eps(T)
+    @inbounds for j in 1:nd, (p, zs) in enumerate(patch_ranges)
+        d = max(I_bar[p, t0 + j - 1], floor_)
+        for z in zs
+            shares[j, z] = Iz[z, j] / d
+        end
+    end
+    return (;
+        shares, forces, infections = Matrix{T}(permutedims(Iz)),
+        imports = zeros(T, nd, nz),
     )
 end
 
@@ -1225,28 +1283,21 @@ $(TYPEDSIGNATURES)
 What one infection on each grid row adds to each vintage window through
 the delay PMF `f` (lag 0), as an `(nd × n_vintages)` matrix:
 `weights[k, v] = Σ_{j = starts[v]}^{stops[v]} f_{j − k}` over `j ≥ k`.
-Built from the cumulative PMF, with its own reverse rule, since the model
-rebuilds it on every draw's delays.
+Each column reads forward from its row, so it is a ComposableRecurrences
+`Convolution` of `f` over the window's indicator in reversed time.
 """
 function zone_window_weights(
         f::AbstractVector, starts::AbstractVector{<:Integer},
         stops::AbstractVector{<:Integer}, nd::Integer
     )
-    L = length(f)
-    ## `cf[m + 1]` is the mass of lags `0 … m`.
-    cf = cumsum(f)
-    weights = zeros(eltype(cf), nd, length(starts))
-    @inbounds for v in eachindex(starts)
-        a, b = starts[v], stops[v]
-        a <= b || continue
-        for k in max(1, a - L + 1):b
-            hi = cf[min(b - k, L - 1) + 1]
-            lo = a - 1 - k < 0 ? zero(eltype(cf)) :
-                cf[min(a - 1 - k, L - 1) + 1]
-            weights[k, v] = hi - lo
-        end
-    end
-    return weights
+    nv = length(starts)
+    (nv == 0 || nd == 0) && return zeros(eltype(f), nd, nv)
+    windows = [
+        starts[v] <= nd + 1 - j <= stops[v] ? one(eltype(f)) :
+            zero(eltype(f))
+            for v in 1:nv, j in 1:nd
+    ]
+    return permutedims(reverse(Convolution(f)(windows); dims = 2))
 end
 
 """

@@ -332,23 +332,6 @@ end
 
 ## --- Multi-patch (meta-population) renewal primitives --------------------
 
-## Importation intensity of origin `q` on day `t`. A scalar applies to every
-## origin and every day; a matrix carries one level per origin over time.
-@inline _eps(e::Real, q::Integer, t::Integer) = e
-@inline _eps(e::AbstractMatrix, q::Integer, t::Integer) = @inbounds e[q, t]
-
-## Renewal force of patch `p` on day `t`, `Σ_{s ≥ 1} I[p, t − s] g[s]` over
-## the lags inside the grid. Shared by `patch_infections` and its rule.
-## `@simd` lets the sum reassociate, so it can differ from a sequential sum
-## in the last bits.
-@inline function _patch_force(I::AbstractMatrix, g::AbstractVector, p, t)
-    f = zero(eltype(I))
-    @inbounds @simd for s in 1:min(t - 1, length(g))
-        f += I[p, t - s] * g[s]
-    end
-    return f
-end
-
 """
     patch_infections(Rt_matrix, g, seeds_matrix, importation_kernel, epsilon, N)
 
@@ -403,29 +386,11 @@ and `S_{p,t} = S_{p,t−1} e^{−y_{p,t} / N_p}`.
 `(n_patches, n_days)` where row `p` is the daily infection trajectory for
 patch `p`. The first `L` days are copied from `seeds_matrix` and the
 remaining days are the renewal recursion with importation. `importation` is
-the matching matrix of infections each patch received from the others, the
-arrivals term alone before depletion rather than the net of arrivals and
+the matching matrix of infections each patch received from the others,
+the arrivals term alone before depletion rather than the net of arrivals and
 departures. The element type is promoted from all input types.
-AD-transparent under Mooncake.
 """
 function patch_infections(
-        Rt_matrix::AbstractMatrix, g::AbstractVector,
-        seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
-        epsilon::Union{Real, AbstractMatrix}, N::AbstractVector
-    )
-    st = patch_infections_with_state(
-        Rt_matrix, g, seeds_matrix, importation_kernel, epsilon, N
-    )
-    return (; st.infections, st.importation)
-end
-
-"""
-The [`patch_infections`](@ref) trajectories with the state they were built
-from: `susceptible`, the pool each patch has left at the end of each day
-(the pool after its seed on the seeded days), and `rate`, each day's
-depletion rate `y_{p,t} / N_p`. The derivative rule reads both.
-"""
-function patch_infections_with_state(
         Rt_matrix::AbstractMatrix, g::AbstractVector,
         seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
         epsilon::Union{Real, AbstractMatrix}, N::AbstractVector
@@ -438,85 +403,72 @@ function patch_infections_with_state(
         epsilon isa Real ? typeof(float(epsilon)) : eltype(epsilon),
         float(eltype(N))
     )
-    I = zeros(Tp, np, n)
-    imports = zeros(Tp, np, n)
-    S = zeros(Tp, np, n)
-    rate = zeros(Tp, np, n)
-    outflow = _patch_outflow(Tp, importation_kernel, np)
-    pool = zeros(Tp, np)
-    @inbounds for p in 1:np
-        for j in 1:min(L, n)
-            I[p, j] = seeds_matrix[p, j]
-        end
-        pool[p] = _pool_after_seed(N[p], view(I, p, 1:min(L, n)))
-        for j in 1:min(L, n)
-            S[p, j] = pool[p]
-        end
+    if L >= n
+        infections = convert(Matrix{Tp}, seeds_matrix[:, 1:n])
+        return (; infections, importation = zeros(Tp, np, n))
     end
-    gen = zeros(Tp, np)
-    @inbounds for t in (L + 1):n
-        ## What each patch generates today from its own renewal force.
-        for p in 1:np
-            gen[p] = Rt_matrix[p, t] * _patch_force(I, g, p, t)
-        end
-        ## Importation redistributes transmission rather than adding to it. A
-        ## fraction `epsilon * K[p, q]` of what `q` generates is realised in
-        ## `p` instead of at home, so `q` is debited exactly what the
-        ## destinations are credited. The intensity belongs to the origin, so
-        ## `p` is debited at its own rate and credited at each sender's.
-        for p in 1:np
-            arrivals = zero(Tp)
-            for q in 1:np
-                q == p && continue
-                arrivals += _eps(epsilon, q, t) *
-                    importation_kernel[p, q] * gen[q]
-            end
-            imports[p, t] = arrivals
-            y = (one(Tp) - _eps(epsilon, p, t) * outflow[p]) * gen[p] +
-                arrivals
-            x = y / N[p]
-            rate[p, t] = x
-            I[p, t] = -pool[p] * expm1(-x)
-            pool[p] *= exp(-x)
-            S[p, t] = pool[p]
-        end
-    end
-    return (; infections = I, importation = imports, susceptible = S, rate)
+    ## The kernel may cover more patches than the model runs.
+    K = size(importation_kernel, 1) == np ? importation_kernel :
+        importation_kernel[1:np, 1:np]
+    pool0 = [_pool_after_seed(N[p], view(seeds_matrix, p, :)) for p in 1:np]
+    modifiers = (
+        Redistribute(K, epsilon),
+        Depletion(PerStratum(N); pools = (S = PerStratum(pool0),)),
+    )
+    renewal = Recurrence(g; modifiers)
+    (; y, trace) = renewal(
+        Rt_matrix; history = seeds_matrix, start = L + 1, record = (:trace,)
+    )
+    ## The call's return type infers only through constant propagation of
+    ## `record`, which a caller several frames up (the joint, under
+    ## Mooncake) does not always reach; the asserts keep the result typed.
+    run = convert(Matrix{Tp}, y)::Matrix{Tp}
+    arrivals = convert(Matrix{Tp}, first(trace.modifiers))::Matrix{Tp}
+    return patch_outputs(seeds_matrix, run, arrivals)
 end
 
-## What each of the first `np` origins sends away per unit of its own
-## generated infections: the importation kernel's off-diagonal column sums
-## over those patches, constant in time. The kernel may cover more patches
-## than the model runs, so `np` comes from the caller.
-function _patch_outflow(::Type{T}, K::AbstractMatrix, np::Integer) where {T}
-    outflow = zeros(T, np)
-    @inbounds for q in 1:np, r in 1:np
-        r == q && continue
-        outflow[q] += K[r, q]
+"""
+$(TYPEDSIGNATURES)
+
+The outputs of [`patch_infections`](@ref) from the seeds
+`(n_patches × L)`, the run after them and its arrivals
+`(n_patches × (n − L))`: the infections, seeds then run, and the
+importation, zero over the seeds then the arrivals. A plain fill with its
+own reverse rule, in place of two concatenations and a block of zeros.
+"""
+function patch_outputs(
+        seeds::AbstractMatrix, run::AbstractMatrix, arrivals::AbstractMatrix
+    )
+    np, L = size(seeds)
+    m = size(run, 2)
+    T = promote_type(eltype(seeds), eltype(run), eltype(arrivals))
+    infections = Matrix{T}(undef, np, L + m)
+    importation = Matrix{T}(undef, np, L + m)
+    @inbounds for t in 1:L, p in 1:np
+        infections[p, t] = seeds[p, t]
+        importation[p, t] = zero(T)
     end
-    return outflow
+    @inbounds for t in 1:m, p in 1:np
+        infections[p, L + t] = run[p, t]
+        importation[p, L + t] = arrivals[p, t]
+    end
+    return (; infections, importation)
 end
 
 """
 Convolve a daily trajectory `x` (infections or onsets) with a delay PMF
 `delay` (indexed from lag 0), returning the expected daily counts of the
 delayed event on the same daily grid: entry `t` sums `x[t−d] · delay[d+1]`
-over lags `d` that stay in range. Maps infections to onsets, onsets to
-deaths, onsets to reports and onsets to detected exports. An `Inf` in `x`
-gives `NaN` on the days it reaches through a lag of zero weight.
+over lags `d` that stay in range. A matrix is taken row by row, one series
+per patch. Maps infections to onsets, onsets to deaths, onsets to reports
+and onsets to detected exports. An `Inf` in `x` gives `NaN` on the days it
+reaches through a lag of zero weight.
+The keywords pass to the `Convolution` call: `gain` scales the output (a
+scalar, a length-`n` vector or an `(n_patches × n)` matrix) and `add` adds to
+it, in the same pass.
 """
-convolve_delay(x::AbstractVector, delay::AbstractVector) =
-    Convolution(delay)(x)
-
-"""
-    convolve_rows(M, delay)
-
-Each row of `M` through `delay`, as [`convolve_delay`](@ref) takes one
-series: `Y[p, t]` sums `M[p, t−d] · delay[d+1]` over lags `d` that stay in
-range. An `Inf` in `M` gives `NaN` on the days it reaches through a lag of
-zero weight.
-"""
-convolve_rows(M::AbstractMatrix, delay::AbstractVector) = Convolution(delay)(M)
+convolve_delay(x::AbstractVecOrMat, delay::AbstractVector; kwargs...) =
+    Convolution(delay)(x; kwargs...)
 
 """
 Discrete convolution of two delay PMFs `a` and `b` (both indexed from

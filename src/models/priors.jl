@@ -1772,11 +1772,11 @@ and `Rt_matrix` covers the horizon.
         z_drift_future ~ product_distribution(
             fill(region_offset_prior, nd * nf)
         )
-        Tf = promote_type(eltype(δ_knots), eltype(z_drift_future))
-        knots_all = zeros(Tf, n_patches, nb + nf)
-        knots_all[:, 1:nb] .= δ_knots
-        sum_to_zero_ar1!(
-            knots_all, F_drift, reshape(z_drift_future, nd, nf), φ, nb
+        knots_all = hcat(
+            δ_knots,
+            sum_to_zero_ar1(
+                δ_knots[:, nb], F_drift, reshape(z_drift_future, nd, nf), φ
+            )
         )
         days_all = vcat(days, fdays)
     else
@@ -2093,7 +2093,7 @@ daily matrix covers the horizon. The cut-off quantities stay at day `n`.
     headlines = _detached(_patch_headlines, infections_matrix, g, n)
     ## 8. Per-patch onsets through the shared incubation PMF.
     inc_state ~ to_submodel(incubation(incubation_nmax))
-    onsets_matrix = convolve_rows(infections_matrix, inc_state.pmf)
+    onsets_matrix = convolve_delay(infections_matrix, inc_state.pmf)
     ## 9. Headline quantities, mirroring [`infection_model`](@ref) so a
     ##    patch chain summarises exactly like a single-patch one.
     T_total = growth_state.T + τ_obs
