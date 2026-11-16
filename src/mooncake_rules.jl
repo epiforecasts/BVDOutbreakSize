@@ -952,36 +952,6 @@ function Mooncake.rrule!!(
     return CoDual(s, NoFData()), betabinomial_vector_pullback!!
 end
 
-## The health-zone window sums: each window's adjoint passes to every
-## column of `y` the window covers.
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(zone_window_sums), Matrix{<:Mooncake.IEEEFloat},
-        Vector{<:Integer}, Vector{<:Integer},
-    }
-)
-function Mooncake.rrule!!(
-        ::CoDual{typeof(zone_window_sums)}, y::CoDual, starts::CoDual,
-        stops::CoDual
-    )
-    yp, lo, hi = primal(y), primal(starts), primal(stops)
-    out = zero_fcodual(zone_window_sums(yp, lo, hi))
-    ō = tangent(out)
-    function zone_window_sums_pullback!!(::NoRData)
-        ȳ = tangent(y)
-        nr, nc = size(yp)
-        @inbounds for v in eachindex(lo, hi)
-            for j in max(lo[v], 1):min(hi[v], nc), r in 1:nr
-
-                ȳ[r, j] += ō[r, v]
-            end
-        end
-        return NoRData(), NoRData(), NoRData(), NoRData()
-    end
-    return out, zone_window_sums_pullback!!
-end
-
 ## The health-zone kernel blocks and the per-patch import fraction, both
 ## rebuilt on every draw of the gravity decay, destination weights and
 ## shared quantity.

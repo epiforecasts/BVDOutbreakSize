@@ -1343,7 +1343,7 @@ end
     ## Deaths are scored per vintage, on the same grid as the cases, and
     ## the rows sum to the cumulative the table ends on.
     @test size(zd.death_counts) == size(zd.counts)
-    @test length(zd.death_bin.stops) == length(zd.days)
+    @test length(zd.death_bin.ends) == length(zd.days)
     @test size(zd.death_bin.pre, 2) == length(zd.days)
     @test vec(sum(zd.death_counts; dims = 2)) == cld.(inputs.cumulative, 10)
     @test length(zd.death_cell_patch) == length(zd.death_cell_vintage)

@@ -15,37 +15,14 @@ the inter-vintage sum `sum(daily[days[i-1]+1:days[i]])`, so only the first
 bin needs the cumulative. Day indices are clamped to the grid. Pure and
 AD-transparent. The output element type follows `daily`.
 
-A real series takes its running total from a unit ComposableRecurrences
-`Recurrence`, `y_t = y_{t-1} + daily_t`, and reads the bins off it by
-difference. Any other element type, such as the `Any` a predict-mode
-container widens to, sums each bin directly.
+A real series is binned by ComposableRecurrences' `window_sums`. Any other
+element type, such as the `Any` a predict-mode container widens to, sums
+each bin directly.
 """
 function bin_increments(
         daily::AbstractVector{<:Real}, days::AbstractVector{<:Integer}
     )
-    n = length(daily)
-    T = eltype(daily)
-    (n == 0 || isempty(days)) &&
-        return _bin_by_sum(daily, days)
-    total = Recurrence([one(T)])(; history = zeros(T, 1), add = daily, stop = n)
-    return _bin_by_difference(total, days)
-end
-
-## The bins of a running total `total`: the total at each clamped vintage
-## day less the total at the day before the bin opens.
-function _bin_by_difference(total::AbstractVector, days)
-    n = length(total)
-    out = Vector{eltype(total)}(undef, length(days))
-    prev = 0
-    @inbounds for (i, d) in enumerate(days)
-        hi = clamp(Int(d), 0, n)
-        lo = clamp(prev, 0, n)
-        out[i] = hi > lo ?
-            total[hi] - (lo == 0 ? zero(eltype(total)) : total[lo]) :
-            zero(eltype(total))
-        prev = hi
-    end
-    return out
+    return window_sums(daily, days)
 end
 
 function bin_increments(
@@ -82,26 +59,7 @@ Each row of `M` binned to the vintage days `days` by
 function bin_row_increments(
         M::AbstractMatrix, days::AbstractVector{<:Integer}
     )
-    np, n = size(M)
-    T = eltype(M)
-    out = zeros(T, np, length(days))
-    (n == 0 || isempty(days)) && return out
-    ## Each row's running total from one unit recurrence over the rows.
-    total = Recurrence([one(T)])(;
-        history = zeros(T, np, 1), add = M, stop = n
-    )
-    prev = 0
-    @inbounds for (i, d) in enumerate(days)
-        hi = clamp(Int(d), 0, n)
-        lo = clamp(prev, 0, n)
-        if hi > lo
-            for p in 1:np
-                out[p, i] = total[p, hi] - (lo == 0 ? zero(T) : total[p, lo])
-            end
-        end
-        prev = hi
-    end
-    return out
+    return window_sums(M, days; dims = 2)
 end
 
 """

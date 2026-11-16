@@ -1224,9 +1224,9 @@ $(TYPEDSIGNATURES)
 
 The delay convolution through the PMF `f` (lag 0) and its binning into the
 vintage windows `(d_{v−1}, d_v]` of `days` as one operator over the grid
-days `t0 … n`. It holds `f` and each window's grid rows `starts` and
-`stops`, so the binned reports of the zones' daily infections are the
-window sums of their convolution with `f`
+days `t0 … n`. It holds `f`, the last grid row `ends` of each window and
+the windows `windows` it reports, so the binned reports of the zones'
+daily infections are the window sums of their convolution with `f`
 ([`zone_window_reports`](@ref)). `pre` `(n_zones × n_vintages)` is each
 window's pre-`t0` term at unit initial share, from the `report_pre` and
 `report_pre_cum` fields of `fixed` ([`zone_fixed_terms`](@ref), built on
@@ -1257,7 +1257,7 @@ function zone_binned_operator(
         end
     end
     pre = patch_pre[patch_of_zone, :]
-    return (; f, starts, stops, pre)
+    return (; f, ends = stops, windows = 1:nv, pre)
 end
 
 ## The grid rows `starts[v] … stops[v]` of each vintage window
@@ -1281,40 +1281,17 @@ $(TYPEDSIGNATURES)
 The expected reports of each zone in each vintage window, `(n_zones ×
 n_vintages)`, from the zones' daily infections `infections` `(n_days ×
 n_zones)` through the delay PMF `f` (lag 0): each zone's series convolved
-with `f`, a ComposableRecurrences `Convolution`, and summed over the grid
-rows `starts[v] … stops[v]` of each window
-([`zone_window_sums`](@ref)). Reports that fall after the last grid day
-are dropped.
+with `f`, a ComposableRecurrences `Convolution`, and summed by its
+`window_sums` over the windows that close on the grid rows `ends`, the
+first from row 1 and each later one from the row after the last one
+closed. Reports that fall after the last grid day are dropped.
 """
 function zone_window_reports(
         f::AbstractVector, infections::AbstractMatrix,
-        starts::AbstractVector{<:Integer}, stops::AbstractVector{<:Integer}
+        ends::AbstractVector{<:Integer}
     )
     reports = Convolution(f)(permutedims(infections))
-    return zone_window_sums(reports, starts, stops)
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-The sums of each row of `y` over the columns `starts[v] … stops[v]`, as an
-`(size(y, 1) × length(starts))` matrix. A window that is empty, or lies
-off the columns of `y`, sums to zero. A plain loop with its own reverse
-rule, which spreads each window's adjoint over its columns.
-"""
-function zone_window_sums(
-        y::AbstractMatrix, starts::AbstractVector{<:Integer},
-        stops::AbstractVector{<:Integer}
-    )
-    nr, nc = size(y)
-    out = zeros(eltype(y), nr, length(starts))
-    @inbounds for v in eachindex(starts, stops)
-        for j in max(starts[v], 1):min(stops[v], nc), r in 1:nr
-
-            out[r, v] += y[r, j]
-        end
-    end
-    return out
+    return window_sums(reports, ends; dims = 2)
 end
 
 """
@@ -1355,10 +1332,7 @@ function zone_delay_terms(
         op = zone_binned_operator(
             pmfs.f, fixed, [future, n], t0, n, patch_of_zone
         )
-        (;
-            op.f, starts = op.starts[2:2], stops = op.stops[2:2],
-            pre = op.pre[:, 2:2],
-        )
+        (; op.f, op.ends, windows = 2:2, pre = op.pre[:, 2:2])
     end
     return (;
         g = pmfs.g, fixed.force_pre, fixed.infections_pre, report_bin,
@@ -1378,8 +1352,8 @@ share times its patch's deformation over those days
 function zone_binned_increments(
         op, infections::AbstractMatrix, w::AbstractVector
     )
-    return zone_window_reports(op.f, infections, op.starts, op.stops) .+
-        w .* op.pre
+    reports = zone_window_reports(op.f, infections, op.ends)
+    return reports[:, op.windows] .+ w .* op.pre
 end
 
 """
