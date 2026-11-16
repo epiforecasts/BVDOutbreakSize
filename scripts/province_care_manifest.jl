@@ -103,6 +103,8 @@ const MISPRINTED = Dict(
         "the report's own editors' note says 363 does not close (371 by flow, 358 by split)",
     (177, "nord_kivu", :admissions_24h) =>
         "the report's own editors' note says the 6 + 73 split gives 79, not 81",
+    (179, "nord_kivu", :patients_isolated) =>
+        "535 + 167 - 118 = 584, the 15 + 100 + 14 sorties give 129 not 118, and 535 repeats SitRep 178's total",
 )
 const ORDER = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo", "bas_uele",
