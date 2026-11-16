@@ -231,13 +231,14 @@ function zone_pre_convolution(
         I_bar::AbstractMatrix, w::AbstractVector, t0::Integer,
         first_lag::Integer
     )
-    ## The days from `t0` on are zeroed in a copy, and the lags before
-    ## `first_lag` are zero weights in front of `w`.
-    before = copy(I_bar)
-    before[:, max(t0, 1):end] .= zero(eltype(before))
+    ## Only the days before `t0` enter, and the convolution runs on to the
+    ## last day; the lags before `first_lag` are zero weights in front of
+    ## `w`.
+    n = size(I_bar, 2)
+    before = I_bar[:, 1:clamp(t0 - 1, 0, n)]
     kernel = zeros(eltype(w), length(w) + first_lag)
     kernel[(first_lag + 1):end] .= w
-    return Convolution(kernel)(before)
+    return Convolution(kernel)(before; stop = n)
 end
 
 ## --- The shared quantity -------------------------------------------------
