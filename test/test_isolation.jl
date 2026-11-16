@@ -272,6 +272,35 @@ end
     @test acc_d.demand[end] < acc_d.demand[peak]
 end
 
+@testitem "accumulate_occupancy: abscond rate above one floors pools" begin
+    using BVDOutbreakSize: accumulate_occupancy, convolve_delay
+    ## The abscond rate's prior has no upper bound, so a warm-up proposal
+    ## can pass one. The balance then drains each pool past zero and the
+    ## floors hold it there rather than raising.
+    n = 40
+    t = 1:n
+    A_bvd = @. 4.0 + 2.0 * sin(t / 5)
+    A_bg = fill(3.0, n)
+    deaths = convolve_delay(0.35 .* A_bvd, [0.0, 0.2, 0.5, 0.3])
+    recover = convolve_delay(0.65 .* A_bvd, [0.0, 0.0, 0.4, 0.6])
+    ruleout = convolve_delay(A_bg, [0.0, 0.5, 0.5])
+    conf_hazard = fill(0.3, n)
+    acc = accumulate_occupancy(
+        A_bvd, A_bg, deaths, recover, ruleout, 1.9, conf_hazard
+    )
+    @test all(isfinite, acc.demand)
+    @test all(acc.demand .>= 0)
+    @test all(acc.O_conf .>= 0)
+    @test all(acc.O_susp .>= 0)
+    @test all(acc.O_conf .<= acc.O_bvd .+ 1.0e-9)
+    @test all(abs.(acc.O_conf .+ acc.O_susp .- acc.demand) .< 1.0e-6)
+    ## Absconding at a higher rate leaves fewer in care.
+    low = accumulate_occupancy(
+        A_bvd, A_bg, deaths, recover, ruleout, 0.5, conf_hazard
+    )
+    @test sum(acc.demand) < sum(low.demand)
+end
+
 @testitem "clinical_stay_survival: complement matches stock balance" begin
     using BVDOutbreakSize: clinical_stay_survival, accumulate_occupancy,
         convolve_delay

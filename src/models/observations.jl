@@ -2057,11 +2057,12 @@ function accumulate_occupancy(
     conf = Recent(1; coupling = [0.0 1.0 0.0; 0.0 0.0 0.0; 0.0 0.0 0.0])
     args = (bvd_out, unconf, conf, adm, hz, κ)
     flows = Depletion(
-        ## The hazard is a rate times a borrowed hazard, so it can pass
-        ## one; as a `Derived` its share is not checked against one.
+        ## The hazard is a rate times a borrowed hazard and the abscond
+        ## rate's prior has no upper bound, so either can pass one; as a
+        ## `Derived` a share is not checked against one.
         Flow(:unconf => :conf, Derived(identity, hz); form = Share()),
-        Flow(:unconf => 0, κ; form = Share()),
-        Flow(:bg => 0, κ; form = Share()),
+        Flow(:unconf => 0, Derived(identity, κ); form = Share()),
+        Flow(:bg => 0, Derived(identity, κ); form = Share()),
         Flow(0 => :unconf, adm; form = Truncate()),
         Flow(0 => :bg, TimeVarying(A_bg); form = Truncate()),
         Flow(
