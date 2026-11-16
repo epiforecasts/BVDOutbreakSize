@@ -35,6 +35,8 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Model
 
+- The incubation, report-to-analysed, admission-to-death, suspected-to-admission, recovery-stay, rule-out-stay and confirmation-to-recovery delay priors are truncated at zero rather than at one day or a small positive floor, and fitted values change (#1214).
+  The generation-interval mean and SD priors keep their one-day truncation, because the renewal needs a generation interval of at least one day.
 - The health-zone stage draws the weekly province infections independently of the importation intensities and the delays, so its province totals no longer fall below the joint model's (#1122).
   The zone in-sample page compares the two by province, and fitted zone values change.
 - The onset-to-admission Gamma scale prior is `LogNormal(log(3.694), 0.32)` at the onset-to-report, onset-to-detection and onset-to-death delays, and fitted values change (#1087).

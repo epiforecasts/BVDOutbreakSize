@@ -471,8 +471,8 @@ ascertainment and the background CFR for reuse by
             cdf_nmax(Gamma(3.33, 3.83));
             oa_alpha_prior = LogNormal(log(1.178), 0.25),
             oa_theta_prior = ONSET_ADMISSION_THETA_PRIOR,
-            ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
-            ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
+            ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0),
+            ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0)
         ),
         cutoff::Union{Nothing, Integer} = nothing,
         simulated = nothing
@@ -2242,8 +2242,8 @@ function treatment_flow_defaults()
         ## receipt delay.
         admission_delay = censored_delay_model(
             cdf_nmax(lognormal_meansd(2.0, 1.5); q = 0.99);
-            mean_prior = truncated(Normal(2.0, 1.0); lower = 0.1),
-            sd_prior = truncated(Normal(1.5, 1.0); lower = 0.3)
+            mean_prior = truncated(Normal(2.0, 1.0); lower = 0),
+            sd_prior = truncated(Normal(1.5, 1.0); lower = 0)
         ),
         ## Outcome-mixture BVD bed stay: admission→death (the
         ## admission→death atomic delay the onset→death convolution also
@@ -2252,20 +2252,20 @@ function treatment_flow_defaults()
         ## elementwise mixture.
         death_los = gamma_delay_model(
             cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
-            alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
-            theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)
+            alpha_prior = truncated(Normal(2.151, 0.604); lower = 0),
+            theta_prior = truncated(Normal(3.906, 1.381); lower = 0)
         ),
         recovery_los = censored_delay_model(
             cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
-            mean_prior = truncated(Normal(14.0, 5.0); lower = 1),
-            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)
+            mean_prior = truncated(Normal(14.0, 5.0); lower = 0),
+            sd_prior = truncated(Normal(8.0, 4.0); lower = 0)
         ),
         ## Non-BVD rule-out stay (report→receipt turnaround plus
         ## sign-off).
         ruleout_los = censored_delay_model(
             cdf_nmax(lognormal_meansd(4.5, 4.0); q = 0.99);
-            mean_prior = truncated(Normal(4.5, 2.0); lower = 1),
-            sd_prior = truncated(Normal(4.0, 1.5); lower = 1)
+            mean_prior = truncated(Normal(4.5, 2.0); lower = 0),
+            sd_prior = truncated(Normal(4.0, 1.5); lower = 0)
         ),
     )
 end
@@ -3128,8 +3128,8 @@ the daily recovered series and the cut-off total.
         ## a mean ~14 d stay before recovery is recorded.
         confirmation_to_recovery = censored_delay_model(
             cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
-            mean_prior = truncated(Normal(14.0, 5.0); lower = 1),
-            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)
+            mean_prior = truncated(Normal(14.0, 5.0); lower = 0),
+            sd_prior = truncated(Normal(8.0, 4.0); lower = 0)
         ),
         ## Dispersion can be injected from the joint composer's pooled set
         ## (`k_external`). Standalone it samples its own from `dispersion`.
