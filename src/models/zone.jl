@@ -1224,28 +1224,26 @@ $(TYPEDSIGNATURES)
 
 The delay convolution through the PMF `f` (lag 0) and its binning into the
 vintage windows `(d_{v−1}, d_v]` of `days` as one operator over the grid
-days `t0 … n`. `weights` `(n_days × n_vintages)` holds what one infection
-on each grid day adds to each window,
-`weights[k, v] = Σ_{j ∈ v, j ≥ k} f_{j − k}`, so the binned reports of
-the zones' daily infections `I` `(n_days × n_zones)` are `Iᵀ weights`. `pre` `(n_zones × n_vintages)` is each window's pre-`t0`
-term at unit initial share, from the `report_pre` and `report_pre_cum`
-fields of `fixed` ([`zone_fixed_terms`](@ref), built on the same `f`).
-Generic in the element type, so the model can rebuild it for a sampled
-delay.
+days `t0 … n`. It holds `f` and each window's grid rows `starts` and
+`stops`, so the binned reports of the zones' daily infections are the
+window sums of their convolution with `f`
+([`zone_window_reports`](@ref)). `pre` `(n_zones × n_vintages)` is each
+window's pre-`t0` term at unit initial share, from the `report_pre` and
+`report_pre_cum` fields of `fixed` ([`zone_fixed_terms`](@ref), built on
+the same `f`). Generic in the element type, so the model can rebuild it
+for a sampled delay.
 """
 function zone_binned_operator(
         f::AbstractVector, fixed, days::AbstractVector{<:Integer},
         t0::Integer, n::Integer, patch_of_zone::AbstractVector{<:Integer}
     )
-    nd = n - t0 + 1
     nv = length(days)
     np = size(fixed.report_pre, 1)
     Tp = promote_type(eltype(f), eltype(fixed.report_pre))
-    rows = _zone_window_rows(days, t0, n)
-    weights = zone_window_weights(f, rows.starts, rows.stops, nd)
+    (; starts, stops) = _zone_window_rows(days, t0, n)
     patch_pre = zeros(Tp, np, nv)
     @inbounds for v in 1:nv
-        for j in rows.starts[v]:rows.stops[v], p in 1:np
+        for j in starts[v]:stops[v], p in 1:np
 
             patch_pre[p, v] += fixed.report_pre[p, t0 + j - 1]
         end
@@ -1259,12 +1257,12 @@ function zone_binned_operator(
         end
     end
     pre = patch_pre[patch_of_zone, :]
-    return (; weights, pre)
+    return (; f, starts, stops, pre)
 end
 
 ## The grid rows `starts[v] … stops[v]` of each vintage window
 ## `(d_{v−1}, d_v]` on the days `t0 … n`, empty (`starts > stops`) for a
-## window that closes before `t0`.
+## window that closes before `t0` or opens after `n`.
 function _zone_window_rows(
         days::AbstractVector{<:Integer}, t0::Integer, n::Integer
     )
@@ -1280,24 +1278,43 @@ end
 """
 $(TYPEDSIGNATURES)
 
-What one infection on each grid row adds to each vintage window through
-the delay PMF `f` (lag 0), as an `(nd × n_vintages)` matrix:
-`weights[k, v] = Σ_{j = starts[v]}^{stops[v]} f_{j − k}` over `j ≥ k`.
-Each column reads forward from its row, so it is a ComposableRecurrences
-`Convolution` of `f` over the window's indicator in reversed time.
+The expected reports of each zone in each vintage window, `(n_zones ×
+n_vintages)`, from the zones' daily infections `infections` `(n_days ×
+n_zones)` through the delay PMF `f` (lag 0): each zone's series convolved
+with `f`, a ComposableRecurrences `Convolution`, and summed over the grid
+rows `starts[v] … stops[v]` of each window
+([`zone_window_sums`](@ref)). Reports that fall after the last grid day
+are dropped.
 """
-function zone_window_weights(
-        f::AbstractVector, starts::AbstractVector{<:Integer},
-        stops::AbstractVector{<:Integer}, nd::Integer
+function zone_window_reports(
+        f::AbstractVector, infections::AbstractMatrix,
+        starts::AbstractVector{<:Integer}, stops::AbstractVector{<:Integer}
     )
-    nv = length(starts)
-    (nv == 0 || nd == 0) && return zeros(eltype(f), nd, nv)
-    windows = [
-        starts[v] <= nd + 1 - j <= stops[v] ? one(eltype(f)) :
-            zero(eltype(f))
-            for v in 1:nv, j in 1:nd
-    ]
-    return permutedims(reverse(Convolution(f)(windows); dims = 2))
+    reports = Convolution(f)(permutedims(infections))
+    return zone_window_sums(reports, starts, stops)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The sums of each row of `y` over the columns `starts[v] … stops[v]`, as an
+`(size(y, 1) × length(starts))` matrix. A window that is empty, or lies
+off the columns of `y`, sums to zero. A plain loop with its own reverse
+rule, which spreads each window's adjoint over its columns.
+"""
+function zone_window_sums(
+        y::AbstractMatrix, starts::AbstractVector{<:Integer},
+        stops::AbstractVector{<:Integer}
+    )
+    nr, nc = size(y)
+    out = zeros(eltype(y), nr, length(starts))
+    @inbounds for v in eachindex(starts, stops)
+        for j in max(starts[v], 1):min(stops[v], nc), r in 1:nr
+
+            out[r, v] += y[r, j]
+        end
+    end
+    return out
 end
 
 """
@@ -1338,7 +1355,10 @@ function zone_delay_terms(
         op = zone_binned_operator(
             pmfs.f, fixed, [future, n], t0, n, patch_of_zone
         )
-        (; weights = op.weights[:, 2:2], pre = op.pre[:, 2:2])
+        (;
+            op.f, starts = op.starts[2:2], stops = op.stops[2:2],
+            pre = op.pre[:, 2:2],
+        )
     end
     return (;
         g = pmfs.g, fixed.force_pre, fixed.infections_pre, report_bin,
@@ -1358,7 +1378,8 @@ share times its patch's deformation over those days
 function zone_binned_increments(
         op, infections::AbstractMatrix, w::AbstractVector
     )
-    return transpose(infections) * op.weights .+ w .* op.pre
+    return zone_window_reports(op.f, infections, op.starts, op.stops) .+
+        w .* op.pre
 end
 
 """

@@ -26,8 +26,8 @@
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
-        zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
-        zone_gravity_kernel, zone_import_fraction, zone_mixed_outputs,
+        zone_share_renewal_kernel, zone_pre_convolution, zone_window_reports,
+        zone_window_sums, zone_gravity_kernel, zone_import_fraction, zone_mixed_outputs,
         zone_unmixed_outputs, zone_split_inputs, zone_import_coupling,
         patch_outputs, occupancy_outputs, abscond_inputs, split_rows,
         anchor_differences, anchor_finish, hold_last, onset_offsets,
@@ -186,7 +186,7 @@
         abscond_thinned_flows, two_clock_confirmed, accumulate_occupancy,
         onset_report_cdf_table, onset_report_anchor_series,
         zone_share_renewal_kernel, zone_pre_convolution, bin_row_increments,
-        zone_window_weights,
+        zone_window_reports,
     )
 
     ## Every native rule with the argument types its call sites pass: float
@@ -721,14 +721,23 @@
             "4 patches, n = 227", zone_pre_convolution,
             10 .* rand(zrng, 4, 227) .+ 1, pmf(zrng, 45), 67, 0; perf = true
         )
+        ## Windows that open before the grid, close before it, cover one
+        ## day, run to the last day and open after it.
+        wstarts, wstops = [1, 1, 5, 6, 33], [3, 0, 5, 30, 30]
         add!(
-            "4 windows", zone_window_weights, pmf(zrng, 12),
-            [1, 1, 5, 6], [3, 0, 5, 30], 30
+            "5 windows", zone_window_reports, pmf(zrng, 12),
+            rand(zrng, 30, 3), wstarts, wstops
         )
+        add!("5 windows", zone_window_sums, rand(zrng, 3, 30), wstarts, wstops)
         vstops = collect(61:161)
+        vstarts = [1; vstops[1:(end - 1)] .+ 1]
         add!(
-            "101 vintages", zone_window_weights, pmf(zrng, 45),
-            [1; vstops[1:(end - 1)] .+ 1], vstops, 161; perf = true
+            "101 vintages", zone_window_reports, pmf(zrng, 45),
+            rand(zrng, 161, 62), vstarts, vstops; perf = true
+        )
+        add!(
+            "101 vintages", zone_window_sums, rand(zrng, 62, 161),
+            vstarts, vstops; perf = true
         )
 
         ## The zone kernel blocks: origins with a destination patch of one

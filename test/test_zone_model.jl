@@ -1343,7 +1343,8 @@ end
     ## Deaths are scored per vintage, on the same grid as the cases, and
     ## the rows sum to the cumulative the table ends on.
     @test size(zd.death_counts) == size(zd.counts)
-    @test size(zd.death_bin.weights, 2) == length(zd.days)
+    @test length(zd.death_bin.stops) == length(zd.days)
+    @test size(zd.death_bin.pre, 2) == length(zd.days)
     @test vec(sum(zd.death_counts; dims = 2)) == cld.(inputs.cumulative, 10)
     @test length(zd.death_cell_patch) == length(zd.death_cell_vintage)
     @test length(zd.death_cell_patch) > 2
@@ -2554,10 +2555,12 @@ end
     for i in (1, 5)
         pm = zone_delay_pmfs(θ[i])
         @test states[i].def.g ≈ pm.g
-        @test states[i].def.report_bin.weights ≈ zone_binned_operator(
+        op = zone_binned_operator(
             pm.f, BVDOutbreakSize.zone_fixed_terms(zd.I_bar, pm.g, pm.f, zd.t0),
             zd.days, zd.t0, zd.n, zd.patch_of_zone
-        ).weights
+        )
+        @test states[i].def.report_bin.f ≈ op.f
+        @test states[i].def.report_bin.pre ≈ op.pre
     end
     @test !(states[1].def.g ≈ states[5].def.g)
 end
