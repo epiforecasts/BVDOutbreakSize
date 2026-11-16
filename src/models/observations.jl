@@ -3469,32 +3469,64 @@ end
 [`onset_report_anchor`](@ref) for every onset date the delay-CDF table
 [`onset_report_cdf_table`](@ref) spans, its column `k` being onset date
 `u_lo + k - 1`. This is the form [`onset_reporting_model`](@ref) calls, off
-the table it shares with [`onset_report_moments`](@ref). Pure, top-level,
-one indexed loop over the table and no further hazard evaluation.
+the table it shares with [`onset_report_moments`](@ref). Pure and
+top-level, with no further hazard evaluation. `a` is indexed by onset date
+from `u_lo`, which must be at least one, and holds its last value past its
+end.
 """
 function onset_report_anchor_series(
         cdf_table::AbstractMatrix,
         u_lo::Integer, a::AbstractVector
     )
-    D = size(cdf_table, 1)
-    nu = size(cdf_table, 2)
+    D, nu = size(cdf_table)
     T = promote_type(eltype(cdf_table), eltype(a))
-    na = length(a)
+    (nu == 0 || D == 0) && return zeros(T, nu)
+    ## Summed by parts, `Σ_d (F_d - F_{d-1}) a(u + d)` is
+    ## `Σ_d F_d (a(u + d) - a(u + d + 1)) + F_{D-1} a(u + D)`, so each onset
+    ## date reads the table's column against the anchor's forward
+    ## differences, the transposed convolution of the table.
+    Δa = anchor_differences(a, Int(u_lo), nu + D - 1)
+    reads = Convolution(TimeVarying(cdf_table, Primary()))'(Δa; stop = nu)
+    return anchor_finish(reads, cdf_table, a, Int(u_lo))
+end
+
+## The anchor read at day `i` from `u_lo`, holding its last value past
+## its end.
+_anchor_at(a, u_lo, i) = a[min(u_lo + i - 1, length(a))]
+
+"""
+$(TYPEDSIGNATURES)
+
+The `m` forward differences `a(u) - a(u + 1)` of the anchor series `a` from
+day `u_lo`, which holds its last value past its end. A plain loop with its
+own reverse rule, for [`onset_report_anchor_series`](@ref).
+"""
+function anchor_differences(a::AbstractVector, u_lo::Integer, m::Integer)
+    Δa = Vector{eltype(a)}(undef, m)
+    @inbounds for i in 1:m
+        Δa[i] = _anchor_at(a, u_lo, i) - _anchor_at(a, u_lo, i + 1)
+    end
+    return Δa
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The anchor series of [`onset_report_anchor_series`](@ref) from the table's
+reads of the differences: each onset date's read plus its last CDF value
+times the anchor `D` days on, over the floored last CDF value. A plain loop
+with its own reverse rule.
+"""
+function anchor_finish(
+        reads::AbstractVector, cdf_table::AbstractMatrix, a::AbstractVector,
+        u_lo::Integer
+    )
+    D, nu = size(cdf_table)
+    T = promote_type(eltype(reads), eltype(cdf_table), eltype(a))
     out = Vector{T}(undef, nu)
-    ## `G(u, d)` shares one survival product across every `d`, and its
-    ## denominator does not depend on `d`, so the weighted sum runs off the
-    ## onset date's table column rather than rebuilding `G` per delay.
     @inbounds for k in 1:nu
-        u = Int(u_lo) + k - 1
-        invden = inv(safe_rate(D > 0 ? cdf_table[D, k] : zero(T)))
-        g_prev = zero(T)
-        acc = zero(T)
-        for d in 0:(D - 1)
-            g_cur = cdf_table[d + 1, k] * invden
-            acc += (g_cur - g_prev) * a[clamp(u + d, 1, na)]
-            g_prev = g_cur
-        end
-        out[k] = acc
+        c = cdf_table[D, k]
+        out[k] = (reads[k] + c * _anchor_at(a, u_lo, k + D)) / safe_rate(c)
     end
     return out
 end

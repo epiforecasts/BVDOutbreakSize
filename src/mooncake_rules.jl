@@ -1029,13 +1029,6 @@ Mooncake.@is_primitive(
 Mooncake.@is_primitive(
     Mooncake.MinimalCtx,
     Tuple{
-        typeof(onset_report_anchor_series), Matrix{<:Mooncake.IEEEFloat},
-        Integer, Array{<:Mooncake.IEEEFloat},
-    },
-)
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
         typeof(onset_report_moments), Matrix{<:Mooncake.IEEEFloat},
         Integer, Array{<:Mooncake.IEEEFloat}, Integer,
         Array{<:Mooncake.IEEEFloat}, Array{<:Integer}, Array{<:Integer},
@@ -1104,48 +1097,68 @@ function Mooncake.rrule!!(
     return out, onset_report_cdf_table_pullback!!
 end
 
+## The onset anchor's forward differences: each `Δa[i]` passes `+1` to the
+## day it reads first and `−1` to the day after, clamped to the series'
+## last day.
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(anchor_differences), Vector{<:Mooncake.IEEEFloat}, Integer,
+        Integer,
+    }
+)
 function Mooncake.rrule!!(
-        ::CoDual{typeof(onset_report_anchor_series)},
-        cdf_table::CoDual{<:Matrix{<:Mooncake.IEEEFloat}},
-        u_lo::CoDual{<:Integer}, a::CoDual{<:Array{<:Mooncake.IEEEFloat}}
+        ::CoDual{typeof(anchor_differences)}, a::CoDual, u_lo::CoDual,
+        m::CoDual
     )
-    cp = primal(cdf_table)
-    ap = primal(a)
-    lo = Int(primal(u_lo))
-    c̄ = tangent(cdf_table)
-    ā = tangent(a)
-    y = onset_report_anchor_series(cp, lo, ap)
-    out = Mooncake.zero_fcodual(y)
+    ap, lo, mp = primal(a), primal(u_lo), primal(m)
+    out = zero_fcodual(anchor_differences(ap, lo, mp))
     ȳ = tangent(out)
-    ## `out[k] = S_k / den_k` with `S_k = Σ_d (c_d - c_{d-1}) a_{u+d}` and
-    ## `den_k = safe_rate(c_{D-1})`, so `c_d` enters `S_k` through two
-    ## neighbouring anchor days and `c_{D-1}` also through the denominator.
-    function onset_report_anchor_series_pullback!!(::NoRData)
+    function anchor_differences_pullback!!(::NoRData)
+        ā = tangent(a)
+        na = length(ap)
+        @inbounds for i in 1:mp
+            ā[min(lo + i - 1, na)] += ȳ[i]
+            ā[min(lo + i, na)] -= ȳ[i]
+        end
+        return ntuple(_ -> NoRData(), 4)
+    end
+    return out, anchor_differences_pullback!!
+end
+
+## `out[k] = (r_k + c_k a_{k+D}) / safe_rate(c_k)` with `c_k` the last CDF
+## value of column `k`: `r̄_k = ō_k / d`, the anchor gets `ō_k c_k / d`, and
+## `c_k` gets `ō_k a / d` less `ō_k out_k / d` where the floor passes it.
+Mooncake.@is_primitive(
+    Mooncake.MinimalCtx,
+    Tuple{
+        typeof(anchor_finish), Vector{<:Mooncake.IEEEFloat},
+        Matrix{<:Mooncake.IEEEFloat}, Vector{<:Mooncake.IEEEFloat}, Integer,
+    }
+)
+function Mooncake.rrule!!(
+        ::CoDual{typeof(anchor_finish)}, reads::CoDual, cdf_table::CoDual,
+        a::CoDual, u_lo::CoDual
+    )
+    rp, cp, ap, lo = primal(reads), primal(cdf_table), primal(a), primal(u_lo)
+    y = anchor_finish(rp, cp, ap, lo)
+    out = zero_fcodual(y)
+    ȳ = tangent(out)
+    function anchor_finish_pullback!!(::NoRData)
+        r̄, c̄, ā = tangent(reads), tangent(cdf_table), tangent(a)
         D = size(cp, 1)
         na = length(ap)
-        D == 0 && return NoRData(), NoRData(), NoRData(), NoRData()
-        @inbounds for k in axes(cp, 2)
-            g = ȳ[k]
-            u = lo + k - 1
-            cD = cp[D, k]
-            invden = inv(safe_rate(cD))
-            gi = g * invden
-            c_prev = zero(eltype(cp))
-            S = zero(eltype(cp))
-            for d in 0:(D - 1)
-                cd = cp[d + 1, k]
-                ad = ap[clamp(u + d, 1, na)]
-                a_next = d < D - 1 ? ap[clamp(u + d + 1, 1, na)] : zero(ad)
-                c̄[d + 1, k] += gi * (ad - a_next)
-                ā[clamp(u + d, 1, na)] += gi * (cd - c_prev)
-                S += (cd - c_prev) * ad
-                c_prev = cd
-            end
-            c̄[D, k] -= gi * S * invden * _safe_rate_slope(cD)
+        @inbounds for k in eachindex(y)
+            c = cp[D, k]
+            g = ȳ[k] / safe_rate(c)
+            j = min(lo + k + D - 1, na)
+            r̄[k] += g
+            ā[j] += g * c
+            c̄[D, k] += g * (ap[j] - y[k] * _safe_rate_slope(c))
         end
-        return NoRData(), NoRData(), NoRData(), NoRData()
+        return ntuple(_ -> NoRData(), 5)
     end
-    return out, onset_report_anchor_series_pullback!!
+    return out, anchor_finish_pullback!!
 end
 
 function Mooncake.rrule!!(

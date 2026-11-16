@@ -24,7 +24,7 @@
         abscond_thinned, abscond_thinned_flows, two_clock_confirmed,
         clinical_stay_survival, accumulate_occupancy, incare_census,
         onset_report_cdf_table, onset_report_anchor_series,
-        onset_report_moments, StudentTVector,
+        anchor_differences, anchor_finish, onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
         zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
         zone_gravity_kernel, zone_import_fraction,
@@ -178,7 +178,10 @@
     ## The kernels ComposableRecurrences builds, whose rules come from the
     ## package rather than from `src/mooncake_rules.jl`. Their cases are
     ## derived rather than primitive, and the speed item leaves them out.
-    const PACKAGE_KERNELS = (convolve_delay, convolve_pmf, renewal_infections)
+    const PACKAGE_KERNELS = (
+        convolve_delay, convolve_pmf, renewal_infections,
+        onset_report_anchor_series,
+    )
 
     ## Every native rule with the argument types its call sites pass: float
     ## arrays, matrix-row views, integer observations and scalar κ, cfr, k,
@@ -466,6 +469,26 @@
             "D = 28", onset_report_anchor_series, big.tab, 120,
             abs.(randn(rng, 220)) .* 0.3; perf = true
         )
+        ## The anchor's differences and finish, reading past the series'
+        ## end and at the model's size. They draw from their own stream so
+        ## the cases after them keep their inputs.
+        let nrng = Xoshiro(789)
+            add!("past the end", anchor_differences, rand(nrng, 10), 4, 12)
+            add!(
+                "n = 220", anchor_differences, rand(nrng, 220), 120, 128;
+                perf = true
+            )
+            tab = cumsum(rand(nrng, 6, 9); dims = 1) ./ 7
+            add!(
+                "past the end", anchor_finish, randn(nrng, 9), tab,
+                rand(nrng, 12), 3
+            )
+            wide = cumsum(rand(nrng, 28, 101); dims = 1) ./ 29
+            add!(
+                "28 × 101", anchor_finish, randn(nrng, 101), wide,
+                rand(nrng, 220), 120; perf = true
+            )
+        end
         add!(
             "D = 12", onset_report_moments, o.tab, gs, o.onsets, gs,
             o.alpha, o.oi, o.ri, o.pri

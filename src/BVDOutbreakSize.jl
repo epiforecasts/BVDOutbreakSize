@@ -3,7 +3,8 @@ module BVDOutbreakSize
 using Statistics: quantile, mean, cor, median, cov, std, var
 using LinearAlgebra: axpy!, dot, cholesky, Symmetric, I, Diagonal, diag,
     issuccess, mul!, LowerTriangular, BLAS
-using ComposableRecurrences: Recurrence, Convolution, Depletion, delay_masses
+using ComposableRecurrences: Recurrence, Convolution, Depletion, TimeVarying,
+    Primary, delay_masses
 using TOML: TOML
 using Printf: Printf
 using DataFrames: DataFrame, rename, select, Not, nrow
