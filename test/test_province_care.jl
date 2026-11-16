@@ -425,12 +425,16 @@ end
     for (prov, d) in (
             ("haut_uele", "2026-10-13"), ("haut_uele", "2026-10-20"),
             ("haut_uele", "2026-10-24"), ("bas_uele", "2026-10-16"),
-            ("bas_uele", "2026-10-17"),
+            ("bas_uele", "2026-10-17"), ("nord_ubangi", "2026-11-11"),
+            ("haut_uele", "2026-11-13"), ("nord_ubangi", "2026-11-13"),
+            ("sud_ubangi", "2026-11-13"),
         )
         @test !(day(d) in iso[prov].days)
     end
     ## The report they repeat keeps its entry.
     @test day("2026-10-15") in iso["bas_uele"].days
+    @test day("2026-11-10") in iso["nord_ubangi"].days
+    @test day("2026-11-12") in iso["haut_uele"].days
 end
 
 @testitem "province_care_observations: weekly and change-day thinning" begin
@@ -853,7 +857,9 @@ end
     for prov in provinces
         @test all(<=(last_tile), string.(manifest["province_isolation_history"][prov]["dates"]))
     end
-    ## MISPRINTED holds SitRep 164 Nord-Kivu's admissions out of the block.
+    ## MISPRINTED holds SitRep 164's and SitRep 181's Nord-Kivu admissions
+    ## out of the block.
     adm = manifest["province_admissions_history"]["nord_kivu"]
     @test !("2026-10-25" in string.(adm["dates"]))
+    @test !("2026-11-11" in string.(adm["dates"]))
 end
