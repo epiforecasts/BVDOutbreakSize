@@ -3,6 +3,28 @@
 Release notes for BVDOutbreakSize.
 Major versions of the report are kept as [GitHub Releases](https://github.com/epiforecasts/BVDOutbreakSize/releases); each push to `main` also republishes the rendered analysis and the `output/` artifacts.
 
+## v3.2.0
+
+Changes since v3.1.0.
+
+A minor version: the health-zone stage draws its province infections apart from the delays, and the data run to SitRep 184.
+
+### Model
+
+- The health-zone stage draws the weekly province infections independently of the importation intensities and the delays, so its province totals no longer fall below the joint model's (#1122).
+  The zone in-sample page compares the two by province, and fitted zone values change.
+
+### Data
+
+- The model cut-off advances from SitRep 171 (1 November) to SitRep 184 (14 November) (#1251, #1254, #1257, #1261, #1265).
+  SitRep 172 (2 November) is not on insp.cd, so 173 follows 171.
+  SitRep 177 was published with its editors' review notes in the text, and the Ituri care census and Nord-Kivu admissions they flag as wrong are left out.
+  Watsa (Haut-Uélé) joins the health-zone blocks at SitRep 181.
+  SitReps 179 to 184 print no symptom-onset figure (#1262).
+  The isolation tile on SitReps 181, 182 and 184 and the Nord-Kivu beds from SitRep 183 are raised in #1266.
+  Fitted values change with the new data.
+- Tests pin the SitRep 181 and 183 province care exclusions (#1267).
+
 ## v3.1.0
 
 Changes since v3.0.0.
@@ -35,8 +57,6 @@ A minor version: every affected province is its own patch, the importation kerne
 
 ### Model
 
-- The health-zone stage draws the weekly province infections independently of the importation intensities and the delays, so its province totals no longer fall below the joint model's (#1122).
-  The zone in-sample page compares the two by province, and fitted zone values change.
 - The onset-to-admission Gamma scale prior is `LogNormal(log(3.694), 0.32)` at the onset-to-report, onset-to-detection and onset-to-death delays, and fitted values change (#1087).
 - Every affected province is its own patch, so the joint model has eight patches rather than Ituri, Nord-Kivu, Haut-Uele and a pooled `other` (#1147).
   SitRep 155 (16 October) reports the first confirmed cases in an eighth province, Nord-Ubangi, and the maintainers chose to give it its own patch.
