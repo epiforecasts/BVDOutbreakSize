@@ -7,7 +7,8 @@
 ## lists every rule with the argument types its call sites pass and the
 ## edge cases its guards take. Mooncake's `test_rule` checks each case
 ## against finite differences with `is_primitive = true`, which also proves
-## the rule fires for that signature. The speed item times one
+## the rule fires for that signature. The ComposableRecurrences kernels are
+## listed the same way and checked as derived. The speed item times one
 ## production-sized case per rule against a process that loads the package
 ## with the `mooncake_rules` preference off, and the joint item compares
 ## the production joint's gradient with that process.
@@ -25,9 +26,12 @@
         onset_report_cdf_table, onset_report_anchor_series,
         onset_report_moments, StudentTVector,
         BetaBinomialVector, censoring_cap, euler_lotka_r,
-        zone_share_renewal_kernel, zone_pre_convolution, zone_window_weights,
-        zone_gravity_kernel, zone_import_fraction,
-        convolve_rows, _share_out, _admission_centred_shares,
+        zone_share_renewal_kernel, zone_pre_convolution, zone_window_reports,
+        zone_gravity_kernel, zone_import_fraction, zone_mixed_outputs,
+        zone_unmixed_outputs, zone_split_inputs, zone_import_coupling,
+        patch_outputs, occupancy_outputs, abscond_inputs, split_rows,
+        anchor_differences, anchor_finish, hold_last, onset_offsets,
+        _share_out, _admission_centred_shares,
         _background_admission_shares, sum_to_zero_basis,
         _embedded_sum_to_zero_basis, knot_days, bin_row_increments,
         patch_rt_matrix, future_knot_days, importation_epsilon_matrix,
@@ -174,17 +178,32 @@
         return (base..., mix, 0.05 .+ 0.3 .* rand(rng, nz))
     end
 
+    ## The kernels ComposableRecurrences builds, whose rules come from the
+    ## package rather than from `src/mooncake_rules.jl`. Their cases are
+    ## derived rather than primitive, and the speed item leaves them out.
+    const PACKAGE_KERNELS = (
+        convolve_delay, convolve_pmf, renewal_infections, patch_infections,
+        abscond_thinned_flows, two_clock_confirmed, accumulate_occupancy,
+        onset_report_cdf_table, onset_report_anchor_series,
+        zone_share_renewal_kernel, zone_pre_convolution, bin_row_increments,
+        zone_window_reports,
+    )
+
     ## Every native rule with the argument types its call sites pass: float
     ## arrays, matrix-row views, integer observations and scalar κ, cfr, k,
-    ## ρ and ν. `perf` marks the one production-sized case per rule the
-    ## speed item times.
+    ## ρ and ν, and the package kernels on the same footing. `perf` marks
+    ## the one production-sized case per rule the speed item times.
     function rule_cases(rng)
         cases = NamedTuple[]
         ## A distribution's rule is named after the distribution.
         label(f, args) = f === _logpdf ? nameof(typeof(first(args))) :
             nameof(f)
         add!(note, f, args...; perf = false, rtol = 1.0e-6) = push!(
-            cases, (; name = "$(label(f, args)): $note", f, args, perf, rtol)
+            cases,
+            (;
+                name = "$(label(f, args)): $note", f, args, perf, rtol,
+                primitive = f ∉ PACKAGE_KERNELS,
+            )
         )
 
         M = rand(rng, 3, 40) .+ 0.5
@@ -227,10 +246,10 @@
         ## patch shares, capacity on cumulative admissions and background on
         ## a knot walk over the printed patches.
         Mr = rand(rng, 4, 30) .+ 0.1
-        add!("D = 8", convolve_rows, Mr, pmf(rng, 8))
-        add!("D > n", convolve_rows, Mr, pmf(rng, 40))
+        add!("D = 8", convolve_delay, Mr, pmf(rng, 8))
+        add!("D > n", convolve_delay, Mr, pmf(rng, 40))
         add!(
-            "8 × 260, D = 42", convolve_rows, rand(rng, 8, 260) .+ 0.1,
+            "8 × 260, D = 42", convolve_delay, rand(rng, 8, 260) .+ 0.1,
             pmf(rng, 42); perf = true
         )
         add!("4 × 30", _share_out, rand(rng, 4, 30) .+ 0.1, 100 .* rand(rng, 30))
@@ -556,6 +575,139 @@
             perf = true
         )
 
+        ## The read-out after the zone renewal, from the zones' infections
+        ## and the split's trace: a patch with no zones, a patch whose
+        ## import pattern is empty on some days (so the arrivals split on
+        ## the spilled force, with no other zone's pattern to perturb into
+        ## it), and the unmixed shares and forces.
+        function readout_args(rng, sizes; nd = 12, t0 = 4, L = 4)
+            I_bar, g, δ, w0, ranges, t0_, fp, mix, ε = zone_args(
+                rng, sizes; nd, t0, L
+            )
+            nz = size(δ, 2)
+            tr = rand(rng, 2nz, nd) .+ 0.1
+            return (
+                mixed = (
+                    rand(rng, nz, nd) .+ 0.1, tr, rand(rng, nz, nd),
+                    rand(rng, nz, nd), I_bar, mix.import_fraction, ranges,
+                    t0_,
+                ),
+                unmixed = (
+                    rand(rng, nz, nd) .+ 0.1, rand(rng, nz, nd),
+                    rand(rng, nz, nd), I_bar, ranges, t0_,
+                ),
+            )
+        end
+        ## The split's inputs from the daily deviations, the initial shares
+        ## and the pre-grid patch forces, with a patch that has no zones.
+        for sizes in ([3, 2], [3, 0, 2])
+            I_bar, g, δ, w0, ranges, t0_, fp = zone_args(zrng, sizes)
+            add!(
+                "$(length(sizes)) patches", zone_split_inputs, δ, w0, fp,
+                ranges, t0_
+            )
+        end
+        I_bar, g, δ, w0, ranges, t0_, fp = zone_args(
+            zrng, [21, 21, 20]; nd = 220, t0 = 30, L = 12
+        )
+        add!(
+            "62 zones, n = 220", zone_split_inputs, δ, w0, fp, ranges, t0_;
+            perf = true
+        )
+        ## The anchor differences and finish, reading past the series' end
+        ## and at the model's size.
+        let nrng = Xoshiro(789)
+            add!("past the end", anchor_differences, rand(nrng, 10), 4, 12)
+            add!(
+                "n = 220", anchor_differences, rand(nrng, 220), 120, 128;
+                perf = true
+            )
+            tab = cumsum(rand(nrng, 6, 9); dims = 1) ./ 7
+            add!(
+                "past the end", anchor_finish, randn(nrng, 9), tab,
+                rand(nrng, 12), 3
+            )
+            big = cumsum(rand(nrng, 28, 101); dims = 1) ./ 29
+            add!(
+                "28 × 101", anchor_finish, randn(nrng, 101), big,
+                rand(nrng, 220), 120; perf = true
+            )
+        end
+        ## The CR abscond inputs, with either schedule the longer and one
+        ## day, and the row split after the convolution.
+        let arng = Xoshiro(787)
+            add!(
+                "schedules 5 and 3", abscond_inputs, rand(arng, 8),
+                pmf(arng, 5), rand(arng, 8), pmf(arng, 3), rand(arng, 8)
+            )
+            add!(
+                "schedules 3 and 5, one day", abscond_inputs, rand(arng, 1),
+                pmf(arng, 3), rand(arng, 1), pmf(arng, 5), rand(arng, 1)
+            )
+            add!(
+                "n = 220", abscond_inputs, rand(arng, 220), pmf(arng, 35),
+                rand(arng, 220), pmf(arng, 45), rand(arng, 220); perf = true
+            )
+            add!("clamped both ends", onset_offsets, rand(arng, 6), -2, 10)
+            add!("101 dates, D = 28", onset_offsets, rand(arng, 101), 0, 128)
+            add!("one day, held 3", hold_last, rand(arng, 1), 3)
+            add!("n = 220, held 45", hold_last, rand(arng, 220), 45)
+            add!("2 × 6", split_rows, rand(arng, 2, 6))
+            add!("2 × 220", split_rows, rand(arng, 2, 220); perf = true)
+        end
+        ## The occupancy outputs from its three pools, one day and the
+        ## model's size.
+        let qrng = Xoshiro(785)
+            add!("one day", occupancy_outputs, rand(qrng, 3, 1), 0.05)
+            add!("n = 12", occupancy_outputs, rand(qrng, 3, 12), 0.05)
+            add!(
+                "n = 220", occupancy_outputs, rand(qrng, 3, 220), 0.02;
+                perf = true
+            )
+        end
+        ## The patch renewal's outputs, at the model's size and with the
+        ## seeds covering all but one day.
+        let orng = Xoshiro(783)
+            add!(
+                "3 patches", patch_outputs, rand(orng, 3, 4),
+                rand(orng, 3, 6), rand(orng, 3, 6)
+            )
+            add!(
+                "seeds to the last day", patch_outputs, rand(orng, 2, 5),
+                rand(orng, 2, 1), rand(orng, 2, 1)
+            )
+            add!(
+                "11 patches, n = 220", patch_outputs, rand(orng, 11, 14),
+                rand(orng, 11, 206), rand(orng, 11, 206); perf = true
+            )
+        end
+        ## The split's import coupling, at the model's size and with zones
+        ## that send nothing.
+        let crng = Xoshiro(781)
+            add!(
+                "5 zones", zone_import_coupling, rand(crng, 5, 5),
+                [rand(crng, 3); 0.0; 0.0]
+            )
+            add!(
+                "62 zones", zone_import_coupling, rand(crng, 62, 62),
+                rand(crng, 62); perf = true
+            )
+        end
+        ra = readout_args(zrng, [3, 2])
+        add!("2 patches", zone_mixed_outputs, ra.mixed...)
+        add!("2 patches", zone_unmixed_outputs, ra.unmixed...)
+        ra = readout_args(zrng, [3, 0, 2]; nd = 3, L = 6)
+        add!("patch with no zones, G > n", zone_mixed_outputs, ra.mixed...)
+        add!(
+            "patch with no zones, G > n", zone_unmixed_outputs, ra.unmixed...
+        )
+        ra = readout_args(zrng, [21, 21, 20]; nd = 220, t0 = 30, L = 12)
+        add!("62 zones, n = 220", zone_mixed_outputs, ra.mixed...; perf = true)
+        add!(
+            "62 zones, n = 220", zone_unmixed_outputs, ra.unmixed...;
+            perf = true
+        )
+
         ## The health-zone delay terms the model rebuilds on every draw: the
         ## part of a convolution that reaches back before the grid start,
         ## for a generation interval (lag 1) and a delay (lag 0) longer than
@@ -569,14 +721,16 @@
             "4 patches, n = 227", zone_pre_convolution,
             10 .* rand(zrng, 4, 227) .+ 1, pmf(zrng, 45), 67, 0; perf = true
         )
+        ## Windows that close before the grid, cover one day, run to the
+        ## last day, close on the same row as the one before and close
+        ## past the grid.
         add!(
-            "4 windows", zone_window_weights, pmf(zrng, 12),
-            [1, 1, 5, 6], [3, 0, 5, 30], 30
+            "5 windows", zone_window_reports, pmf(zrng, 12),
+            rand(zrng, 30, 3), [-2, 3, 30, 30, 34]
         )
-        vstops = collect(61:161)
         add!(
-            "101 vintages", zone_window_weights, pmf(zrng, 45),
-            [1; vstops[1:(end - 1)] .+ 1], vstops, 161; perf = true
+            "101 vintages", zone_window_reports, pmf(zrng, 45),
+            rand(zrng, 161, 62), collect(61:161); perf = true
         )
 
         ## The zone kernel blocks: origins with a destination patch of one
@@ -730,7 +884,8 @@ end
     for c in rule_cases(rng)
         @testset "$(c.name)" begin
             test_rule(
-                Xoshiro(hash(c.name)), c.f, c.args...; is_primitive = true,
+                Xoshiro(hash(c.name)), c.f, c.args...;
+                is_primitive = c.primitive,
                 mode = ReverseMode, c.rtol, atol = 1.0e-8
             )
         end
@@ -867,7 +1022,9 @@ end
     ## with the rules loaded and in a process without them.
     cases = [
         (; c.name, c.f, c.args)
-            for c in filter(c -> c.perf, rule_cases(Xoshiro(20260923)))
+            for c in filter(
+                c -> c.perf && c.primitive, rule_cases(Xoshiro(20260923))
+            )
     ]
     on = pullback_times(cases)
     off = rules_off("result = pullback_times(input)", cases)
@@ -910,58 +1067,6 @@ end
     @test rules_loaded()
     @test !off.rules_loaded
     @test agrees(only(on).result, only(off.result).result; rtol = 1.0e-8)
-end
-
-@testitem "Mooncake rules: pullbacks leave the output tangent as given" tags = [
-    :ad,
-] setup = [ADRuleCases] begin
-    using Mooncake: Mooncake, NoRData, tangent, zero_fcodual
-    using BVDOutbreakSize: renewal_infections, patch_infections
-
-    ## The renewal pullbacks walk the recursion backwards through a working
-    ## copy of the output tangent rather than consuming it in place.
-    rng = Xoshiro(20260923)
-    out, pb = Mooncake.rrule!!(
-        zero_fcodual(renewal_infections),
-        map(
-            zero_fcodual,
-            (rand(rng, 40) .+ 1, rand(rng, 12), rand(rng, 7), 300.0)
-        )...
-    )
-    Ī = randn(rng, 40)
-    tangent(out) .= Ī
-    pb(NoRData())
-    @test tangent(out) == Ī
-
-    np, n = 3, 40
-    K = rand(rng, np, np) .* 0.2
-    K[[1, 5, 9]] .= 0
-    args = (
-        rand(rng, np, n) .+ 1, rand(rng, 12), rand(rng, np, 7) .+ 1, K,
-        rand(rng, np, n) .* 0.5, fill(300.0, np),
-    )
-    out, pb = Mooncake.rrule!!(
-        zero_fcodual(patch_infections), map(zero_fcodual, args)...
-    )
-    Ī = randn(rng, np, n)
-    tangent(out).infections .= Ī
-    pb(NoRData())
-    @test tangent(out).infections == Ī
-
-    ## The zone pullback walks its days backwards through a copy of the
-    ## infection tangent and reads the other three outputs.
-    args = zone_args(rng, [3, 2])
-    out, pb = Mooncake.rrule!!(
-        zero_fcodual(zone_share_renewal_kernel), map(zero_fcodual, args)...
-    )
-    ks = (:shares, :forces, :infections, :imports)
-    ȳ = tangent(out)
-    for k in ks
-        getproperty(ȳ, k) .= randn(rng, size(args[3]))
-    end
-    given = map(k -> copy(getproperty(ȳ, k)), ks)
-    pb(NoRData())
-    @test all(map((k, v) -> getproperty(ȳ, k) == v, ks, given))
 end
 
 @testitem "Mooncake rules: the import fraction matches its formula with no arrivals" tags = [
@@ -1109,7 +1214,7 @@ end
     using Distributions: _logpdf
     using BVDOutbreakSize: load_observations, joint_fit_args,
         default_breakpoint, incare_census, NegBinomialVector,
-        StudentTVector, BetaBinomialVector, bin_row_increments
+        StudentTVector, BetaBinomialVector
 
     ## The argument types the streams pass on the production data.
     obs = load_observations()
@@ -1132,9 +1237,6 @@ end
     ## means, and the composition's rows are the vectors
     ## `stick_breaking_loglik` builds.
     @test fires(Tuple{typeof(incare_census), F, F, F, Float64, F})
-    ## The per-patch confirmed and death rows are binned as a float matrix
-    ## on integer vintage days.
-    @test fires(Tuple{typeof(bin_row_increments), Matrix{Float64}, Vector{Int}})
     @test fires(
         Tuple{
             typeof(_logpdf), NegBinomialVector{Float64, F}, Vector{Int},
@@ -1227,23 +1329,6 @@ end
         ),
         mgrad(split_terms, p, 0.05, 8.3, μs)
     )
-end
-
-@testitem "Mooncake rules: the occupancy rule records the model's balance" tags = [
-    :ad,
-] setup = [ADRuleCases] begin
-    using BVDOutbreakSize: _accumulate_occupancy, _OCC_CONF_HI
-
-    ## The recording forward pass the rule runs gives the model's outputs
-    ## bit for bit, and the clamp scenario reaches the confirmed cap.
-    rng = Xoshiro(20260923)
-    for kw in ((;), (; dmult = 1.6, κ = 0.08), (; stop = 59, hflat = 0.9))
-        args = occupancy_args(rng, 60; kw...)
-        y = accumulate_occupancy(args...)
-        ỹ, _, flags = _accumulate_occupancy(Val(true), args...)
-        @test all(k -> getfield(y, k) == getfield(ỹ, k), keys(y))
-        haskey(kw, :hflat) && @test any(f -> f & _OCC_CONF_HI != 0, flags)
-    end
 end
 
 @testitem "Mooncake rules: the census rule records the model's census" tags = [
