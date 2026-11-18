@@ -22,7 +22,7 @@ A minor version: the health-zone stage draws its province infections apart from 
   Watsa (Haut-Uélé) joins the health-zone blocks at SitRep 181.
   SitReps 179 to 186 print no symptom-onset figure (#1262).
   The isolation tile on SitReps 181, 182 and 184 and the Nord-Kivu beds from SitRep 183 are raised in #1266.
-  SitRep 186 withdraws two Tshopo deaths that SitRep 185 marked as under harmonisation, so the health-zone blocks skip 15 November (#1269).
+  SitRep 186 withdraws two Tshopo deaths that SitRep 185 marked as under harmonisation, so the health-zone and province death blocks skip 15 November (#1269).
   Fitted values change with the new data.
 - Tests pin the SitRep 181 and 183 province care exclusions (#1267).
 
