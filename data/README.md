@@ -237,7 +237,7 @@ SitRep 033 gives the split as prose only, 084 to 086 (the brief format) carry no
 None of those four is scanned.
 From SitRep 124 the caption drops `de santé` and carries the date instead, reading `par province et zone du 15 septembre 2026`.
 The table itself is unchanged, so the scanner matches the caption as far as `par province et zone`.
-The series run to SitRep 186 (16 November), with SitRep 169 (30 October) listed in `[skip_dates]` (see the SitRep 170 note below); SitReps 142 (3 October) and 172 (2 November) are not published on insp.cd.
+The series run to SitRep 186 (16 November), with SitReps 169 (30 October) and 185 (15 November) listed in `[skip_dates]` (see the SitRep 170 and SitReps 185 and 186 notes below); SitReps 142 (3 October) and 172 (2 November) are not published on insp.cd.
 From SitRep 147 Dakwa (Bas-Uélé) is carried in the Bas-Uélé unallocated row, because it has no polygon in the health-zone map (see the inclusion rules below).
 SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
 On 11 November `download_sitreps.jl` did not fetch SitReps 023 and 046 into a fresh archive, and its log does not name them, so a rescan from that archive loses their rows in `province_care_scanned.csv`, which is kept as committed rather than regenerated.
@@ -265,7 +265,7 @@ Every other zone-vintage keeps its cumulative difference, and the vintages the d
 The three falls on 11 June (SitRep 028) have no 24h column and stay clamped.
 SitRep 169 restates Ituri's zones in the same harmonisation, so six case falls (Bunia, Kilo, Komanda, Lita, Mambasa, Mongbwalu) and three death falls (Aru, Kilo, Logo) carry their printed 24h figures.
 SitRep 174 restates Biena (Nord-Kivu) from 48 cases and 19 deaths to 26 and 9, moving into Beni the 22 SitRep 173 cases that 173's own messages clés place in Beni, so Biena carries its blank 24h cells as 0 for both.
-SitRep 186 restates Lubunga (Tshopo) from SitRep 185's 2 deaths, printed `2**` against 1 case and footnoted `**En cours d'harmonisation`, to 0, so Lubunga carries its blank 24h deaths cell as 0.
+SitRep 186 restates Lubunga (Tshopo) from SitRep 185's 2 deaths, printed `2**` against 1 case and footnoted `**En cours d'harmonisation`, to 0. A named zone's deaths cannot exceed its cases, so 15 November is in `[skip_dates]` for both zone blocks (#1269).
 
 Spelling varies between vintages.
 The scanner's alias table resolves `Gethy` to `gety`, `Nai-Nia` (SitRep 030) to `nia_nia`, `MakisoKisangani` (SitRep 064) and the wrapped `Makiso-` / `Kisangani` to `makiso_kisangani`, the wrapped `Boma` / `Mangbetu` to `boma_mangbetu`, `Bambu-mine` to `bambu` and `Mungbwalu` to `mongbwalu`, plus the variants the mirror's `aliases.csv` records from vintages this archive lacks (`Nyakunde`, `Rumba`, `Mongbalu`, `Tchomai`, `Wanierukula`, `Manguripa`).
@@ -701,7 +701,7 @@ No script tracks mirror-sourced values, so this check is manual.
 - **SitReps 185 and 186 (15 and 16 November)**: cases rise by exactly the printed 56 and 72.
   SitRep 185's 25 deaths include 2 Tshopo intra-CTE deaths that Tableau 2 puts in Lubunga as `1  2**  200,0%`, footnoted `**En cours d'harmonisation`; SitRep 186 prints Tshopo 33 and Lubunga 0 with no note, so national deaths rise 37 against 39 printed.
   The phrase appears before only in SitReps 016 to 033 and 077 (searched every cached report for `cours d.harmonisation`).
-  Neither date is in `[skip_dates]`, since the national series does not fall; the province and zone fall is raised in #1269.
+  The national series does not fall. Lubunga's 2 deaths against 1 case fail the zone check, so 15 November is in `[skip_dates]` for both zone blocks; whether to skip it for `province_death_history` too is #1269.
   185's isolation tile (1681) is byte-identical to 184's and is left out; 186's (1743) is above its paragraphs (1054, every province but Sud-Kivu) and is left out too, as at SitReps 181, 182 and 184.
   Tableau 3 prints Haut-Uélé with 0 alerts and blank validated cells on both, so both are left out of `suspected_daily_history`, as at SitRep 182.
   SitRep 185's Ituri laboratory bullet splits its 238 samples into `Nouveaux échantillons : 100 testés`, `Reprélèvements : 78 testés` and `Échantillons en cours : 60 testés (53 négatifs et 7 positifs)`, the last wording found in no other cached report; all 238 carry results and are counted.
