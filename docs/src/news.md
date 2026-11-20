@@ -7,7 +7,7 @@ Major versions of the report are kept as [GitHub Releases](https://github.com/ep
 
 Changes since v3.1.0.
 
-A minor version: the health-zone stage draws its province infections apart from the delays, and the data run to SitRep 186.
+A minor version: the health-zone stage draws its province infections apart from the delays, and the data run to SitRep 188.
 
 ### Model
 
@@ -16,12 +16,12 @@ A minor version: the health-zone stage draws its province infections apart from 
 
 ### Data
 
-- The model cut-off advances from SitRep 171 (1 November) to SitRep 186 (16 November) (#1251, #1254, #1257, #1261, #1265, #1270).
+- The model cut-off advances from SitRep 171 (1 November) to SitRep 188 (18 November) (#1251, #1254, #1257, #1261, #1265, #1270).
   SitRep 172 (2 November) is not on insp.cd, so 173 follows 171.
   SitRep 177 was published with its editors' review notes in the text, and the Ituri care census and Nord-Kivu admissions they flag as wrong are left out.
   Watsa (Haut-Uélé) joins the health-zone blocks at SitRep 181.
-  SitReps 179 to 186 print no symptom-onset figure (#1262).
-  The isolation tile on SitReps 181, 182 and 184 and the Nord-Kivu beds from SitRep 183 are raised in #1266.
+  SitReps 179 to 188 print no symptom-onset figure (#1262).
+  The isolation tile on SitReps 181, 182, 184 and 186 to 188 and the Nord-Kivu beds from SitRep 183 are raised in #1266.
   SitRep 186 withdraws two Tshopo deaths that SitRep 185 marked as under harmonisation, so the health-zone and province death blocks skip 15 November (#1269).
   Fitted values change with the new data.
 - Tests pin the SitRep 181 and 183 province care exclusions (#1267).
