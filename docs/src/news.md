@@ -16,7 +16,7 @@ A minor version: the health-zone stage draws its province infections apart from 
 
 ### Data
 
-- The model cut-off advances from SitRep 171 (1 November) to SitRep 188 (18 November) (#1251, #1254, #1257, #1261, #1265, #1270).
+- The model cut-off advances from SitRep 171 (1 November) to SitRep 188 (18 November) (#1251, #1254, #1257, #1261, #1265, #1270, #1272).
   SitRep 172 (2 November) is not on insp.cd, so 173 follows 171.
   SitRep 177 was published with its editors' review notes in the text, and the Ituri care census and Nord-Kivu admissions they flag as wrong are left out.
   Watsa (Haut-Uélé) joins the health-zone blocks at SitRep 181.
