@@ -38,7 +38,7 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [sources]
-ComposableRecurrences = {url = "https://github.com/EpiAware/ComposableRecurrences.jl", rev = "main"}
+ComposableRecurrences = {url = "https://github.com/EpiAware/ComposableRecurrences.jl", rev = "7ed518d24e40b2cf891a874f32a0f4b5abd3d403"}
 
 [weakdeps]
 Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
