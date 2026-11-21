@@ -94,6 +94,15 @@ const STALE = Dict(
     ## discharge figures changed.
     (176, "ituri") => "SitRep 175's census repeated with SitRep 175's la veille",
     (176, "nord_kivu") => "SitRep 175's census repeated with SitRep 175's la veille",
+    ## Nord-Ubangi's paragraph repeats SitRep 180's word for word (Wapinda 4
+    ## confirmés et 15 suspects, Yakoma 2 et 12).
+    (181, "nord_ubangi") => "word-for-word repeat of SitRep 180",
+    ## The Haut-Uélé, Nord-Ubangi and Sud-Ubangi paragraphs repeat SitRep
+    ## 182's word for word, as does Haut-Uélé's laboratory bullet (20 samples,
+    ## 4 positives) against 13 new Haut-Uélé cases that day.
+    (183, "haut_uele") => "word-for-word repeat of SitRep 182",
+    (183, "nord_ubangi") => "word-for-word repeat of SitRep 182",
+    (183, "sud_ubangi") => "word-for-word repeat of SitRep 182",
 )
 const MISPRINTED = Dict(
     (164, "nord_kivu", :admissions_24h) =>
@@ -103,6 +112,10 @@ const MISPRINTED = Dict(
         "the report's own editors' note says 363 does not close (371 by flow, 358 by split)",
     (177, "nord_kivu", :admissions_24h) =>
         "the report's own editors' note says the 6 + 73 split gives 79, not 81",
+    (179, "nord_kivu", :patients_isolated) =>
+        "535 + 167 - 118 = 584, the 15 + 100 + 14 sorties give 129 not 118, and 535 repeats SitRep 178's total",
+    (181, "nord_kivu", :admissions_24h) =>
+        "604 (132 confirmés et 472 suspects) is SitRep 180's census printed as admissions",
 )
 const ORDER = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo", "bas_uele",
