@@ -29,7 +29,7 @@
         zone_share_renewal_kernel, zone_pre_convolution, zone_window_reports,
         zone_gravity_kernel, zone_import_fraction, zone_mixed_outputs,
         zone_unmixed_outputs, zone_split_inputs, zone_import_coupling,
-        patch_outputs, abscond_inputs, split_rows,
+        patch_outputs, occupancy_outputs, abscond_inputs, split_rows,
         anchor_differences, anchor_finish, hold_last, onset_offsets,
         _share_out, _admission_centred_shares,
         _background_admission_shares, sum_to_zero_basis,
@@ -183,7 +183,7 @@
     ## derived rather than primitive, and the speed item leaves them out.
     const PACKAGE_KERNELS = (
         convolve_delay, convolve_pmf, renewal_infections, patch_infections,
-        abscond_thinned_flows, two_clock_confirmed,
+        abscond_thinned_flows, two_clock_confirmed, accumulate_occupancy,
         onset_report_cdf_table, onset_report_anchor_series,
         zone_share_renewal_kernel, zone_pre_convolution, bin_row_increments,
         zone_window_reports,
@@ -654,6 +654,16 @@
             add!("n = 220, held 45", hold_last, rand(arng, 220), 45)
             add!("2 × 6", split_rows, rand(arng, 2, 6))
             add!("2 × 220", split_rows, rand(arng, 2, 220); perf = true)
+        end
+        ## The occupancy outputs from its three pools, one day and the
+        ## model's size.
+        let qrng = Xoshiro(785)
+            add!("one day", occupancy_outputs, rand(qrng, 3, 1), 0.05)
+            add!("n = 12", occupancy_outputs, rand(qrng, 3, 12), 0.05)
+            add!(
+                "n = 220", occupancy_outputs, rand(qrng, 3, 220), 0.02;
+                perf = true
+            )
         end
         ## The patch renewal's outputs, at the model's size and with the
         ## seeds covering all but one day.
