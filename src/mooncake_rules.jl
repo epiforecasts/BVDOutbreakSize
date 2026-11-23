@@ -982,6 +982,7 @@ Mooncake.@is_primitive(
     Tuple{
         typeof(_background_admission_shares), _FloatVector, _FloatMat,
         _FloatVector, _FloatVector, Vector{<:Integer}, Integer,
+        Vector{<:Integer},
     }
 )
 
@@ -1100,24 +1101,26 @@ function Mooncake.rrule!!(
 end
 
 ## `W = softmax_p(log w_p + η_p(t))` per day, with `η_p` the knots
-## `level_p + Σ_{i < j} moves_{p,i}` interpolated to the grid, `level = Q y`
-## and `moves = Q steps`. With `l̄_p = W_p (W̄_p − Σ_q W̄_q W_q)`,
+## `level_p + Σ_{starts_p ≤ i < j} moves_{p,i}` interpolated to the grid,
+## `level = Q y` and `moves = Q steps`. With
+## `l̄_p = W_p (W̄_p − Σ_q W̄_q W_q)`,
 ##
 ##     w̄_p += Σ_t l̄_p(t) / w_p,
 ##
 ## each `l̄_p(t)` goes to the two knots bracketing day `t`, a knot's adjoint
-## to the level and to every move before it, and both through `Qᵀ` to `y`
-## and `steps` (and as outer products to `Q`).
+## to the level and to every move before it from the patch's start, and
+## both through `Qᵀ` to `y` and `steps` (and as outer products to `Q`).
 function Mooncake.rrule!!(
         ::CoDual{typeof(_background_admission_shares)},
         w::CoDual{<:_FloatVector}, basis::CoDual{<:_FloatMat},
         y::CoDual{<:_FloatVector}, steps::CoDual{<:_FloatVector},
-        kd::CoDual{<:Vector{<:Integer}}, n::CoDual{<:Integer}
+        kd::CoDual{<:Vector{<:Integer}}, n::CoDual{<:Integer},
+        starts::CoDual{<:Vector{<:Integer}}
     )
     wp, Q, yp, sp = primal(w), primal(basis), primal(y), primal(steps)
-    kdp, nn = primal(kd), primal(n)
+    kdp, nn, st = primal(kd), primal(n), primal(starts)
     w̄, Q̄, ȳ, s̄ = tangent(w), tangent(basis), tangent(y), tangent(steps)
-    W = _background_admission_shares(wp, Q, yp, sp, kdp, nn)
+    W = _background_admission_shares(wp, Q, yp, sp, kdp, nn, st)
     W̄ = zero(W)
     function background_admission_shares_pullback!!(::NoRData)
         np = size(W, 1)
@@ -1143,14 +1146,14 @@ function Mooncake.rrule!!(
             r = zero(T)
             for j in nk:-1:2
                 r += k̄[p, j]
-                moves̄[p, j - 1] = r
+                moves̄[p, j - 1] = j > st[p] ? r : zero(T)
             end
         end
         ȳ .+= transpose(Q) * level̄
         s̄ .+= vec(transpose(Q) * moves̄)
         Q̄ .+= level̄ * transpose(yp) .+
             moves̄ * transpose(reshape(sp, size(Q, 2), nk - 1))
-        return ntuple(_ -> NoRData(), 7)
+        return ntuple(_ -> NoRData(), 8)
     end
     return CoDual(W, W̄), background_admission_shares_pullback!!
 end
