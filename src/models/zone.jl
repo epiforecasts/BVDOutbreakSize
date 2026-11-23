@@ -1354,7 +1354,14 @@ function zone_binned_increments(
         op, infections::AbstractMatrix, w::AbstractVector
     )
     reports = zone_window_reports(op.f, infections, op.ends)
-    return reports[:, op.windows] .+ w .* op.pre
+    return _zone_pick_windows(reports, op.windows) .+ w .* op.pre
+end
+
+## The windows' columns of `reports`. When every window is wanted the reports
+## are returned as they are: under Mooncake, copying all their columns costs
+## more than computing them.
+function _zone_pick_windows(reports::AbstractMatrix, windows)
+    return windows == axes(reports, 2) ? reports : reports[:, windows]
 end
 
 """
