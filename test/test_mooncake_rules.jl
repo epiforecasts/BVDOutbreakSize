@@ -254,21 +254,20 @@
             pmf(rng, 5), Qb, 0.3 .* randn(rng, 2),
             0.1 .* randn(rng, 2 * (length(kd) - 1)), kd, 30, ones(Int, 5)
         )
+        ## Each per-patch start case draws from its own seeded stream.
         ## Patch 4 first prints on the third knot, so its walk starts there.
-        ## Its inputs come from their own stream, so the cases after it keep
-        ## their draws.
-        rng_late = Xoshiro(1273)
+        late = Xoshiro(1273)
         add!(
             "5 patches, one late start", _background_admission_shares,
-            pmf(rng_late, 5), Qb, 0.3 .* randn(rng_late, 2),
-            0.1 .* randn(rng_late, 2 * (length(kd) - 1)), kd, 30,
-            [1, 1, 1, 3, 1]
+            pmf(late, 5), Qb, 0.3 .* randn(late, 2),
+            0.1 .* randn(late, 2 * (length(kd) - 1)), kd, 30, [1, 1, 1, 3, 1]
         )
         ## Patch 2 first prints on the last knot, so none of its moves apply.
+        last_knot = Xoshiro(1275)
         add!(
             "5 patches, start on the last knot", _background_admission_shares,
-            pmf(rng_late, 5), Qb, 0.3 .* randn(rng_late, 2),
-            0.1 .* randn(rng_late, 2 * (length(kd) - 1)), kd, 30,
+            pmf(last_knot, 5), Qb, 0.3 .* randn(last_knot, 2),
+            0.1 .* randn(last_knot, 2 * (length(kd) - 1)), kd, 30,
             [1, length(kd), 1, 3, 1]
         )
         add!(

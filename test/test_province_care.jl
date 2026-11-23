@@ -618,7 +618,8 @@ end
 end
 
 @testitem "background admission shares start each walk at the patch's first printed day" begin
-    using BVDOutbreakSize: background_admission_share_model, knot_days
+    using BVDOutbreakSize: background_admission_share_model, knot_days,
+        _embedded_sum_to_zero_basis
     using Turing: returned, fix, @varname
     using Random: Xoshiro
 
@@ -644,7 +645,10 @@ end
     ratios = map(seed -> shares(m, seed)[3, :] ./ shares(m, seed)[4, :], (11, 12))
     early = 1:kd[k3]
     @test ratios[1][early] ≈ ratios[2][early]
-    @test all(r -> r ≈ ratios[1][1], ratios[1][early])
+    ## Before its start knot the ratio is patch 3's level alone, in closed
+    ## form from the basis over the printing patches.
+    level3 = (_embedded_sum_to_zero_basis(4, [1, 2, 3]) * y)[3]
+    @test all(r -> r ≈ w[3] / w[4] * exp(level3), ratios[1][early])
     ## After its start the walk moves it.
     @test !(ratios[1][n] ≈ ratios[2][n])
     ## Patches 1 and 2 print from the first day, so their walks start on the
@@ -671,7 +675,6 @@ end
     @test _first_printed_knots(5, days, patches, kd) == [1, 2, 1, 4, 1]
     @test_throws ArgumentError _first_printed_knots(5, days, [1, 2], kd)
 end
-
 
 @testitem "background admission shares on one printed day have a level and no walk" begin
     using BVDOutbreakSize: background_admission_share_model

@@ -883,8 +883,8 @@ linearly ([`interpolate_knots`](@ref)). With `paired = true`, `days` and
 `patches` give one printed figure per entry, and each patch's walk starts
 at zero on the last knot at or before its own first printed admission. It
 is held flat before that knot and after the last one, so a patch's
-deviation moves only where its own printed admissions inform it, and its
-level `δ_p` is its deviation on its first printed day. With
+deviation moves only from a week at most before its own printed admissions
+begin, and its level `δ_p` is its deviation on that knot. With
 `paired = false`, `patches` only names the printing patches and every walk
 starts on the first knot. `τ_bga = σ_bga = 0` gives `W_p(t) = w_p`, a
 time-constant share of the background suspects.
@@ -916,8 +916,10 @@ the constant share there exactly. Every sampled coordinate is a contrast
 among the printing provinces, which their daily admissions pin, so the
 level coordinates are drawn centred, on the scale `τ_bga`, as in
 [`background_split_model`](@ref). That holds because each level sits on
-its patch's own first printed day, where the patch's admissions identify
-it. The walk innovations are drawn
+the knot at or before its patch's first printed day, so the patch's
+admissions in the week after that knot identify it, up to the one
+interpolated step between the knot and the first printed day. The walk
+innovations are drawn
 non-centred, as in the other weekly walks. At `σ_bga = 0.2`, one SD of its
 half-normal prior, a one-SD weekly step moves a province's share about
 1.2-fold and twenty weeks drift it about 2.4-fold. At the prior median,
