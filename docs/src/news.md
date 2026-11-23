@@ -3,6 +3,18 @@
 Release notes for BVDOutbreakSize.
 Major versions of the report are kept as [GitHub Releases](https://github.com/epiforecasts/BVDOutbreakSize/releases); each push to `main` also republishes the rendered analysis and the `output/` artifacts.
 
+## v3.3.0
+
+Changes since v3.2.0.
+
+A minor version: each province's walk in its share of the background admissions starts at its own first printed admission.
+
+### Model
+
+- Each province's walk in its share of the background admissions starts at its own first printed admission rather than at the first printed admission of any province (#1273, #1275).
+  Nord-Ubangi first prints admissions on 12 November, so its level had been set on a day with no Nord-Ubangi data. That level, months of walk steps and the walk scale traded off along a ridge, and the joint fit failed its convergence gate on the province care shares.
+  Fitted province care shares change.
+
 ## v3.2.0
 
 Changes since v3.1.0.
@@ -13,9 +25,6 @@ A minor version: the health-zone stage draws its province infections apart from 
 
 - The health-zone stage draws the weekly province infections independently of the importation intensities and the delays, so its province totals no longer fall below the joint model's (#1122).
   The zone in-sample page compares the two by province, and fitted zone values change.
-- Each province's walk in its share of the background admissions starts at its own first printed admission rather than at the first printed admission of any province (#1273, #1275).
-  Nord-Ubangi first prints admissions on 12 November, so its level had been set on a day with no Nord-Ubangi data. That level, months of walk steps and the walk scale traded off along a ridge, and the joint fit failed its convergence gate on the province care shares.
-  Fitted province care shares change.
 
 ### Data
 
