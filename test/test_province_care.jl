@@ -617,6 +617,65 @@ end
     @test one_patch().W == repeat(w, 1, n)
 end
 
+@testitem "background admission shares start each walk at the patch's first printed day" begin
+    using BVDOutbreakSize: background_admission_share_model, knot_days,
+        _embedded_sum_to_zero_basis
+    using Turing: returned, fix, @varname
+    using Random: Xoshiro
+
+    ## Patches 1 and 2 print from day 20, patch 3 only from day 55, paired
+    ## entry by entry. Patch 3's walk starts on the last knot at or before
+    ## day 55, so before it the ratio of patch 3 to patch 4 (which never
+    ## prints) is set by patch 3's level alone, whatever the walk steps.
+    w = [0.5, 0.3, 0.15, 0.05]
+    n = 80
+    days = vcat(collect(20:60), collect(20:60), [55, 58, 60])
+    patches = vcat(fill(1, 41), fill(2, 41), [3, 3, 3])
+    m = background_admission_share_model(w, n, days; patches, paired = true)
+    kd = knot_days(60; start = 20)
+    k3 = searchsortedlast(kd, 55)
+    @test 1 < k3 < length(kd)
+    nb = 2
+    y = [0.3, -0.4]
+    shares(model, seed) = begin
+        z = randn(Xoshiro(seed), nb * (length(kd) - 1))
+        f = fix(model, (; τ_bga = 0.5, y_bga = y, σ_bga = 0.3, z_bga = z))
+        returned(f, rand(Xoshiro(seed), f)).W
+    end
+    ratios = map(seed -> shares(m, seed)[3, :] ./ shares(m, seed)[4, :], (11, 12))
+    early = 1:kd[k3]
+    @test ratios[1][early] ≈ ratios[2][early]
+    ## Before its start knot the ratio is patch 3's level alone, in closed
+    ## form from the basis over the printing patches.
+    level3 = (_embedded_sum_to_zero_basis(4, [1, 2, 3]) * y)[3]
+    @test all(r -> r ≈ w[3] / w[4] * exp(level3), ratios[1][early])
+    ## After its start the walk moves it.
+    @test !(ratios[1][n] ≈ ratios[2][n])
+    ## Patches 1 and 2 print from the first day, so their walks start on the
+    ## first knot: their ratio, which patch 3 cannot move, matches the model
+    ## with every walk on the first knot on every day.
+    unpaired = background_admission_share_model(w, n, days; patches)
+    Wp, Wu = shares(m, 21), shares(unpaired, 21)
+    @test Wp[1, :] ./ Wp[2, :] ≈ Wu[1, :] ./ Wu[2, :]
+    @test !(Wp[3, :] ./ Wp[4, :] ≈ Wu[3, :] ./ Wu[4, :])
+    ## Paired entries must match in length.
+    @test_throws ArgumentError background_admission_share_model(
+        w, n, days; patches = [1, 2, 3], paired = true
+    )()
+end
+
+@testitem "first printed knots" begin
+    using BVDOutbreakSize: _first_printed_knots
+
+    kd = [10, 17, 24, 31]
+    ## Patch 1 first prints on a knot, patch 2 between knots, patch 3 before
+    ## the first knot, patch 4 on the last knot and patch 5 never.
+    days = [10, 20, 3, 31, 12, 25]
+    patches = [1, 2, 3, 4, 1, 2]
+    @test _first_printed_knots(5, days, patches, kd) == [1, 2, 1, 4, 1]
+    @test_throws ArgumentError _first_printed_knots(5, days, [1, 2], kd)
+end
+
 @testitem "background admission shares on one printed day have a level and no walk" begin
     using BVDOutbreakSize: background_admission_share_model
     using Turing: returned, fix, @varname

@@ -7,7 +7,13 @@ Major versions of the report are kept as [GitHub Releases](https://github.com/ep
 
 Changes since v3.2.0.
 
-A minor version: the data run to SitRep 190.
+A minor version: each province's walk in its share of the background admissions starts at its own first printed admission, and the data run to SitRep 190.
+
+### Model
+
+- Each province's walk in its share of the background admissions starts at its own first printed admission rather than at the first printed admission of any province (#1273, #1275).
+  Nord-Ubangi first prints admissions on 12 November, so its level had been set on a day with no Nord-Ubangi data. That level, months of walk steps and the walk scale traded off along a ridge, and the joint fit failed its convergence gate on the province care shares.
+  Fitted province care shares change.
 
 ### Data
 

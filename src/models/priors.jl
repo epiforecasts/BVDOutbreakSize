@@ -878,11 +878,16 @@ normalised over the patches each day, with `τ_bga ~ N⁺(0, 0.5)` and
 print admissions, so neither the level nor the walk has a reference patch.
 A patch that never prints admissions has no deviation, `δ_p = η_p = 0`.
 The walk sits on knots every `week` days from the first to the last day in
-`days`, the days the province admissions are printed, starting at zero on
-the first and interpolated linearly ([`interpolate_knots`](@ref)). It is
-held flat outside them, so it moves only where the printed admissions
-inform it. `τ_bga = σ_bga = 0` gives `W_p(t) = w_p`, a time-constant share
-of the background suspects.
+`days`, the days the province admissions are printed, and is interpolated
+linearly ([`interpolate_knots`](@ref)). With `paired = true`, `days` and
+`patches` give one printed figure per entry, and each patch's walk starts
+at zero on the last knot at or before its own first printed admission. It
+is held flat before that knot and after the last one, so a patch's
+deviation moves only from a week at most before its own printed admissions
+begin, and its level `δ_p` is its deviation on that knot. With
+`paired = false`, `patches` only names the printing patches and every walk
+starts on the first knot. `τ_bga = σ_bga = 0` gives `W_p(t) = w_p`, a
+time-constant share of the background suspects.
 
 The background suspects are split by `w`, but who is admitted need not be.
 A province's share of the admitted background differs from its share of
@@ -910,7 +915,11 @@ normalisation, as the printing provinces' shares move, and the model nests
 the constant share there exactly. Every sampled coordinate is a contrast
 among the printing provinces, which their daily admissions pin, so the
 level coordinates are drawn centred, on the scale `τ_bga`, as in
-[`background_split_model`](@ref). The walk innovations are drawn
+[`background_split_model`](@ref). That holds because each level sits on
+the knot at or before its patch's first printed day, so the patch's
+admissions in the week after that knot identify it, up to the one
+interpolated step between the knot and the first printed day. The walk
+innovations are drawn
 non-centred, as in the other weekly walks. At `σ_bga = 0.2`, one SD of its
 half-normal prior, a one-SD weekly step moves a province's share about
 1.2-fold and twenty weeks drift it about 2.4-fold. At the prior median,
@@ -923,6 +932,7 @@ whose columns sum to one.
         w::AbstractVector{<:Real}, n::Integer,
         days::AbstractVector{<:Integer};
         patches::AbstractVector{<:Integer} = eachindex(w),
+        paired::Bool = false,
         week::Integer = 7,
         level_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         walk_sd_prior = truncated(Normal(0, 0.2); lower = 0),
@@ -938,6 +948,8 @@ whose columns sum to one.
     end
     kd = knot_days(maximum(days); week, start = minimum(days))
     nk = length(kd)
+    starts = paired ? _first_printed_knots(np, days, patches, kd) :
+        ones(Int, np)
     τ_bga ~ level_sd_prior
     ## Each level coordinate is drawn centred, on the scale `τ_bga`. `eps`
     ## floors the SD so a `τ_bga ≈ 0` draw stays a proper distribution.
@@ -948,14 +960,41 @@ whose columns sum to one.
         σ_bga ~ walk_sd_prior
         z_bga ~ filldist(Normal(0, 1), nb * (nk - 1))
         W = _background_admission_shares(
-            w, basis, y_bga, σ_bga .* z_bga, kd, n
+            w, basis, y_bga, σ_bga .* z_bga, kd, n, starts
         )
         return (; W, level_sd = τ_bga, walk_sd = σ_bga)
     end
     W = _background_admission_shares(
-        w, basis, y_bga, zeros(eltype(y_bga), 0), kd, n
+        w, basis, y_bga, zeros(eltype(y_bga), 0), kd, n, starts
     )
     return (; W, level_sd = τ_bga, walk_sd = zero(τ_bga))
+end
+
+## Per patch, the index of the last knot at or before its first printed
+## admission, where its walk starts, with `days` and `patches` one printed
+## figure per entry. A first day before the first knot starts on the first
+## knot. A patch with no printed admission gets `1`, which is moot: its
+## basis row is zero.
+function _first_printed_knots(
+        np::Integer, days::AbstractVector{<:Integer},
+        patches::AbstractVector{<:Integer}, kd::AbstractVector{<:Integer}
+    )
+    length(patches) == length(days) || throw(
+        ArgumentError(
+            "_first_printed_knots: $(length(patches)) patches for " *
+                "$(length(days)) days; paired entries must match."
+        )
+    )
+    starts = ones(Int, np)
+    first_day = fill(typemax(Int), np)
+    for (d, p) in zip(days, patches)
+        first_day[p] = min(first_day[p], Int(d))
+    end
+    for p in 1:np
+        first_day[p] == typemax(Int) && continue
+        starts[p] = max(searchsortedlast(kd, first_day[p]), 1)
+    end
+    return starts
 end
 
 ## The sum-to-zero basis over the patches in `patches`, embedded in `np`
@@ -971,15 +1010,17 @@ end
 
 ## Daily background admission shares: column `t` is
 ## `W_p(t) ∝ w_p exp(δ_p + η_p(t))`, with `δ = Q y` and `η` the walk whose
-## knot `k`, on day `kd[k]`, is `Q` times the sum of the first `k - 1`
-## columns of `steps` (`(n_patches - 1) × (n_knots - 1)`, stored
-## column-major), interpolated to the grid and flat outside the knots. Each
-## column is normalised against its largest term, so a wide deviation
+## knot `k`, on day `kd[k]`, is `Q` times the sum of columns `starts[p]` to
+## `k - 1` of `steps` (`(n_patches - 1) × (n_knots - 1)`, stored
+## column-major), interpolated to the grid and flat outside the knots. So
+## patch `p` sits at its level up to knot `starts[p]` and walks after it.
+## Each column is normalised against its largest term, so a wide deviation
 ## cannot overflow.
 function _background_admission_shares(
         w::AbstractVector{<:Real}, basis::AbstractMatrix{<:Real},
         y::AbstractVector{<:Real}, steps::AbstractVector{<:Real},
-        kd::AbstractVector{<:Integer}, n::Integer
+        kd::AbstractVector{<:Integer}, n::Integer,
+        starts::AbstractVector{<:Integer}
     )
     np = length(w)
     nk = length(kd)
@@ -991,7 +1032,8 @@ function _background_admission_shares(
         knots = Vector{T}(undef, nk)
         knots[1] = level[p]
         for j in 2:nk
-            knots[j] = knots[j - 1] + moves[p, j - 1]
+            knots[j] = j > starts[p] ? knots[j - 1] + moves[p, j - 1] :
+                knots[j - 1]
         end
         dev = interpolate_knots(knots, kd, n)
         lw = log(w[p])
