@@ -7,13 +7,21 @@ Major versions of the report are kept as [GitHub Releases](https://github.com/ep
 
 Changes since v3.2.0.
 
-A minor version: each province's walk in its share of the background admissions starts at its own first printed admission.
+A minor version: each province's walk in its share of the background admissions starts at its own first printed admission, and the data run to SitRep 190.
 
 ### Model
 
 - Each province's walk in its share of the background admissions starts at its own first printed admission rather than at the first printed admission of any province (#1273, #1275).
   Nord-Ubangi first prints admissions on 12 November, so its level had been set on a day with no Nord-Ubangi data. That level, months of walk steps and the walk scale traded off along a ridge, and the joint fit failed its convergence gate on the province care shares.
   Fitted province care shares change.
+
+### Data
+
+- The model cut-off advances from SitRep 188 (18 November) to SitRep 190 (20 November) (#1274).
+  SitReps 189 and 190 print no symptom-onset figure (#1262).
+  Their isolation tiles are left out, as on SitReps 181, 182, 184 and 186 to 188 (#1266).
+  The SitRep 190 Haut-Uélé care paragraph repeats SitRep 189's with a new total, so it is left out.
+  Fitted values change with the new data.
 
 ## v3.2.0
 

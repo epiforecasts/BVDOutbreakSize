@@ -103,6 +103,12 @@ const STALE = Dict(
     (183, "haut_uele") => "word-for-word repeat of SitRep 182",
     (183, "nord_ubangi") => "word-for-word repeat of SitRep 182",
     (183, "sud_ubangi") => "word-for-word repeat of SitRep 182",
+    ## Haut-Uélé's paragraph repeats SitRep 189's 35 confirmés et 19
+    ## suspects, 17 admissions, 2 deaths, 231 cumulative recoveries, its 25,
+    ## 22 and 27 % rates and its meals (54 patients, 83 PPL, 47
+    ## accompagnants); only the total changes, to 71, which its own 35 + 19
+    ## does not give, while page 1 prints 6 Haut-Uélé recoveries that day.
+    (190, "haut_uele") => "SitRep 189's paragraph repeated with a new total of 71",
 )
 const MISPRINTED = Dict(
     (164, "nord_kivu", :admissions_24h) =>
