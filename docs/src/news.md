@@ -3,6 +3,20 @@
 Release notes for BVDOutbreakSize.
 Major versions of the report are kept as [GitHub Releases](https://github.com/epiforecasts/BVDOutbreakSize/releases); each push to `main` also republishes the rendered analysis and the `output/` artifacts.
 
+## v3.3.0
+
+Changes since v3.2.0.
+
+A minor version: the data run to SitRep 190.
+
+### Data
+
+- The model cut-off advances from SitRep 188 (18 November) to SitRep 190 (20 November) (#1274).
+  SitReps 189 and 190 print no symptom-onset figure (#1262).
+  Their isolation tiles are left out, as on SitReps 181, 182, 184 and 186 to 188 (#1266).
+  The SitRep 190 Haut-Uélé care paragraph repeats SitRep 189's with a new total, so it is left out.
+  Fitted values change with the new data.
+
 ## v3.2.0
 
 Changes since v3.1.0.
