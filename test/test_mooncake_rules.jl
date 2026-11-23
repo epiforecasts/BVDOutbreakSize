@@ -28,7 +28,7 @@
         BetaBinomialVector, censoring_cap, euler_lotka_r,
         zone_share_renewal_kernel, zone_pre_convolution, zone_window_reports,
         zone_gravity_kernel, zone_import_fraction, zone_mixed_outputs,
-        zone_unmixed_outputs, zone_split_inputs, zone_import_coupling,
+        zone_unmixed_outputs, zone_split_inputs,
         patch_outputs, occupancy_outputs, abscond_inputs, split_rows,
         anchor_differences, anchor_finish, hold_last, onset_offsets,
         _share_out, _admission_centred_shares,
@@ -679,18 +679,6 @@
             add!(
                 "11 patches, n = 220", patch_outputs, rand(orng, 11, 14),
                 rand(orng, 11, 206), rand(orng, 11, 206); perf = true
-            )
-        end
-        ## The split's import coupling, at the model's size and with zones
-        ## that send nothing.
-        let crng = Xoshiro(781)
-            add!(
-                "5 zones", zone_import_coupling, rand(crng, 5, 5),
-                [rand(crng, 3); 0.0; 0.0]
-            )
-            add!(
-                "62 zones", zone_import_coupling, rand(crng, 62, 62),
-                rand(crng, 62); perf = true
             )
         end
         ra = readout_args(zrng, [3, 2])

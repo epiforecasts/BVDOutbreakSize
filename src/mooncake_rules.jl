@@ -1063,38 +1063,6 @@ function Mooncake.rrule!!(
     return out, zone_import_fraction_pullback!!
 end
 
-## The zone split's import coupling `C = B diag(w)`: `B̄ += C̄ diag(w)` and
-## `w̄_j += Σ_i C̄_ij B_ij`.
-Mooncake.@is_primitive(
-    Mooncake.MinimalCtx,
-    Tuple{
-        typeof(zone_import_coupling), Matrix{<:Mooncake.IEEEFloat},
-        Vector{<:Mooncake.IEEEFloat},
-    }
-)
-function Mooncake.rrule!!(
-        ::CoDual{typeof(zone_import_coupling)}, between::CoDual,
-        origin_weight::CoDual
-    )
-    Bp, wp = primal(between), primal(origin_weight)
-    out = zero_fcodual(zone_import_coupling(Bp, wp))
-    C̄ = tangent(out)
-    function zone_import_coupling_pullback!!(::NoRData)
-        B̄, w̄ = tangent(between), tangent(origin_weight)
-        @inbounds for j in axes(Bp, 2)
-            w = wp[j]
-            acc = zero(eltype(w̄))
-            for i in axes(Bp, 1)
-                B̄[i, j] += C̄[i, j] * w
-                acc += C̄[i, j] * Bp[i, j]
-            end
-            w̄[j] += acc
-        end
-        return NoRData(), NoRData(), NoRData()
-    end
-    return out, zone_import_coupling_pullback!!
-end
-
 ## The anchor differences: each `Δa[i]` passes `+1` to the day it reads
 ## first and `−1` to the day after, clamped to the series' last day.
 Mooncake.@is_primitive(

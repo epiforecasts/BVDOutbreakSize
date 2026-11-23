@@ -1041,7 +1041,7 @@ function zone_share_renewal_kernel(
             patch_ranges, totals;
             imports = (
                 TimeVarying(PerStratum(view(mix.import_fraction, :, days))),
-                zone_import_coupling(mix.between, mix.origin_weight),
+                mix.between .* permutedims(mix.origin_weight),
             ),
             spill = Redistribute(mix.within, ε)
         ) :
@@ -1068,28 +1068,6 @@ function zone_share_renewal_kernel(
     return zone_mixed_outputs(
         Iz, tr, q, pre, I_bar, mix.import_fraction, patch_ranges, t0
     )
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-The import coupling of the zone split in [`zone_share_renewal`](@ref):
-`between[i, j] * origin_weight[j]`, the weight with which zone `j`'s
-infections reach zone `i`. A plain loop with its own reverse rule, as
-the derived rule of the broadcast costs tens of times its forward pass.
-"""
-function zone_import_coupling(
-        between::AbstractMatrix, origin_weight::AbstractVector
-    )
-    T = promote_type(eltype(between), eltype(origin_weight))
-    C = similar(between, T)
-    @inbounds for j in axes(between, 2)
-        w = origin_weight[j]
-        for i in axes(between, 1)
-            C[i, j] = between[i, j] * w
-        end
-    end
-    return C
 end
 
 """
