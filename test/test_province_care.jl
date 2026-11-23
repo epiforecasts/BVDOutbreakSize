@@ -617,6 +617,45 @@ end
     @test one_patch().W == repeat(w, 1, n)
 end
 
+@testitem "background admission shares start each walk at the patch's first printed day" begin
+    using BVDOutbreakSize: background_admission_share_model, knot_days
+    using Turing: returned, fix, @varname
+    using Random: Xoshiro
+
+    ## Patches 1 and 2 print from day 20, patch 3 only from day 55, paired
+    ## entry by entry as the model receives them (#1273). Patch 3's walk
+    ## starts on the last knot at or before day 55, so before it the ratio of
+    ## patch 3 to patch 4 (which never prints) is set by patch 3's level
+    ## alone, whatever the walk steps.
+    w = [0.5, 0.3, 0.15, 0.05]
+    n = 80
+    days = vcat(collect(20:60), collect(20:60), [55, 58, 60])
+    patches = vcat(fill(1, 41), fill(2, 41), [3, 3, 3])
+    m = background_admission_share_model(w, n, days; patches)
+    kd = knot_days(60; start = 20)
+    k3 = searchsortedlast(kd, 55)
+    @test 1 < k3 < length(kd)
+    nb = 2
+    y = [0.3, -0.4]
+    ratios = map((11, 12)) do seed
+        z = randn(Xoshiro(seed), nb * (length(kd) - 1))
+        f = fix(m, (; τ_bga = 0.5, y_bga = y, σ_bga = 0.3, z_bga = z))
+        W = returned(f, rand(Xoshiro(seed), f)).W
+        W[3, :] ./ W[4, :]
+    end
+    early = 1:kd[k3]
+    @test ratios[1][early] ≈ ratios[2][early]
+    @test all(r -> r ≈ ratios[1][1], ratios[1][early])
+    ## After its start the walk moves it.
+    @test !(ratios[1][n] ≈ ratios[2][n])
+    ## Patches printing from the first day walk from the first knot, as
+    ## before.
+    z = randn(Xoshiro(21), nb * (length(kd) - 1))
+    f = fix(m, (; τ_bga = 0.5, y_bga = y, σ_bga = 0.3, z_bga = z))
+    W = returned(f, rand(Xoshiro(21), f)).W
+    @test !(W[1, kd[2]] / W[2, kd[2]] ≈ W[1, 1] / W[2, 1])
+end
+
 @testitem "background admission shares on one printed day have a level and no walk" begin
     using BVDOutbreakSize: background_admission_share_model
     using Turing: returned, fix, @varname

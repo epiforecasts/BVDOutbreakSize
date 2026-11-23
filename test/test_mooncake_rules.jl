@@ -252,18 +252,28 @@
         add!(
             "5 patches, 3 printed", _background_admission_shares,
             pmf(rng, 5), Qb, 0.3 .* randn(rng, 2),
-            0.1 .* randn(rng, 2 * (length(kd) - 1)), kd, 30
+            0.1 .* randn(rng, 2 * (length(kd) - 1)), kd, 30, ones(Int, 5)
+        )
+        ## Patch 4 first prints on the third knot, so its walk starts there.
+        ## Its inputs come from their own stream, so the cases after it keep
+        ## their draws.
+        rng_late = Xoshiro(1273)
+        add!(
+            "5 patches, one late start", _background_admission_shares,
+            pmf(rng_late, 5), Qb, 0.3 .* randn(rng_late, 2),
+            0.1 .* randn(rng_late, 2 * (length(kd) - 1)), kd, 30,
+            [1, 1, 1, 3, 1]
         )
         add!(
             "one knot", _background_admission_shares, pmf(rng, 5), Qb,
-            0.3 .* randn(rng, 2), Float64[], [9], 30
+            0.3 .* randn(rng, 2), Float64[], [9], 30, ones(Int, 5)
         )
         Q8 = _embedded_sum_to_zero_basis(8, [1, 2, 3, 4, 5, 6, 7])
         kd8 = knot_days(260; week = 7, start = 104)
         add!(
             "8 patches, 260 days", _background_admission_shares, pmf(rng, 8),
             Q8, 0.3 .* randn(rng, 6), 0.05 .* randn(rng, 6 * (length(kd8) - 1)),
-            kd8, 260; perf = true
+            kd8, 260, [1, 1, 1, 2, 5, 9, 18, 1]; perf = true
         )
 
         ## Every knot layout the model builds: a regular weekly grid, a
