@@ -879,12 +879,15 @@ print admissions, so neither the level nor the walk has a reference patch.
 A patch that never prints admissions has no deviation, `δ_p = η_p = 0`.
 The walk sits on knots every `week` days from the first to the last day in
 `days`, the days the province admissions are printed, and is interpolated
-linearly ([`interpolate_knots`](@ref)). Each patch's walk starts at zero on
-the last knot at or before its own first printed admission, and is held
-flat before that knot and after the last one. So a patch's deviation moves
-only where its own printed admissions inform it, and its level `δ_p` is its
-deviation on its first printed day. `τ_bga = σ_bga = 0` gives
-`W_p(t) = w_p`, a time-constant share of the background suspects.
+linearly ([`interpolate_knots`](@ref)). With `paired = true`, `days` and
+`patches` give one printed figure per entry, and each patch's walk starts
+at zero on the last knot at or before its own first printed admission. It
+is held flat before that knot and after the last one, so a patch's
+deviation moves only where its own printed admissions inform it, and its
+level `δ_p` is its deviation on its first printed day. With
+`paired = false`, `patches` only names the printing patches and every walk
+starts on the first knot. `τ_bga = σ_bga = 0` gives `W_p(t) = w_p`, a
+time-constant share of the background suspects.
 
 The background suspects are split by `w`, but who is admitted need not be.
 A province's share of the admitted background differs from its share of
@@ -912,14 +915,9 @@ normalisation, as the printing provinces' shares move, and the model nests
 the constant share there exactly. Every sampled coordinate is a contrast
 among the printing provinces, which their daily admissions pin, so the
 level coordinates are drawn centred, on the scale `τ_bga`, as in
-[`background_split_model`](@ref). The level has to be anchored at each
-patch's own first printed day for that to hold. With one start for every
-patch, a province that first prints months after the others (Nord-Ubangi
-from 12 November) has its level set on a day it prints nothing, and its
-data pin only the level plus months of walk steps. The level, those steps
-and `σ_bga` then trade off along a ridge the sampler cannot cross, and the
-province's share before its first printed admission is set by the prior
-alone (#1273). The walk innovations are drawn
+[`background_split_model`](@ref). That holds because each level sits on
+its patch's own first printed day, where the patch's admissions identify
+it. The walk innovations are drawn
 non-centred, as in the other weekly walks. At `σ_bga = 0.2`, one SD of its
 half-normal prior, a one-SD weekly step moves a province's share about
 1.2-fold and twenty weeks drift it about 2.4-fold. At the prior median,
@@ -932,6 +930,7 @@ whose columns sum to one.
         w::AbstractVector{<:Real}, n::Integer,
         days::AbstractVector{<:Integer};
         patches::AbstractVector{<:Integer} = eachindex(w),
+        paired::Bool = false,
         week::Integer = 7,
         level_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         walk_sd_prior = truncated(Normal(0, 0.2); lower = 0),
@@ -947,7 +946,8 @@ whose columns sum to one.
     end
     kd = knot_days(maximum(days); week, start = minimum(days))
     nk = length(kd)
-    starts = _first_printed_knots(np, days, patches, kd)
+    starts = paired ? _first_printed_knots(np, days, patches, kd) :
+        ones(Int, np)
     τ_bga ~ level_sd_prior
     ## Each level coordinate is drawn centred, on the scale `τ_bga`. `eps`
     ## floors the SD so a `τ_bga ≈ 0` draw stays a proper distribution.
@@ -969,16 +969,21 @@ whose columns sum to one.
 end
 
 ## Per patch, the index of the last knot at or before its first printed
-## admission, where its walk starts. `days` and `patches` pair up entry by
-## entry when they have the same length. Otherwise `patches` only names the
-## printing patches, and every walk starts on the first knot. A patch with
-## no printed admission gets `1`, which is moot: its basis row is zero.
+## admission, where its walk starts, with `days` and `patches` one printed
+## figure per entry. A first day before the first knot starts on the first
+## knot. A patch with no printed admission gets `1`, which is moot: its
+## basis row is zero.
 function _first_printed_knots(
         np::Integer, days::AbstractVector{<:Integer},
         patches::AbstractVector{<:Integer}, kd::AbstractVector{<:Integer}
     )
+    length(patches) == length(days) || throw(
+        ArgumentError(
+            "_first_printed_knots: $(length(patches)) patches for " *
+                "$(length(days)) days; paired entries must match."
+        )
+    )
     starts = ones(Int, np)
-    length(patches) == length(days) || return starts
     first_day = fill(typemax(Int), np)
     for (d, p) in zip(days, patches)
         first_day[p] = min(first_day[p], Int(d))
@@ -1013,7 +1018,7 @@ function _background_admission_shares(
         w::AbstractVector{<:Real}, basis::AbstractMatrix{<:Real},
         y::AbstractVector{<:Real}, steps::AbstractVector{<:Real},
         kd::AbstractVector{<:Integer}, n::Integer,
-        starts::AbstractVector{<:Integer} = ones(Int, length(w))
+        starts::AbstractVector{<:Integer}
     )
     np = length(w)
     nk = length(kd)

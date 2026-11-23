@@ -2780,7 +2780,7 @@ in-care fraction and the daily series for forecasting and replication.
             bg_adm_state ~ to_submodel(
                 background_admission(
                     background_split, n, Int.(province_admissions.days);
-                    patches = Int.(province_admissions.patches)
+                    patches = Int.(province_admissions.patches), paired = true
                 )
             )
             bg_adm_share = bg_adm_state.W
