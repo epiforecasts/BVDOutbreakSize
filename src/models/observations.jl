@@ -2003,17 +2003,11 @@ function accumulate_occupancy(
     end
     ## The pools are the unconfirmed and confirmed true cases and the
     ## non-case stock. Confirmation and absconding are shares of the previous
-    ## day's pools; admissions, rule-outs and discharges are counts capped by
-    ## what a pool holds. The discharges split by the previous day's confirmed
-    ## share, and a pool's overshoot below zero is charged to the other one,
-    ## which is where the balance's clamps act.
-    bvd_out = TimeVarying(deaths .+ recover)
-    adm = TimeVarying(A_bvd)
+    ## day's pools; admissions and rule-outs are counts capped by what a pool
+    ## holds. The discharges split across the true-case pools by the
+    ## previous day's confirmed share, and a pool's overshoot below zero is
+    ## charged to the other one, which is where the balance's clamps act.
     hz = TimeVarying(conf_hazard)
-    ## Yesterday's unconfirmed and confirmed pools, read at the one group.
-    unconf = Recent(1)
-    conf = Recent(1; coupling = [0.0 1.0 0.0; 0.0 0.0 0.0; 0.0 0.0 0.0])
-    args = (bvd_out, unconf, conf, adm, hz, κ)
     flows = Depletion(
         ## The hazard is a rate times a borrowed hazard and the abscond
         ## rate's prior has no upper bound, so either can pass one; as a
@@ -2021,15 +2015,11 @@ function accumulate_occupancy(
         Flow(:unconf => :conf, Derived(identity, hz); form = Share()),
         Flow(:unconf => 0, Derived(identity, κ); form = Share()),
         Flow(:bg => 0, Derived(identity, κ); form = Share()),
-        Flow(0 => :unconf, adm; form = Truncate()),
+        Flow(0 => :unconf, TimeVarying(A_bvd); form = Truncate()),
         Flow(0 => :bg, TimeVarying(A_bg); form = Truncate()),
         Flow(
-            :unconf => 0, Derived(_unconf_discharges, args...);
-            form = Truncate()
-        ),
-        Flow(
-            :conf => 0, Derived(_conf_discharges, args...);
-            form = Truncate()
+            (:unconf, :conf) => 0, TimeVarying(deaths .+ recover);
+            form = Split()
         ),
         Flow(:bg => 0, TimeVarying(ruleout); form = Truncate());
         pools = (:unconf, :conf, :bg)
@@ -2072,33 +2062,6 @@ function occupancy_outputs(Y::AbstractMatrix, κ::Real)
         prev = u + b
     end
     return (; demand, O_bvd, O_conf, O_susp, abscond)
-end
-
-## The confirmed share of the day's BVD discharges `b`, off the previous
-## day's unconfirmed and confirmed pools `u` and `c`. The pools are never
-## negative, so the test asks whether `u + c > 0`. It is asked of `abs2`,
-## whose derivative at zero is zero, because a dual number breaks a tie at
-## zero by its derivative and would divide 0 by 0.
-function _conf_share_of(b, u, c)
-    s = u + c
-    return abs2(s) > zero(s) ? b * (c / s) : zero(b * s)
-end
-
-## What each true-case pool keeps after its flows and its share `o` of the
-## discharges, before any overshoot moves to the other pool.
-_unconf_left(u, A, h, κ, o) = u * (1 - κ - h) + A - o
-_conf_left(u, c, h, o) = c + h * u - o
-
-## The discharge count of each true-case pool: its share of the discharges,
-## plus the other pool's overshoot below zero, so that the total true-case
-## stock rather than each pool takes the floor.
-function _unconf_discharges(b, u, c, A, h, κ)
-    oc = _conf_share_of(b, u, c)
-    return (b - oc) + max(-_conf_left(u, c, h, oc), zero(oc))
-end
-function _conf_discharges(b, u, c, A, h, κ)
-    oc = _conf_share_of(b, u, c)
-    return oc + max(-_unconf_left(u, A, h, κ, b - oc), zero(oc))
 end
 
 """
@@ -3473,8 +3436,6 @@ function onset_report_cdf_table(
     ## delay `l + 1` at `k + l + u_lo - grid_start`, clamped to the grid.
     γk = onset_offsets(γ, Int(u_lo) - Int(grid_start), nu + D - 1)
     hazard = Derived(_logistic_sum, logit_h0, TimeVarying(γk))
-    ## `kernel_weights` is internal to ComposableRecurrences; the table moves
-    ## to its public replacement once the package names one.
     return kernel_weights(TimeVarying(1 - Survival(hazard), Primary()), nu)
 end
 
