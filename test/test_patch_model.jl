@@ -1190,12 +1190,13 @@ end
     @test issorted(case_gaps)
 
     ## Nord-Kivu has carried a rising share of new confirmed cases since
-    ## July, so its cumulative share has drifted up from ~16% to ~24% by
-    ## SitRep 169. The band catches a misassigned province column, not a
-    ## trend, so it sits clear of the drift.
+    ## July, so its cumulative share has drifted up from ~16% to ~26% by
+    ## SitRep 193. The band catches a misassigned province column (Ituri
+    ## ~68%, every other province under 5%), not a trend, so it sits clear
+    ## of the drift.
     ct = sum(cases.increments; dims = 2)
     nk_case_share = ct[2] / sum(ct)
-    @test 0.12 < nk_case_share < 0.26          ## ~24%
+    @test 0.12 < nk_case_share < 0.40          ## ~26%
 end
 
 @testitem "bvd_joint: a patch chain carries every headline quantity" tags = [:slow] begin
