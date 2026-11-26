@@ -1196,7 +1196,7 @@ end
     ## of the drift.
     ct = sum(cases.increments; dims = 2)
     nk_case_share = ct[2] / sum(ct)
-    @test 0.12 < nk_case_share < 0.40          ## ~26%
+    @test 0.12 < nk_case_share < 0.4          ## ~26%
 end
 
 @testitem "bvd_joint: a patch chain carries every headline quantity" tags = [:slow] begin
