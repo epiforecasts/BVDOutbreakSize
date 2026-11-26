@@ -49,9 +49,9 @@ To advance the two blocks when new reports land, after `download_sitreps.jl`:
 5. Run the province loader tests (`test/test_province_care.jl`) and `pre-commit run --files` on the three files.
 A province paragraph that repeats an earlier report's word for word, or says it carries the day before forward, is a stale carry-forward.
 List its (SitRep, province) in `STALE` in `scripts/province_care_manifest.jl`, with its reason, so the manifest leaves it out of both blocks; the CSVs keep the printed values.
-The list holds Haut-Uélé on SitReps 152, 159, 163, 183 and 190, Bas-Uélé on SitReps 155 and 156, Ituri and Nord-Kivu on SitRep 176, Nord-Ubangi on SitReps 181 and 183, and Sud-Ubangi on SitRep 183 (see the notes below).
+The list holds Haut-Uélé on SitReps 152, 159, 163, 183, 190 and 192, Bas-Uélé on SitReps 155 and 156, Ituri and Nord-Kivu on SitRep 176, Nord-Ubangi on SitReps 181 and 183, and Sud-Ubangi on SitRep 183 (see the notes below).
 The committed `province_care_scanned.csv` is kept and each new report's scan rows are appended to it, because a full rescan reverts the hand-settled cells listed below.
-A single printed figure that cannot be right is listed in `MISPRINTED` by (SitRep, province, CSV column), and only that cell is left out of its block; the list holds SitRep 164 Nord-Kivu admissions, SitRep 177 Ituri patients and Nord-Kivu admissions, SitRep 179 Nord-Kivu patients, and SitRep 181 Nord-Kivu admissions.
+A single printed figure that cannot be right is listed in `MISPRINTED` by (SitRep, province, CSV column), and only that cell is left out of its block; the list holds SitRep 164 Nord-Kivu admissions, SitRep 177 Ituri patients and Nord-Kivu admissions, SitRep 179 Nord-Kivu patients, SitRep 181 Nord-Kivu admissions, and SitRep 192 Ituri patients.
 A province occupancy dated after the last day of the national `isolation_history` is left out of `[province_isolation_history]`, since the province counts are fitted as splits inside the national window, and it enters once a later tile is printed (SitRep 164's four counts entered with SitRep 165's tile).
 The script reads that date from `observations.toml`, so advance the national `isolation_history` before step 3.
 Table-era bed counts (to SitRep 080) are taken from the scan's `Nombre de lits` row alone, because the blind read's table-era bed figures are implied from the printed rate, which the national `bed_capacity_history` already carries.
@@ -170,7 +170,7 @@ SitRep 165's figure (731x391) also carries n = 7 709.
 SitReps 166 to 169 embed the figure at 351x188, too small to read its `n` or ticks with confidence, so none is digitised.
 SitRep 167 reprints SitRep 166's image and SitRep 169 reprints SitRep 168's, md5-identical.
 SitReps 170, 171 and 173 to 178 reprint SitRep 166's 351x188 image byte for byte (md5 `de8bdecf`), so none adds an extract.
-SitReps 179 to 190 print no symptom-onset figure: SitRep 179's Figure 1 is `Évolution quotidienne de cas et décès confirmés depuis le 15/5 -9/11/26 en RDC`, a daily count of confirmed cases alive and dead with no `n`, which no earlier report in the archive carries, and SitReps 180 to 190 print the same chart to their own report dates.
+SitReps 179 to 194 print no symptom-onset figure: SitRep 179's Figure 1 is `Évolution quotidienne de cas et décès confirmés depuis le 15/5 -9/11/26 en RDC`, a daily count of confirmed cases alive and dead with no `n`, which no earlier report in the archive carries, and SitReps 180 to 194 print the same chart to their own report dates.
 SitRep 169's caption changes to `Répartition des cas confirmés de MVE par date de début des symptômes et par issue du 20 avril au 30 octobre 2026 (n = X)`, with the placeholder printed as is.
 SitRep 138 (n = 6 370) is not digitised: its render loses the outline between the 15 and 16 June bars, so 16 June reads 40 against 28 to 29 in every other vintage and the dashboard.
 SitRep 112's render (771x433) needs the near-grey mask for the y-axis ticks as well.
@@ -237,7 +237,7 @@ SitRep 033 gives the split as prose only, 084 to 086 (the brief format) carry no
 None of those four is scanned.
 From SitRep 124 the caption drops `de santé` and carries the date instead, reading `par province et zone du 15 septembre 2026`.
 The table itself is unchanged, so the scanner matches the caption as far as `par province et zone`.
-The series run to SitRep 190 (20 November), with SitReps 169 (30 October) and 185 (15 November) listed in `[skip_dates]` (see the SitRep 170 and SitReps 185 and 186 notes below); SitReps 142 (3 October) and 172 (2 November) are not published on insp.cd.
+The series run to SitRep 194 (24 November), with SitReps 169 (30 October) and 185 (15 November) listed in `[skip_dates]` (see the SitRep 170 and SitReps 185 and 186 notes below); SitReps 142 (3 October) and 172 (2 November) are not published on insp.cd.
 From SitRep 147 Dakwa (Bas-Uélé) is carried in the Bas-Uélé unallocated row, because it has no polygon in the health-zone map (see the inclusion rules below).
 SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
 On 11 November `download_sitreps.jl` did not fetch SitReps 023 and 046 into a fresh archive, and its log does not name them, so a rescan from that archive loses their rows in `province_care_scanned.csv`, which is kept as committed rather than regenerated.
@@ -284,8 +284,8 @@ SitRep 080 prints the table with the Létalité column displaced one row down an
 SitRep 116 prints `1` in Buta's Létalité cell.
 
 `scripts/confirm_zone_data.jl` (`task confirm-zone-data`) cross-checks both blocks against the INRB-UMIE mirror's per-zone `cumulative_confirmed_cases` and `cumulative_confirmed_deaths` CSVs, its `NA` zone read as the unallocated row.
-Of the 7162 case cells and 7164 death cells the two transcriptions share, 7122 and 7127 agree.
-The mirror does not yet carry 7, 8, 20, 22, 23 and 24 October (SitReps 146, 147, 159, 161, 162 and 163), and like INSP it has no 2 November row.
+Of the 7365 case cells and 7367 death cells the two transcriptions share, 7325 and 7330 agree.
+The mirror does not yet carry 24 November (SitRep 194) or 7, 8, 20, 22, 23 and 24 October (SitReps 146, 147, 159, 161, 162 and 163), and like INSP it has no 2 November row.
 It carries 3 October, which INSP has not published, and the blocks leave that date out.
 Every disagreement was re-read from the PDF and the manifest matches the printed table in each case.
 On 3 June the mirror's unallocated row reads 97 cases and 1 death against the printed 94 and 10.
@@ -320,12 +320,13 @@ A zone new to the table needs `task health-zones` re-run against a fresh `build/
 
 `health_zones.csv` and `src/assets/health_zones.geojson` are written by `scripts/build_health_zones.py` (`task health-zones`) from the INRB-UMIE build of the DRC health-zone map (`build/drc_health_zones.geojson`, as served on 5 October 2026, whose geometry is unchanged from the build of 21 September, commit `f489a92`).
 That build joins the Ministry of Health `DRC_Health_zones` shapefile from the Humanitarian Data Exchange (<https://data.humdata.org/dataset/drc-health-data>) with WorldPop population counts aggregated per zone (WorldPop 2025, University of Southampton, <https://www.worldpop.org>, CC BY 4.0).
-The 67 zone keys in the blocks must each match a shapefile `nom`; two need an explicit alias (`lubunga` to `Lubunga (Tshopo)`, `wanie_rukula` to `Wanierukula`).
+The 68 zone keys in the blocks must each match a shapefile `nom`; two need an explicit alias (`lubunga` to `Lubunga (Tshopo)`, `wanie_rukula` to `Wanierukula`).
 Population is the WorldPop count rounded to a whole person and the centroid is the area-weighted centroid of the zone's largest ring.
 The centroid is what the zone model's distance kernel and its gravity pull read; nothing else in the model uses the geometry.
 The GeoJSON keeps the eight affected provinces' 178 zones with coordinates rounded to four decimals and rings simplified independently by Douglas-Peucker at 0.005 degrees (less for a small ring, capped at 5% of the square root of its area), so a shared boundary can show a hairline gap; its properties are `zone` (the manifest key, empty for a zone with no confirmed case), `label`, `province` and `zscode`.
 Wapinda (Nord-Ubangi) is in the blocks at zero before its first confirmed case in SitRep 155, so its patch has a zone (issue #1147).
 Yakoma (Nord-Ubangi) enters Tableau 2 at SitRep 167 (28 October) with 3 cases and no 24h count, and is 0 before that.
+Kibirizi (Nord-Kivu) enters at SitRep 192 (22 November) with 1 case and 1 death, and is 0 before that; its row in `health_zones.csv` comes from the INRB-UMIE map as served on 24 November, which leaves every other zone's row unchanged.
 Watsa (Haut-Uélé) enters at SitRep 181 (11 November) with 2 cases and 2 deaths, and is 0 before that; its row in `health_zones.csv` comes from the INRB-UMIE map as served on 16 November, which leaves every other zone's row and geometry unchanged.
 Reuse of both files carries the shapefile's and WorldPop's attribution; the INRB-UMIE repository asks that its own epidemiological data be cited through its README, which these files do not use.
 
@@ -520,6 +521,29 @@ No script tracks mirror-sourced values, so this check is manual.
   SitRep 190's Haut-Uele paragraph repeats SitRep 189's 35 confirmes and 19 suspects, 17 admissions, 2 deaths, 231 cumulative recoveries, 25, 22 and 27 % rates and meal counts, with only its total changed to 71, which its own 35 + 19 does not give, so it is in `STALE`.
   `83 PPL` and the 231 cumulative recoveries appear in no report from 175 to 188 (searched with `pdftotext`), so the repeat is between 189 and 190 alone.
   A rescan reverts the three cells.
+- **SitReps 191 to 194 (21 to 24 November)**: cases and deaths rise by exactly the printed counts on all four (+59 and +35, +65 and +22, +69 and +35, +66 and +37), with no harmonisation note (searched SitReps 185 to 194 for `harmonis`, which appears in SitRep 185 only).
+  SitRep 192 prints `Une nouvelle zone de santé (Kibirizi, Nord-Kivu)` and adds it to Tableau 2 with 1 case and 1 death.
+  Searched every cached report for `Kibirizi`: it appears before only in SitRep 186's PSEA prose (`partenaires à Beni et Kibirizi`), never in a case table.
+  The two blind readers and the zone scanner agree on every Tableau 2 cell of the three reports.
+  The scanner prints Dakwa (Bas-Uélé) as its own series and leaves the unallocated row at 0, so the three vintages were appended to the committed blocks by hand, with Dakwa kept in `bas_uele.unallocated`.
+  `scripts/scan_province_lab.jl` leaves SitReps 191 and 192 out (the Tshopo and Bas-Uélé bullets print no positive count) and misreads 193's Haut-Uélé and Sud-Ubangi bullets, so their laboratory rows were appended from the two blind reads, which sum to 719, 452 and 507.
+  `scripts/scan_province_care.jl` returns no row for SitRep 192 and misses most cells on 191 and 193, so the two blind reads carry them; every cell both carry agrees.
+  The isolation tiles of 191 (2208) and 192 (2124) are far above their paragraphs (768 and 724), and are left out as at SitReps 181, 182, 184 and 186 to 190 (#1266).
+  193's tile (1161) is 96 above its paragraphs (1065), with Nord-Ubangi and Sud-Ubangi silent, so it is kept, as SitRep 183's 1055 against 1000 was.
+  That gives 193 an `isolation_history` entry and lets the province counts of 191 to 193 enter the care blocks.
+  SitRep 192's Haut-Uélé paragraph repeats 191's census (80 patients, 34 confirmés et 46 suspects, 43 %, 51 % and 34 %) with new flows (13 admissions and 7 sorties, which 80 + 13 - 7 does not close), as SitRep 176's Ituri and Nord-Kivu paragraphs repeated 175's, so it is in `STALE`.
+  SitRep 192's Ituri paragraph prints 68 patients at 32 % (7 admissions, 74 sorties), and SitRep 193 prints 347 at the same 32 % (84 admissions, 84 sorties), so its 68 cannot close to 193's opening census and is in `MISPRINTED`.
+  Ituri's census falls from 611 on SitRep 190 to 347 on SitRep 193 with no paragraph on 191, which is recorded in #1266 rather than as a break.
+  Nord-Kivu 191 prints `taux d'occupation de 73 % (378/519 lits)` for the CTE/CT against 597 patients, so the effective-beds rule gives 818, as it did at SitReps 183 to 188.
+  SitRep 192's Tshopo paragraph prints 8 patients, `taux Global de 20 % à 38,9 %` and 7/18, 7/32 and 1/4 lits, which count 15 occupied beds, and no bed count is recorded.
+  SitRep 193's Haut-Uélé paragraph prints a global rate of `4 %` beside 54 % and 33 %, which it cannot lie outside, and no bed count, so the rate is recorded as printed and feeds no block.
+  Ituri's paragraph on 194 prints 335 patients at 31 %, close to 193's 347 at 32 % and far from 192's 68, which supports leaving the 68 out.
+  194's tile (1092) is 22 above its paragraphs (1070, Sud-Kivu silent), so it is kept like 193's.
+  194's laboratory bullets sum to the page-1 514 (Nord-Kivu 241, Ituri 211, Haut-Uélé 59, Bas-Uélé 3), but `scripts/scan_province_lab.jl` leaves it out, so its row comes from the two blind reads; Nord-Ubangi and Tshopo print no analysed count.
+  194's Sud-Ubangi paragraph prints 4 patients with `8,3 % (5/60)`, recorded as printed, and Nord-Kivu's 601 patients at the CTE/CT rate of 72,4 % (`376/519 lits`) give 830 effective beds.
+  Tableau 3 of 193 prints blank received and validated cells in the Nord-Ubangi row with the total printed, and Nord-Ubangi validated 4 and 5 on SitReps 191 and 192, so 193's 562 stays in `suspected_daily_history`, as SitRep 148's 473 did with Sud-Ubangi ND.
+  SitRep 191's Haut-Uélé vaccination line gives 86,7 % `(soit 4 428 personnes ...)` and 3 839 doses given; SitRep 192 prints `3 839 PPL ont été vaccinés sur 4 428 personnes pré-enregistrées`, so 3 839 is the persons vaccinated in `candidate_signals.csv`.
+  SitRep 193's Tableau 5 prints Ituri travellers at 102 883 and Haut-Uélé at 65 423 against 158 965 and 38 002 the day before, and the Ituri narrative gives 177 053; the table is recorded as printed.
 - **Province occupancy rates, SitReps 092, 093 and 095 (14, 15 and 17 August)**: the scan took a ward's rate where the prose prints the province's first, right after the bed count. Nord-Kivu 092 prints "165 malades ... pour 206 lits (80,1 %), l'occupation des lits pour suspects atteignant 94,3 %", Tshopo 093 "8 patients ... pour 12 lits, soit 66,7 % d'occupation (75 % pour les confirmés" and Nord-Kivu 095 "181 malades ... pour 206 lits, soit 87,9 % d'occupation, les lits suspects atteignant 103,5 %". The province rates 80.1, 66.7 and 87.9, which the blind read carries, are recorded in `province_care_scanned.csv` in place of the scan's 94.3, 75.0 and 103.5; a rescan reverts them.
 - **Tshopo bed-count discrepancy, SitRep 097 (19 August)**: the prose reads "porte à 5, le nombre de patients isolés pour 14 lits (41,7 % d'occupation)", but 5/14 = 35,7% while 5/12 = 41,7%, and SitRep 096 printed exactly "5 patients ... 12 lits (41,7%)" - so 097's Tshopo patient count and rate are a verbatim carry-forward of 096 with only the lits figure changed. The rate-implied 12 (also 098's own printed value) is used and the printed 14 recorded as the discrepancy, per the convention that capacity = Fin J ÷ taux d'occupation should equal the printed `Nombre de lits` and the auditable value wins. SitReps 099 and 100 both print 14 lits with internally consistent rates (5/14 = 35,7%; 4/14 = 28,6%), so the step to 14 is real from 099 onward.
 - **SitRep 097's Haut-Uélé Continuité prose is internally inconsistent**: one bullet repeats 096's sentence verbatim ("53 patients ... 52 lits des HGR de Wamba et d'Isiro ... portant la capacité provinciale à 130 lits") but prints a 44,6% rate where 53/130 = 40,8% (which is what 096 printed), and a second bullet states "Au Haut-Uélé, 4 patients sont en hospitalisation (Taux d'occupation 100,0 %)". Both blind readers flagged it independently. Neither figure feeds a fitted value: occupancy rests on the page-1 tile and the 130-lit capacity is corroborated by 096, 099 and 100.

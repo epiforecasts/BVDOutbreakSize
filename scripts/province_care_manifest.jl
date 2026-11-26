@@ -109,6 +109,10 @@ const STALE = Dict(
     ## accompagnants); only the total changes, to 71, which its own 35 + 19
     ## does not give, while page 1 prints 6 Haut-Uélé recoveries that day.
     (190, "haut_uele") => "SitRep 189's paragraph repeated with a new total of 71",
+    ## Haut-Uélé's census repeats SitRep 191's (80 patients, 34 confirmés et
+    ## 46 suspects, 43 %, 51 % and 34 %) while its admissions and sorties
+    ## change (13 and 7 against 7 and 2), which 80 + 13 - 7 does not close.
+    (192, "haut_uele") => "SitRep 191's census repeated with new flows",
 )
 const MISPRINTED = Dict(
     (164, "nord_kivu", :admissions_24h) =>
@@ -122,6 +126,10 @@ const MISPRINTED = Dict(
         "535 + 167 - 118 = 584, the 15 + 100 + 14 sorties give 129 not 118, and 535 repeats SitRep 178's total",
     (181, "nord_kivu", :admissions_24h) =>
         "604 (132 confirmés et 472 suspects) is SitRep 180's census printed as admissions",
+    ## SitRep 193 opens Ituri at 347 (84 admissions against 84 sorties, 32 %),
+    ## which SitRep 192's 68 (7 admissions, 74 sorties, also 32 %) cannot close.
+    (192, "ituri", :patients_isolated) =>
+        "68 at 32 % cannot close SitRep 193's opening census of 347 at the same 32 %",
 )
 const ORDER = [
     "ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo", "bas_uele",
