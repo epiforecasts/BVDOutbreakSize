@@ -7,7 +7,7 @@ Major versions of the report are kept as [GitHub Releases](https://github.com/ep
 
 Changes since v3.2.0.
 
-A minor version: each province's walk in its share of the background admissions starts at its own first printed admission, and the data run to SitRep 193.
+A minor version: each province's walk in its share of the background admissions starts at its own first printed admission, and the data run to SitRep 194.
 
 ### Model
 
@@ -17,10 +17,10 @@ A minor version: each province's walk in its share of the background admissions 
 
 ### Data
 
-- The model cut-off advances from SitRep 188 (18 November) to SitRep 193 (23 November) (#1274, #1278).
-  SitReps 189 to 193 print no symptom-onset figure (#1262).
+- The model cut-off advances from SitRep 188 (18 November) to SitRep 194 (24 November) (#1274, #1278).
+  SitReps 189 to 194 print no symptom-onset figure (#1262).
   The isolation tiles of SitReps 189 to 192 are left out, as on SitReps 181, 182, 184 and 186 to 188 (#1266).
-  SitRep 193's tile is kept, since it is close to its province paragraphs.
+  The tiles of SitReps 193 and 194 are kept, since they are close to their province paragraphs.
   The SitRep 190 and 192 Haut-Uélé care paragraphs repeat the day before's census, so they are left out.
   SitRep 192's Ituri census (68, against 347 the day after) is left out as a misprint.
   Kibirizi (Nord-Kivu) enters the health-zone blocks on SitRep 192.
