@@ -7,10 +7,8 @@ This file is included by `test/test_ad_gradients.jl`, by
 `test/enzyme/runtests.jl` and by `benchmark/benchmarks.jl`, so the surface
 the tests assert is differentiable is the surface the benchmarks time and
 the surface the Enzyme sweep checks. It is a plain file rather than a path
-package because `[sources]` needs Julia 1.11 and the LTS test cell runs
-1.10, where an unregistered path dependency cannot resolve. Its imports
-come from whichever environment includes it, and each carries every package
-named below.
+package. Its imports come from whichever environment includes it, and each
+carries every package named below.
 
 A scenario is one model plus a seeded unconstrained point. The units are
 per component rather than the full joint: the observation submodels from

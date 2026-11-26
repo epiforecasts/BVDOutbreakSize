@@ -56,6 +56,8 @@ The [Methods](methods.md) page describes the model and the [API reference](lib/a
 - Keep the NaN and Inf safe clamps (`safe_nbinomial`, `eps`-flooring of expected counts) when editing a likelihood.
   They guard against extreme NUTS warmup proposals.
 - The AD backend is Mooncake reverse mode.
+  Every recurrence and convolution in the model, the stock balances and the binned increments are [ComposableRecurrences](https://github.com/EpiAware/ComposableRecurrences.jl) operators, which bring their own rules.
+  Where the package is still slower than the hand code it replaced, small hand-ruled steps around the operator build its inputs or read its outputs, and the remaining gap is fixed in the package rather than by returning to hand code.
   The hand-written rules in `src/mooncake_rules.jl` are timed against the backend's own by `task benchmark-rules`.
   Run it after an AD backend upgrade and delete any rule that no longer pays for itself.
 - Code, code comments and docstrings keep to 80 characters per line.
